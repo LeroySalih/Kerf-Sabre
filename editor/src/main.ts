@@ -4,6 +4,7 @@ import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
+import { boundsOf } from "./geometry";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
@@ -18,6 +19,7 @@ const doc = new Doc();
 let selected = new Set<number>();
 type Tool = "select" | "rect" | "circle" | "line";
 let tool: Tool = "select";
+let showGrid = true;
 let marquee: { a: Point; b: Point; base: Set<number> } | null = null;
 let preview: { tool: Tool; a: Point; b: Point } | null = null;
 
@@ -48,6 +50,19 @@ function shapeFor(t: Tool, a: Point, b: Point): { path: Path; at: Point } | null
   return null;
 }
 
+/** 1 cm grid inside the bed, heavier every 10 cm. Hidden when lines would be under ~5 px apart. */
+function drawGrid(widthMm: number, heightMm: number): void {
+  const STEP = 10;
+  if (STEP * view.scale < 5) return;
+  const line = (a: Point, b: Point, major: boolean) => {
+    const p = new paper.Path.Line(toScreen(a), toScreen(b));
+    p.strokeColor = new paper.Color(major ? "#9ca3af" : "#d1d5db");
+    p.strokeWidth = major ? 1 : 0.5;
+  };
+  for (let x = 0; x <= widthMm; x += STEP) line({ x, y: 0 }, { x, y: heightMm }, x % 100 === 0);
+  for (let y = 0; y <= heightMm; y += STEP) line({ x: 0, y }, { x: widthMm, y }, y % 100 === 0);
+}
+
 function draw(): void {
   paper.project.clear();
   const { widthMm, heightMm } = machine.bed;
@@ -58,6 +73,8 @@ function draw(): void {
   bed.fillColor = new paper.Color("#f3f4f6");
   new paper.Path.Circle(new paper.Point(a.x, a.y), 4).fillColor = new paper.Color("#f97316");
 
+  if (showGrid) drawGrid(widthMm, heightMm);
+
   for (const o of doc.state.objects) {
     const item = toPaperPath(transformPath(o.path, o.matrix));
     item.data = { id: o.id };
@@ -65,6 +82,14 @@ function draw(): void {
     item.strokeWidth = selected.has(o.id) ? 3 : 1.5;
     if (o.path.closed) item.fillColor = new paper.Color(0, 0, 0, 0.01); // hit-testable
     if (selected.has(o.id)) item.dashArray = [6, 3];
+  }
+  for (const g of new Set(doc.state.objects.filter((o) => selected.has(o.id) && o.group !== undefined).map((o) => o.group))) {
+    const bs = doc.state.objects.filter((o) => o.group === g).map((o) => boundsOf(transformPath(o.path, o.matrix)));
+    const tl = bedToScreen(view, { x: Math.min(...bs.map((b) => b.minX)), y: Math.max(...bs.map((b) => b.maxY)) });
+    const br = bedToScreen(view, { x: Math.max(...bs.map((b) => b.maxX)), y: Math.min(...bs.map((b) => b.minY)) });
+    const box = new paper.Path.Rectangle(new paper.Point(tl.x - 4, tl.y - 4), new paper.Point(br.x + 4, br.y + 4));
+    box.strokeColor = new paper.Color("#2563eb");
+    box.dashArray = [2, 3];
   }
   if (preview) {
     const sh = shapeFor(preview.tool, preview.a, preview.b);
@@ -115,6 +140,12 @@ const on = (id: string, fn: () => void) => document.getElementById(id)!.addEvent
 on("score", () => selected.size && edit(() => doc.setLayer([...selected], "score")));
 on("cut", () => selected.size && edit(() => doc.setLayer([...selected], "cut")));
 on("del", () => deleteSelected());
+on("group", () => groupSelected());
+on("ungroup", () => ungroupSelected());
+(document.getElementById("grid") as HTMLInputElement).addEventListener("change", (e) => {
+  showGrid = (e.target as HTMLInputElement).checked;
+  draw();
+});
 on("undo", () => { if (doc.undo()) { selected.clear(); draw(); } });
 on("redo", () => { if (doc.redo()) { selected.clear(); draw(); } });
 on("exp-dxf", () => download("kerf-design.dxf", toDXF(doc.state.objects), "application/dxf"));
@@ -141,6 +172,16 @@ function importDXF(text: string, name: string): void {
   if (skipped) alert(`Imported ${r.shapes.length} shapes. Skipped unsupported: ${skipped}.`);
 }
 
+function groupSelected(): void {
+  if (doc.expand(selected).length < 2) return;
+  edit(() => { doc.group([...selected]); selected = new Set(doc.expand(selected)); });
+}
+
+function ungroupSelected(): void {
+  if (!doc.state.objects.some((o) => selected.has(o.id) && o.group !== undefined)) return;
+  edit(() => doc.ungroup([...selected]));
+}
+
 function deleteSelected(): void {
   if (selected.size) edit(() => { doc.remove([...selected]); selected.clear(); });
 }
@@ -155,6 +196,7 @@ function download(name: string, text: string, type: string): void {
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }
 });
 
@@ -188,8 +230,8 @@ canvas.addEventListener("mousedown", (e) => {
       if (!e.shiftKey) selected.clear();
       marquee = { a: p, b: p, base: new Set(selected) };
     }
-    else if (e.shiftKey) selected.has(id) ? selected.delete(id) : selected.add(id);
-    else if (!selected.has(id)) selected = new Set([id]);
+    else if (e.shiftKey) { const m = doc.expand([id]); const was = selected.has(id); for (const i of m) was ? selected.delete(i) : selected.add(i); }
+    else if (!selected.has(id)) selected = new Set(doc.expand([id]));
     draw();
   }
 });
@@ -200,7 +242,7 @@ canvas.addEventListener("mousemove", (e) => {
   if (!dragStart || !dragLast) return;
   if (marquee) {
     marquee.b = p;
-    selected = new Set([...marquee.base, ...boxSelect(doc.state.objects, marquee.a, p)]);
+    selected = new Set([...marquee.base, ...doc.expand(boxSelect(doc.state.objects, marquee.a, p))]);
   } else if (tool === "select" && selected.size) {
     if (!moved) { doc.checkpoint(); moved = true; }
     for (const id of selected) doc.transform(id, translation(p.x - dragLast.x, p.y - dragLast.y));

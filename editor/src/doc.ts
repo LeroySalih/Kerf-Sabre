@@ -8,15 +8,18 @@ export interface DocObject {
   path: Path; // design space, never mutated after creation
   matrix: Matrix; // Design -> Bed
   layer: LayerType;
+  /** Objects sharing a group id are selected and moved together. One level only. */
+  group?: number;
 }
 
 export interface DocState {
   objects: DocObject[];
   nextId: number;
+  nextGroup: number;
 }
 
 export class Doc {
-  state: DocState = { objects: [], nextId: 1 };
+  state: DocState = { objects: [], nextId: 1, nextGroup: 1 };
   private undoStack: DocState[] = [];
   private redoStack: DocState[] = [];
 
@@ -64,5 +67,27 @@ export class Doc {
 
   setLayer(ids: number[], layer: LayerType): void {
     for (const o of this.state.objects) if (ids.includes(o.id)) o.layer = layer;
+  }
+
+  /** Ids plus every other member of any group they belong to. */
+  expand(ids: Iterable<number>): number[] {
+    const set = new Set(ids);
+    const groups = new Set(this.state.objects.filter((o) => set.has(o.id) && o.group !== undefined).map((o) => o.group));
+    for (const o of this.state.objects) if (o.group !== undefined && groups.has(o.group)) set.add(o.id);
+    return [...set];
+  }
+
+  /** Group the given objects (replacing any earlier grouping of them). Needs 2+ objects; returns the group id. */
+  group(ids: number[]): number | undefined {
+    const members = this.expand(ids);
+    if (members.length < 2) return undefined;
+    const g = this.state.nextGroup++;
+    for (const o of this.state.objects) if (members.includes(o.id)) o.group = g;
+    return g;
+  }
+
+  /** Dissolve every group that any of the given objects belong to. */
+  ungroup(ids: number[]): void {
+    for (const o of this.state.objects) if (this.expand(ids).includes(o.id)) delete o.group;
   }
 }

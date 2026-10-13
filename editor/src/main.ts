@@ -155,14 +155,23 @@ let dragStart: Point | null = null;
 let dragLast: Point | null = null;
 let moved = false;
 
+/** Outlines beat interiors; among interiors the smallest shape wins, so a shape inside another stays selectable. */
+function pickObject(pt: paper.Point): number | undefined {
+  const hits = paper.project.hitTestAll(pt, { stroke: true, fill: true, tolerance: 6 }).filter((h) => h.item.data?.id !== undefined);
+  const stroke = hits.find((h) => h.type === "stroke");
+  if (stroke) return stroke.item.data.id as number;
+  const area = (h: paper.HitResult) => h.item.bounds.width * h.item.bounds.height;
+  const fill = hits.filter((h) => h.type === "fill").sort((a, b) => area(a) - area(b))[0];
+  return fill?.item.data.id as number | undefined;
+}
+
 canvas.addEventListener("mousedown", (e) => {
   const p = bedPt(e);
   dragStart = dragLast = p;
   moved = false;
   if (tool === "select") {
     const r = canvas.getBoundingClientRect();
-    const hit = paper.project.hitTest(new paper.Point(e.clientX - r.left, e.clientY - r.top), { stroke: true, fill: true, tolerance: 6 });
-    const id = hit?.item.data?.id as number | undefined;
+    const id = pickObject(new paper.Point(e.clientX - r.left, e.clientY - r.top));
     if (id === undefined) { if (!e.shiftKey) selected.clear(); }
     else if (e.shiftKey) selected.has(id) ? selected.delete(id) : selected.add(id);
     else if (!selected.has(id)) selected = new Set([id]);

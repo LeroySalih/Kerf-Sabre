@@ -8,6 +8,7 @@ import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } fr
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
+import { alignDeltas, distributeDeltas, unionBounds, type AlignKind, type Unit } from "./align";
 import { booleanOp, type BoolOp } from "./boolean";
 import { outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
@@ -387,6 +388,9 @@ function setGimbal(on: boolean): void {
   draw();
 }
 on("gimbal", () => setGimbal(!showGimbal));
+document.querySelectorAll<HTMLButtonElement>("[data-align]").forEach((b) => b.addEventListener("click", () => alignSelected(b.dataset.align as AlignKind)));
+on("dist-h", () => distributeSelected("h"));
+on("dist-v", () => distributeSelected("v"));
 on("b-union", () => booleanSelected("union"));
 on("b-intersect", () => booleanSelected("intersect"));
 on("b-subtract", () => booleanSelected("subtract"));
@@ -452,6 +456,36 @@ function booleanSelected(op: BoolOp): void {
     const group = result.paths.length > 1 ? doc.state.nextGroup++ : undefined;
     selected = new Set(result.paths.map((p) => { const o = doc.add(p, IDENTITY, layer); if (group !== undefined) o.group = group; return o.id; }));
   });
+}
+
+/** Selected shapes as align units: each group (or text) is one unit. */
+function selectedUnits(): Unit[] {
+  const byKey = new Map<string, number[]>();
+  for (const o of doc.state.objects.filter((x) => selected.has(x.id))) {
+    const key = o.group !== undefined ? `g${o.group}` : `o${o.id}`;
+    byKey.set(key, [...(byKey.get(key) ?? []), o.id]);
+  }
+  return [...byKey.values()].map((ids) => ({ ids, bounds: selectionBounds(doc.state.objects, ids)! }));
+}
+
+function moveUnits(units: Unit[], deltas: { x: number; y: number }[]): void {
+  if (deltas.every((d) => Math.abs(d.x) < 1e-9 && Math.abs(d.y) < 1e-9)) return; // already in place: no undo step
+  edit(() => units.forEach((u, i) => { for (const id of u.ids) doc.transform(id, translation(deltas[i]!.x, deltas[i]!.y)); }));
+}
+
+function alignSelected(kind: AlignKind): void {
+  const units = selectedUnits();
+  const toBed = (document.getElementById("align-to") as HTMLSelectElement).value === "bed";
+  if (!units.length) return;
+  if (!toBed && units.length < 2) { notify("Select two or more shapes, or choose Align to bed."); return; }
+  const ref = toBed ? { minX: 0, minY: 0, maxX: machine.bed.widthMm, maxY: machine.bed.heightMm } : unionBounds(units);
+  moveUnits(units, alignDeltas(units, kind, ref));
+}
+
+function distributeSelected(axis: "h" | "v"): void {
+  const units = selectedUnits();
+  if (units.length < 3) { notify("Select three or more shapes to space them evenly."); return; }
+  moveUnits(units, distributeDeltas(units, axis));
 }
 
 function groupSelected(): void {

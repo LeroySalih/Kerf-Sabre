@@ -69,6 +69,17 @@
           <input id="t-file" type="file" accept=".ttf,.otf" hidden />
           <button id="t-convert" title="Turn the text into plain paths (no longer editable as text)">Convert to path</button>
         </span>
+        <span id="align" title="Align or space the selected shapes (a group moves as one)">
+          <label>Align to <select id="align-to"><option value="selection">selection</option><option value="bed">bed</option></select></label>
+          <button data-align="left" title="Align left edges">Left</button>
+          <button data-align="centre" title="Centre horizontally">Centre</button>
+          <button data-align="right" title="Align right edges">Right</button>
+          <button data-align="top" title="Align top edges">Top</button>
+          <button data-align="middle" title="Centre vertically">Middle</button>
+          <button data-align="bottom" title="Align bottom edges">Bottom</button>
+          <button id="dist-h" title="Equal gaps left to right (3 or more shapes)">Space H</button>
+          <button id="dist-v" title="Equal gaps top to bottom (3 or more shapes)">Space V</button>
+        </span>
         <span id="position" title="Position of the selection's anchor point on the bed (mm)">
           <span class="anchors"><input type="radio" name="anchor" data-col="0" data-row="0" title="Anchor: top-left" /><input type="radio" name="anchor" data-col="1" data-row="0" title="Anchor: top" /><input type="radio" name="anchor" data-col="2" data-row="0" title="Anchor: top-right" /><input type="radio" name="anchor" data-col="0" data-row="1" title="Anchor: left" /><input type="radio" name="anchor" data-col="1" data-row="1" title="Anchor: centre" /><input type="radio" name="anchor" data-col="2" data-row="1" title="Anchor: right" /><input type="radio" name="anchor" data-col="0" data-row="2" title="Anchor: bottom-left" checked /><input type="radio" name="anchor" data-col="1" data-row="2" title="Anchor: bottom" /><input type="radio" name="anchor" data-col="2" data-row="2" title="Anchor: bottom-right" /></span>
           <span class="fields">

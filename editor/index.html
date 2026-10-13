@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1f2937" />
+    <title>BISAK Kerf Editor</title>
+    <style>
+      html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+      #app { display: flex; flex-direction: column; height: 100%; }
+      #bar { display: flex; gap: 1rem; align-items: center; padding: 0.5rem 1rem; background: #1f2937; color: #fff; }
+      #cursor { margin-left: auto; font-variant-numeric: tabular-nums; }
+      #stage { flex: 1; min-height: 0; }
+      canvas { display: block; width: 100%; height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="bar">
+        <strong>BISAK Kerf Editor</strong>
+        <label>Laser <select id="machine"></select></label>
+        <span id="cursor">X – Y –</span>
+      </div>
+      <div id="stage"><canvas id="canvas" resize></canvas></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

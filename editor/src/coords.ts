@@ -41,3 +41,8 @@ export function zoomAt(view: View, screenPt: Point, factor: number): View {
     originPx: { x: screenPt.x - bed.x * scale, y: screenPt.y + bed.y * scale },
   };
 }
+
+/** Pan by a screen-space delta in px. Scale is unchanged; the bed moves with the cursor. */
+export function panBy(view: View, dxPx: number, dyPx: number): View {
+  return { scale: view.scale, originPx: { x: view.originPx.x + dxPx, y: view.originPx.y + dyPx } };
+}

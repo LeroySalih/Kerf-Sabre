@@ -31,3 +31,21 @@ describe("coords", () => {
     expect(after.y).toBeCloseTo(before.y);
   });
 });
+
+import { panBy } from "../src/coords";
+
+describe("panBy", () => {
+  const v = { scale: 2, originPx: { x: 10, y: 500 } };
+  it("moves the bed with the drag and keeps the scale", () => {
+    const p = panBy(v, 30, -20);
+    expect(p.scale).toBe(2);
+    expect(p.originPx).toEqual({ x: 40, y: 480 });
+  });
+  it("the bed point under the cursor follows the cursor", () => {
+    const start = { x: 100, y: 100 };
+    const before = screenToBed(v, start);
+    const after = screenToBed(panBy(v, 50, 25), { x: start.x + 50, y: start.y + 25 });
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+  });
+});

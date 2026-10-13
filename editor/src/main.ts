@@ -1,5 +1,5 @@
 import paper from "paper";
-import { bedToScreen, fitView, screenToBed, zoomAt, type Point, type View } from "./coords";
+import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View } from "./coords";
 import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
@@ -22,6 +22,8 @@ let selected = new Set<number>();
 type Tool = "select" | "rect" | "circle" | "line" | "trim";
 let tool: Tool = "select";
 let showGrid = true;
+let spaceDown = false;
+let panning: { x: number; y: number } | null = null;
 let anchor: Anchor = DEFAULT_ANCHOR;
 let trimPreview: Path | null = null;
 let marquee: { a: Point; b: Point; base: Set<number> } | null = null;
@@ -278,6 +280,23 @@ function download(name: string, text: string, type: string): void {
   URL.revokeObjectURL(a.href);
 }
 
+const typingInField = (e: KeyboardEvent) =>
+  e.target instanceof HTMLInputElement && e.target.type !== "radio" && e.target.type !== "checkbox";
+
+function setSpace(down: boolean): void {
+  spaceDown = down;
+  canvas.style.cursor = panning ? "grabbing" : down ? "grab" : tool === "trim" ? "crosshair" : "";
+}
+
+// Hold Space and drag with the left button to pan. Space must not click a focused toolbar button.
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && !typingInField(e)) { e.preventDefault(); setSpace(true); return; }
+}, true);
+window.addEventListener("keyup", (e) => {
+  if (e.code === "Space" && !typingInField(e)) { e.preventDefault(); setSpace(false); }
+}, true);
+window.addEventListener("blur", () => { panning = null; setSpace(false); });
+
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement && e.target.type !== "radio") return; // typing in a field
   if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
@@ -319,6 +338,12 @@ function pickObject(pt: paper.Point): number | undefined {
 }
 
 canvas.addEventListener("mousedown", (e) => {
+  if (spaceDown && e.button === 0) {
+    panning = { x: e.clientX, y: e.clientY };
+    setSpace(true);
+    e.preventDefault();
+    return;
+  }
   const p = bedPt(e);
   dragStart = dragLast = p;
   moved = false;
@@ -336,7 +361,15 @@ canvas.addEventListener("mousedown", (e) => {
   }
 });
 
+window.addEventListener("mousemove", (e) => {
+  if (!panning) return;
+  view = panBy(view, e.clientX - panning.x, e.clientY - panning.y);
+  panning = { x: e.clientX, y: e.clientY };
+  draw();
+});
+
 canvas.addEventListener("mousemove", (e) => {
+  if (panning) return;
   const p = bedPt(e);
   cursorEl.textContent = `X ${p.x.toFixed(1)}  Y ${p.y.toFixed(1)} mm`;
   if (tool === "trim") {
@@ -359,6 +392,7 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 window.addEventListener("mouseup", (e) => {
+  if (panning) { panning = null; setSpace(spaceDown); return; }
   if (dragStart && tool !== "select") {
     const sh = shapeFor(tool, dragStart, bedPt(e));
     if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y) ?? IDENTITY).id]); });

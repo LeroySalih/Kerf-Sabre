@@ -7,6 +7,7 @@ import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, 
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf } from "./geometry";
 import { planTrim } from "./trim";
+import { outOfBounds } from "./bounds";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
@@ -152,12 +153,18 @@ function draw(): void {
 
   if (showGrid) drawGrid(widthMm, heightMm);
 
+  const oob = new Set(outOfBounds(doc.state.objects, machine.bed));
+  document.getElementById("warn")!.textContent = oob.size
+    ? `${oob.size} object${oob.size > 1 ? "s" : ""} outside the bed: fix before submitting`
+    : "";
+
   for (const o of doc.state.objects) {
     const item = toPaperPath(transformPath(o.path, o.matrix));
     item.data = { id: o.id };
-    item.strokeColor = new paper.Color(COLOURS[o.layer]);
-    item.strokeWidth = selected.has(o.id) ? 3 : 1.5;
-    if (o.path.closed) item.fillColor = new paper.Color(0, 0, 0, 0.01); // hit-testable
+    const out = oob.has(o.id);
+    item.strokeColor = new paper.Color(out ? "#ff0000" : COLOURS[o.layer]);
+    item.strokeWidth = selected.has(o.id) || out ? 3 : 1.5;
+    if (o.path.closed) item.fillColor = out ? new paper.Color(1, 0, 0, 0.18) : new paper.Color(0, 0, 0, 0.01); // faint fill keeps it hit-testable
     if (selected.has(o.id)) item.dashArray = [6, 3];
   }
   for (const g of new Set(doc.state.objects.filter((o) => selected.has(o.id) && o.group !== undefined).map((o) => o.group))) {

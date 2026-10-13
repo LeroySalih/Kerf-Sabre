@@ -20,6 +20,7 @@
       #bar .fields { display: grid; grid-template-columns: repeat(2, auto); gap: 0.2rem 0.6rem; justify-items: end; }
       #bar .fields .lock { grid-column: 1 / -1; justify-self: start; font-size: 0.8rem; }
       #bar input[type="number"] { width: 5.5rem; }
+      #warn { color: #fecaca; font-weight: 600; }
       #bar button { padding: 0.25rem 0.6rem; }
       #bar button.on { background: #f97316; color: #fff; border-color: #f97316; }
       canvas { display: block; width: 100%; height: 100%; }
@@ -66,6 +67,7 @@
           <button id="exp-svg">Export SVG</button>
         </span>
         <label><input id="grid" type="checkbox" checked /> 1 cm grid</label>
+        <span id="warn" role="status"></span>
         <span id="cursor">X – Y –</span>
       </div>
       <div id="stage"><canvas id="canvas" resize></canvas></div>

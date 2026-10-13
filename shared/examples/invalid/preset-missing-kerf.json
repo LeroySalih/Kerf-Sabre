@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "ply-3mm",
+  "version": 2,
+  "material": "Plywood",
+  "thicknessMm": 3,
+  "sheet": {
+    "widthMm": 600,
+    "heightMm": 400,
+    "costSar": 12.5
+  },
+  "cut": {
+    "powerPct": 100,
+    "speedMmPerS": 3,
+    "passes": 2,
+    "airAssist": true
+  },
+  "score": {
+    "powerPct": 20,
+    "speedMmPerS": 20,
+    "passes": 1,
+    "airAssist": false
+  },
+  "laserOverrides": {
+    "station-2": {
+      "kerfMm": 0.25,
+      "cut": {
+        "speedMmPerS": 2.5
+      }
+    }
+  },
+  "testedOn": [
+    "station-1"
+  ],
+  "updatedBy": "t001"
+}

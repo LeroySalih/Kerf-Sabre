@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kerf-sabre.local/schemas/job.schema.json",
+  "title": "Job",
+  "description": "A pupil's submitted design. Geometry in Design space (mm, Y-up); each object has an affine matrix placing it on the bed. No pupil names, pupil ID only.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "pupilId", "createdAt", "status", "preset", "origin", "objects"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "0.1.0"},
+    "id": {"type": "string", "minLength": 1},
+    "pupilId": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "description": "Pupil ID, never a name"},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["draft", "submitted", "approved", "queued", "assigned", "running", "done", "failed", "cancelled"]},
+    "preset": {
+      "type": "object",
+      "required": ["id", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "station": {"type": ["string", "null"], "description": "Machine profile id once assigned"},
+    "origin": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["absolute", "current-position"]},
+        "anchor": {"enum": ["top-left", "top-center", "top-right", "middle-left", "center", "middle-right",
+                            "bottom-left", "bottom-center", "bottom-right"],
+                   "description": "Required when mode is current-position"}
+      },
+      "if": {"properties": {"mode": {"const": "current-position"}}},
+      "then": {"required": ["anchor"]}
+    },
+    "objects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/object"}},
+    "estimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "durationS": {"type": "number", "minimum": 0},
+        "partAreaMm2": {"type": "number", "minimum": 0},
+        "sheetAreaUsedMm2": {"type": "number", "minimum": 0},
+        "percentUsed": {"type": "number", "minimum": 0, "maximum": 100},
+        "costSar": {"type": ["number", "null"], "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "point": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "matrix": {"type": "array", "items": {"type": "number"}, "minItems": 6, "maxItems": 6,
+               "description": "Affine [a,b,c,d,e,f] Design -> Bed: x'=a*x+c*y+e, y'=b*x+d*y+f"},
+    "segment": {
+      "oneOf": [
+        {"type": "object", "required": ["type", "to"], "additionalProperties": false,
+         "properties": {"type": {"const": "line"}, "to": {"$ref": "#/$defs/point"}}},
+        {"type": "object", "required": ["type", "to", "center", "clockwise"], "additionalProperties": false,
+         "properties": {"type": {"const": "arc"}, "to": {"$ref": "#/$defs/point"},
+                        "center": {"$ref": "#/$defs/point"}, "clockwise": {"type": "boolean"}}},
+        {"type": "object", "required": ["type", "c1", "c2", "to"], "additionalProperties": false,
+         "properties": {"type": {"const": "cubic"}, "c1": {"$ref": "#/$defs/point"},
+                        "c2": {"$ref": "#/$defs/point"}, "to": {"$ref": "#/$defs/point"}}}
+      ]
+    },
+    "object": {
+      "type": "object",
+      "required": ["id", "layer", "closed", "start", "segments", "matrix"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "layer": {"enum": ["score", "cut"]},
+        "closed": {"type": "boolean"},
+        "start": {"$ref": "#/$defs/point"},
+        "segments": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/segment"}},
+        "matrix": {"$ref": "#/$defs/matrix"},
+        "tabs": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["atLengthMm", "widthMm"], "additionalProperties": false,
+            "properties": {"atLengthMm": {"type": "number", "minimum": 0},
+                           "widthMm": {"type": "number", "exclusiveMinimum": 0}}
+          }
+        }
+      }
+    }
+  }
+}

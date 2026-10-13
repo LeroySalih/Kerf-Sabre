@@ -1,0 +1,155 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "job-0001",
+  "pupilId": "p10234",
+  "createdAt": "2026-10-13T09:30:00Z",
+  "status": "submitted",
+  "preset": {
+    "id": "ply-3mm",
+    "version": 2
+  },
+  "station": null,
+  "origin": {
+    "mode": "current-position",
+    "anchor": "bottom-left"
+  },
+  "objects": [
+    {
+      "id": "outer",
+      "layer": "engrave",
+      "closed": true,
+      "start": [
+        0,
+        0
+      ],
+      "segments": [
+        {
+          "type": "line",
+          "to": [
+            50,
+            0
+          ]
+        },
+        {
+          "type": "line",
+          "to": [
+            50,
+            30
+          ]
+        },
+        {
+          "type": "line",
+          "to": [
+            0,
+            30
+          ]
+        },
+        {
+          "type": "line",
+          "to": [
+            0,
+            0
+          ]
+        }
+      ],
+      "matrix": [
+        1,
+        0,
+        0,
+        1,
+        10,
+        10
+      ],
+      "tabs": [
+        {
+          "atLengthMm": 25,
+          "widthMm": 1
+        }
+      ]
+    },
+    {
+      "id": "hole",
+      "layer": "cut",
+      "closed": true,
+      "start": [
+        30,
+        15
+      ],
+      "segments": [
+        {
+          "type": "arc",
+          "to": [
+            10,
+            15
+          ],
+          "center": [
+            20,
+            15
+          ],
+          "clockwise": false
+        },
+        {
+          "type": "arc",
+          "to": [
+            30,
+            15
+          ],
+          "center": [
+            20,
+            15
+          ],
+          "clockwise": false
+        }
+      ],
+      "matrix": [
+        1,
+        0,
+        0,
+        1,
+        10,
+        10
+      ]
+    },
+    {
+      "id": "label",
+      "layer": "score",
+      "closed": false,
+      "start": [
+        5,
+        5
+      ],
+      "segments": [
+        {
+          "type": "cubic",
+          "c1": [
+            10,
+            8
+          ],
+          "c2": [
+            15,
+            2
+          ],
+          "to": [
+            20,
+            5
+          ]
+        }
+      ],
+      "matrix": [
+        1,
+        0,
+        0,
+        1,
+        10,
+        10
+      ]
+    }
+  ],
+  "estimate": {
+    "durationS": 95.5,
+    "partAreaMm2": 1200,
+    "sheetAreaUsedMm2": 1500,
+    "percentUsed": 80,
+    "costSar": 1.2
+  }
+}

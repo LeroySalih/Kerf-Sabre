@@ -1,0 +1,142 @@
+[
+  {
+    "schemaVersion": "0.2.0",
+    "id": "ply-3mm",
+    "version": 2,
+    "material": "Plywood",
+    "thicknessMm": 3,
+    "sheet": {
+      "widthMm": 600,
+      "heightMm": 400,
+      "costSar": 12.5
+    },
+    "kerfMm": 0.2,
+    "cut": {
+      "powerPct": 100,
+      "speedMmPerS": 3,
+      "passes": 2,
+      "airAssist": true
+    },
+    "score": {
+      "powerPct": 20,
+      "speedMmPerS": 20,
+      "passes": 1,
+      "airAssist": false
+    },
+    "laserOverrides": {
+      "station-2": {
+        "kerfMm": 0.25,
+        "cut": {
+          "speedMmPerS": 2.5
+        }
+      }
+    },
+    "testedOn": [
+      "station-1"
+    ]
+  },
+  {
+    "schemaVersion": "0.2.0",
+    "id": "ply-6mm",
+    "version": 1,
+    "material": "Plywood",
+    "thicknessMm": 6,
+    "sheet": {
+      "widthMm": 600,
+      "heightMm": 400,
+      "costSar": 20
+    },
+    "kerfMm": 0.25,
+    "cut": {
+      "powerPct": 100,
+      "speedMmPerS": 1.5,
+      "passes": 4,
+      "airAssist": true
+    },
+    "score": {
+      "powerPct": 25,
+      "speedMmPerS": 20,
+      "passes": 1,
+      "airAssist": false
+    },
+    "testedOn": []
+  },
+  {
+    "schemaVersion": "0.2.0",
+    "id": "mdf-3mm",
+    "version": 1,
+    "material": "MDF",
+    "thicknessMm": 3,
+    "sheet": {
+      "widthMm": 600,
+      "heightMm": 400,
+      "costSar": 8
+    },
+    "kerfMm": 0.2,
+    "cut": {
+      "powerPct": 100,
+      "speedMmPerS": 3.5,
+      "passes": 2,
+      "airAssist": true
+    },
+    "score": {
+      "powerPct": 18,
+      "speedMmPerS": 20,
+      "passes": 1,
+      "airAssist": false
+    },
+    "testedOn": []
+  },
+  {
+    "schemaVersion": "0.2.0",
+    "id": "card-1mm",
+    "version": 1,
+    "material": "Card",
+    "thicknessMm": 1,
+    "sheet": {
+      "widthMm": 400,
+      "heightMm": 300,
+      "costSar": 2
+    },
+    "kerfMm": 0.1,
+    "cut": {
+      "powerPct": 40,
+      "speedMmPerS": 12,
+      "passes": 1,
+      "airAssist": true
+    },
+    "score": {
+      "powerPct": 10,
+      "speedMmPerS": 30,
+      "passes": 1,
+      "airAssist": false
+    },
+    "testedOn": []
+  },
+  {
+    "schemaVersion": "0.2.0",
+    "id": "acrylic-opaque-3mm",
+    "version": 1,
+    "material": "Acrylic (opaque dark)",
+    "thicknessMm": 3,
+    "sheet": {
+      "widthMm": 600,
+      "heightMm": 400,
+      "costSar": 30
+    },
+    "kerfMm": 0.15,
+    "cut": {
+      "powerPct": 100,
+      "speedMmPerS": 1.2,
+      "passes": 5,
+      "airAssist": true
+    },
+    "score": {
+      "powerPct": 30,
+      "speedMmPerS": 15,
+      "passes": 1,
+      "airAssist": false
+    },
+    "testedOn": []
+  }
+]

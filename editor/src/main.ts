@@ -1,6 +1,6 @@
 import paper from "paper";
 import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View } from "./coords";
-import { Doc, type LayerType } from "./doc";
+import { Doc, type DocObject, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, multiply, polylinePath, rectangle, regularPolygon, translation, transformPath, type Matrix, type Path } from "./geometry";
@@ -8,6 +8,7 @@ import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } fr
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
+import { booleanOp, type BoolOp } from "./boolean";
 import { outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
 import { DEFAULT_FONT, getFont, listFonts, loadBundledFonts, registerOutlineFont, textToPaths, type TextSpec } from "./text";
@@ -386,6 +387,9 @@ function setGimbal(on: boolean): void {
   draw();
 }
 on("gimbal", () => setGimbal(!showGimbal));
+on("b-union", () => booleanSelected("union"));
+on("b-intersect", () => booleanSelected("intersect"));
+on("b-subtract", () => booleanSelected("subtract"));
 on("group", () => groupSelected());
 on("ungroup", () => ungroupSelected());
 (document.getElementById("grid") as HTMLInputElement).addEventListener("change", (e) => {
@@ -416,6 +420,38 @@ function importDXF(text: string, name: string): void {
   });
   const skipped = Object.entries(r.skipped).map(([t, n]) => `${n} ${t}`).join(", ");
   if (skipped) alert(`Imported ${r.shapes.length} shapes. Skipped unsupported: ${skipped}.`);
+}
+
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+/** A short message in the footer that clears itself. */
+function notify(msg: string): void {
+  const el = document.getElementById("notice")!;
+  el.textContent = msg;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { el.textContent = ""; }, 5000);
+}
+
+/**
+ * Union / intersect / subtract the selection. A group (or text) counts as one compound shape, so a donut stays a donut.
+ * Subtract removes every later-drawn shape from the earliest-drawn one. Results are baked paths in one group.
+ */
+function booleanSelected(op: BoolOp): void {
+  const groups = new Map<string, DocObject[]>();
+  for (const o of doc.state.objects.filter((x) => selected.has(x.id))) {
+    const key = o.group !== undefined ? `g${o.group}` : `o${o.id}`;
+    groups.set(key, [...(groups.get(key) ?? []), o]);
+  }
+  const operands = [...groups.values()].sort((a, b) => Math.min(...a.map((o) => o.id)) - Math.min(...b.map((o) => o.id)));
+  const result = booleanOp(op, operands.map((list) => list.map((o) => transformPath(o.path, o.matrix))));
+  if (result.error) { notify(result.error); return; }
+  const layer = operands[0]![0]!.layer;
+  const ids = [...selected];
+  edit(() => {
+    doc.convertText(ids); // text is baked into the result
+    doc.remove(ids);
+    const group = result.paths.length > 1 ? doc.state.nextGroup++ : undefined;
+    selected = new Set(result.paths.map((p) => { const o = doc.add(p, IDENTITY, layer); if (group !== undefined) o.group = group; return o.id; }));
+  });
 }
 
 function groupSelected(): void {

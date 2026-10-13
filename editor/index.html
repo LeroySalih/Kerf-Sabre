@@ -21,6 +21,7 @@
       #bar .fields .lock { grid-column: 1 / -1; justify-self: start; font-size: 0.8rem; }
       #bar input[type="number"] { width: 5.5rem; }
       #bar #sides { width: 3.4rem; }
+      #notice { color: #fde68a; font-weight: 600; }
       #footer { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 1rem; background: #1f2937; color: #e5e7eb; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
       #bar [hidden] { display: none; }
       #bar input[type="text"] { width: 9rem; }
@@ -51,6 +52,9 @@
           <button id="score" title="Set selection to Score">Score</button>
           <button id="cut" title="Set selection to Cut">Cut</button>
           <button id="gimbal" title="Gimbal on the selection (G): arrows move along an axis, squares scale, the ring rotates (Shift = 15 degree steps). Pivot is the anchor you picked.">Gimbal</button>
+          <button id="b-union" title="Union: merge the selected shapes into one outline">Union</button>
+          <button id="b-intersect" title="Intersect: keep only the area the selected shapes share">Intersect</button>
+          <button id="b-subtract" title="Subtract: remove the later-drawn shapes from the earliest-drawn one">Subtract</button>
           <button id="group" title="Group (Ctrl/Cmd+G)">Group</button>
           <button id="ungroup" title="Ungroup (Ctrl/Cmd+Shift+G)">Ungroup</button>
           <button id="del">Delete</button>
@@ -89,7 +93,7 @@
         <span id="warn" role="status"></span>
       </div>
       <div id="stage"><canvas id="canvas" resize></canvas></div>
-      <div id="footer"><span id="selinfo">Nothing selected</span><span id="cursor">X – Y –</span></div>
+      <div id="footer"><span id="selinfo">Nothing selected</span><span id="notice" role="status"></span><span id="cursor">X – Y –</span></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

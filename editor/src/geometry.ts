@@ -201,3 +201,31 @@ export function polylinePath(points: Point[], closed: boolean): Path | null {
   if (points.length < (closed ? 3 : 2)) return null;
   return { start: points[0]!, segs: points.slice(1).map((to): Seg => ({ t: "l", to })), closed };
 }
+
+const KAPPA = 0.5522847498307936; // Bezier handle length for a quarter circle, as a fraction of the radius
+
+/** Ellipse centred on the origin as four cubic Beziers (an ellipse is not a circular arc, so it can't be an arc). */
+export function ellipse(rx: number, ry: number): Path {
+  const kx = rx * KAPPA, ky = ry * KAPPA;
+  return {
+    start: { x: rx, y: 0 },
+    segs: [
+      { t: "c", c1: { x: rx, y: ky }, c2: { x: kx, y: ry }, to: { x: 0, y: ry } },
+      { t: "c", c1: { x: -kx, y: ry }, c2: { x: -rx, y: ky }, to: { x: -rx, y: 0 } },
+      { t: "c", c1: { x: -rx, y: -ky }, c2: { x: -kx, y: -ry }, to: { x: 0, y: -ry } },
+      { t: "c", c1: { x: kx, y: -ry }, c2: { x: rx, y: -ky }, to: { x: rx, y: 0 } },
+    ],
+    closed: true,
+  };
+}
+
+/** Star centred on the origin: `points` tips at `outerR`, valleys at `innerR`; the first tip is at `startRad`. */
+export function star(points: number, outerR: number, innerR: number, startRad = 0): Path {
+  const n = Math.max(3, Math.round(points));
+  const v = (i: number): Point => {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = startRad + (Math.PI * i) / n;
+    return { x: r * Math.cos(a), y: r * Math.sin(a) };
+  };
+  return { start: v(0), segs: Array.from({ length: 2 * n - 1 }, (_, i): Seg => ({ t: "l", to: v(i + 1) })), closed: true };
+}

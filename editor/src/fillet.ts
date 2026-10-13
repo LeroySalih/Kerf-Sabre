@@ -130,3 +130,10 @@ export function nearestCorner<T extends { path: Path }>(items: T[], p: Point, to
   }
   return best ? { item: best.item, vertex: best.vertex } : null;
 }
+
+/** Rectangle with rounded corners (true arcs), at the origin. The radius is limited to half the shorter side. */
+export function roundedRectangle(w: number, h: number, r: number): Path {
+  const base: Path = { start: { x: 0, y: 0 }, segs: [{ t: "l", to: { x: w, y: 0 } }, { t: "l", to: { x: w, y: h } }, { t: "l", to: { x: 0, y: h } }], closed: true };
+  const radius = Math.min(Math.max(r, 0), Math.min(w, h) / 2);
+  return radius < 1e-9 ? base : filletAll(base, radius, "radius").path;
+}

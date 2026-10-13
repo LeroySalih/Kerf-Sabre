@@ -4,7 +4,7 @@ import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View
 import { Doc, type ClipData, type DocObject, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
-import { IDENTITY, arcMid, circle, line, multiply, polylinePath, rectangle, regularPolygon, translation, transformPath, type Matrix, type Path } from "./geometry";
+import { IDENTITY, arcMid, circle, ellipse, line, star, multiply, polylinePath, rectangle, regularPolygon, translation, transformPath, type Matrix, type Path } from "./geometry";
 import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } from "./gizmo";
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
@@ -22,7 +22,7 @@ import { PLACEHOLDER_PRESETS, findPreset, formatOperation, presetLabel, resolveP
 import { selectionSummary } from "./status";
 import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
-import { filletAll, filletVertices, nearestCorner, type CornerMode } from "./fillet";
+import { filletAll, filletVertices, nearestCorner, roundedRectangle, type CornerMode } from "./fillet";
 import { mountIcons } from "./icons";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
@@ -36,7 +36,7 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "circle" | "line" | "polygon" | "pen" | "trim" | "radius" | "measure" | "text";
+type Tool = "select" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
@@ -84,6 +84,14 @@ function shapeFor(t: Tool, a: Point, b: Point): { path: Path; at: Point } | null
   const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
   if (t === "rect" && w > 0.1 && h > 0.1) return { path: rectangle(w, h), at: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) } };
   if (t === "circle") { const r = Math.hypot(b.x - a.x, b.y - a.y); if (r > 0.1) return { path: circle(r), at: a }; }
+  if (t === "rrect" && w > 0.1 && h > 0.1) return { path: roundedRectangle(w, h, Math.max(0, parseFloat((document.getElementById("rrad") as HTMLInputElement).value) || 0)), at: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) } };
+  if (t === "ellipse" && w > 0.1 && h > 0.1) return { path: ellipse(w / 2, h / 2), at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+  if (t === "star") {
+    const r = Math.hypot(b.x - a.x, b.y - a.y);
+    const pts = Math.min(32, Math.max(3, Math.round(parseFloat((document.getElementById("star-points") as HTMLInputElement).value) || 5)));
+    const inner = Math.min(95, Math.max(5, parseFloat((document.getElementById("star-inner") as HTMLInputElement).value) || 40)) / 100;
+    if (r > 0.1) return { path: star(pts, r, r * inner, Math.atan2(b.y - a.y, b.x - a.x)), at: a };
+  }
   if (t === "polygon") { const r = Math.hypot(b.x - a.x, b.y - a.y); if (r > 0.1) return { path: regularPolygon(sides(), r, Math.atan2(b.y - a.y, b.x - a.x)), at: a }; }
   if (t === "line" && Math.hypot(w, h) > 0.1) return { path: line(b.x - a.x, b.y - a.y), at: a };
   return null;
@@ -378,7 +386,9 @@ function setTool(next: Tool): void {
   tool = next;
   (document.getElementById("opt-polygon") as HTMLElement).hidden = tool !== "polygon";
   (document.getElementById("opt-radius") as HTMLElement).hidden = tool !== "radius";
-  (document.getElementById("opt-none") as HTMLElement).hidden = tool === "polygon" || tool === "radius";
+  (document.getElementById("opt-rrect") as HTMLElement).hidden = tool !== "rrect";
+  (document.getElementById("opt-star") as HTMLElement).hidden = tool !== "star";
+  (document.getElementById("opt-none") as HTMLElement).hidden = ["polygon", "radius", "rrect", "star"].includes(tool);
   penPoints = [];
   penCursor = null;
   trimPreview = null;
@@ -855,7 +865,7 @@ function updateGizmoDrag(e: MouseEvent): void {
   draw();
 }
 
-const isDrawTool = () => tool === "rect" || tool === "circle" || tool === "line" || tool === "polygon" || tool === "measure";
+const isDrawTool = () => tool === "rect" || tool === "rrect" || tool === "ellipse" || tool === "circle" || tool === "line" || tool === "polygon" || tool === "star" || tool === "measure";
 
 // ---- pointer ----
 const bedPt = (e: MouseEvent): Point => {

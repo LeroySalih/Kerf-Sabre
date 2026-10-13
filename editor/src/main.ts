@@ -1,6 +1,6 @@
 import paper from "paper";
 import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View } from "./coords";
-import { Doc, type DocObject, type LayerType } from "./doc";
+import { Doc, type ClipData, type DocObject, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, multiply, polylinePath, rectangle, regularPolygon, translation, transformPath, type Matrix, type Path } from "./geometry";
@@ -10,6 +10,7 @@ import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
 import { alignDeltas, distributeDeltas, unionBounds, type AlignKind, type Unit } from "./align";
 import { booleanOp, type BoolOp } from "./boolean";
+import { parseClip, serializeClip } from "./clipboard";
 import { outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
 import { DEFAULT_FONT, getFont, listFonts, loadBundledFonts, registerOutlineFont, textToPaths, type TextSpec } from "./text";
@@ -488,6 +489,65 @@ function distributeSelected(axis: "h" | "v"): void {
   moveUnits(units, distributeDeltas(units, axis));
 }
 
+// ---- copy / cut / paste / duplicate ----
+let clipboard: ClipData | null = null; // in-app copy, used by the buttons and as a fallback
+let clipboardText: string | null = null; // the text we last put on the system clipboard, to recognise our own copy
+let pasteCount = 0; // each paste of the same copy steps further from the original
+const PASTE_STEP_MM = 5;
+
+function copySelected(): string | null {
+  if (!selected.size) return null;
+  clipboard = doc.copyOut(selected);
+  clipboardText = serializeClip(clipboard);
+  pasteCount = 0;
+  return clipboardText;
+}
+
+function pasteClip(data: ClipData | null): void {
+  if (!data) return;
+  pasteCount++;
+  const d = PASTE_STEP_MM * pasteCount;
+  edit(() => { selected = new Set(doc.pasteIn(data, d, -d)); });
+}
+
+function duplicateSelected(): void {
+  const data = selected.size ? doc.copyOut(selected) : null;
+  if (!data) return;
+  edit(() => { selected = new Set(doc.pasteIn(data, PASTE_STEP_MM, -PASTE_STEP_MM)); });
+}
+
+// The browser's copy/cut/paste events need no permission prompt and carry the shapes through the system clipboard.
+const inTextField = (e: Event) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
+document.addEventListener("copy", (e) => {
+  if (inTextField(e)) return;
+  const text = copySelected();
+  if (text === null) return;
+  e.clipboardData?.setData("text/plain", text);
+  e.preventDefault();
+});
+document.addEventListener("cut", (e) => {
+  if (inTextField(e)) return;
+  const text = copySelected();
+  if (text === null) return;
+  e.clipboardData?.setData("text/plain", text);
+  e.preventDefault();
+  deleteSelected();
+});
+document.addEventListener("paste", (e) => {
+  if (inTextField(e)) return;
+  const text = e.clipboardData?.getData("text/plain") ?? "";
+  if (text !== clipboardText) { // not our own last copy: it may have come from another tab
+    const parsed = parseClip(text);
+    if (parsed) { clipboard = parsed; clipboardText = text; pasteCount = 0; }
+  }
+  if (!clipboard) return;
+  e.preventDefault();
+  pasteClip(clipboard);
+});
+on("copy", () => { copySelected(); });
+on("paste", () => pasteClip(clipboard));
+on("dup", () => duplicateSelected());
+
 function groupSelected(): void {
   if (doc.expand(selected).length < 2) return;
   edit(() => { doc.group([...selected]); selected = new Set(doc.expand(selected)); });
@@ -534,6 +594,7 @@ window.addEventListener("keydown", (e) => {
   else if (tool === "pen" && penPoints.length && e.key === "Escape") penCancel();
   else if (tool === "pen" && penPoints.length && (e.key === "Backspace" || e.key === "Delete")) { penPoints.pop(); draw(); }
   else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSelected(); }
   else if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) setGimbal(!showGimbal);
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }

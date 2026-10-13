@@ -1,5 +1,5 @@
 // Document state with snapshot undo/redo. Edits change object matrices, never source geometry.
-import { multiply, type Matrix, type Path } from "./geometry";
+import { multiply, translation, type Matrix, type Path } from "./geometry";
 import type { TextSpec } from "./text";
 
 export type LayerType = "score" | "cut";
@@ -13,6 +13,13 @@ export interface DocObject {
   group?: number;
   /** Set on every contour of a live text object; see DocState.texts. Cleared by Convert to Path. */
   textId?: number;
+}
+
+/** What a copy carries: the shapes with their groups, layers and (live) text specs. Ids are renumbered on paste. */
+export interface ClipData {
+  kerfSabre: 1;
+  objects: { path: Path; matrix: Matrix; layer: LayerType; group?: number; textId?: number }[];
+  texts: Record<number, TextSpec>;
 }
 
 export interface DocState {
@@ -136,5 +143,33 @@ export class Doc {
     const textIds = new Set(this.state.objects.filter((o) => new Set(this.expand(ids)).has(o.id) && o.textId !== undefined).map((o) => o.textId!));
     for (const o of this.state.objects) if (o.textId !== undefined && textIds.has(o.textId)) delete o.textId;
     for (const t of textIds) delete this.state.texts[t];
+  }
+
+  /** Snapshot of the given objects (whole groups, whole texts) for the clipboard. */
+  copyOut(ids: Iterable<number>): ClipData {
+    const want = new Set(this.expand(ids));
+    for (const o of this.state.objects) if (o.textId !== undefined && this.state.objects.some((x) => want.has(x.id) && x.textId === o.textId)) want.add(o.id);
+    const objects = this.state.objects.filter((o) => want.has(o.id)).map((o) => structuredClone({ path: o.path, matrix: o.matrix, layer: o.layer, group: o.group, textId: o.textId }));
+    const texts: Record<number, TextSpec> = {};
+    for (const o of objects) if (o.textId !== undefined && this.state.texts[o.textId]) texts[o.textId] = structuredClone(this.state.texts[o.textId]!);
+    return { kerfSabre: 1, objects, texts };
+  }
+
+  /** Add clipboard shapes, moved by (dx, dy) mm, with fresh group and text ids. Returns the new object ids. */
+  pasteIn(data: ClipData, dx: number, dy: number): number[] {
+    const groups = new Map<number, number>();
+    const texts = new Map<number, number>();
+    return data.objects.map((c) => {
+      const o = this.add(structuredClone(c.path), multiply(translation(dx, dy), c.matrix), c.layer);
+      if (c.group !== undefined) {
+        if (!groups.has(c.group)) groups.set(c.group, this.state.nextGroup++);
+        o.group = groups.get(c.group);
+      }
+      if (c.textId !== undefined && data.texts[c.textId]) {
+        if (!texts.has(c.textId)) { const id = this.state.nextText++; texts.set(c.textId, id); this.state.texts[id] = structuredClone(data.texts[c.textId]!); }
+        o.textId = texts.get(c.textId);
+      }
+      return o.id;
+    });
   }
 }

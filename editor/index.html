@@ -17,6 +17,8 @@
       #bar { flex-wrap: wrap; }
       #bar .anchors { display: grid; grid-template-columns: repeat(3, 16px); gap: 0; }
       #bar .anchors input { margin: 0; width: 16px; height: 16px; }
+      #bar .fields { display: grid; grid-template-columns: repeat(2, auto); gap: 0.2rem 0.6rem; justify-items: end; }
+      #bar .fields .lock { grid-column: 1 / -1; justify-self: start; font-size: 0.8rem; }
       #bar input[type="number"] { width: 5.5rem; }
       #bar button { padding: 0.25rem 0.6rem; }
       #bar button.on { background: #f97316; color: #fff; border-color: #f97316; }
@@ -45,8 +47,13 @@
         </span>
         <span id="position" title="Position of the selection's anchor point on the bed (mm)">
           <span class="anchors"><input type="radio" name="anchor" data-col="0" data-row="0" title="Anchor: top-left" /><input type="radio" name="anchor" data-col="1" data-row="0" title="Anchor: top" /><input type="radio" name="anchor" data-col="2" data-row="0" title="Anchor: top-right" /><input type="radio" name="anchor" data-col="0" data-row="1" title="Anchor: left" /><input type="radio" name="anchor" data-col="1" data-row="1" title="Anchor: centre" /><input type="radio" name="anchor" data-col="2" data-row="1" title="Anchor: right" /><input type="radio" name="anchor" data-col="0" data-row="2" title="Anchor: bottom-left" checked /><input type="radio" name="anchor" data-col="1" data-row="2" title="Anchor: bottom" /><input type="radio" name="anchor" data-col="2" data-row="2" title="Anchor: bottom-right" /></span>
-          <label>X <input id="px" type="number" step="0.1" disabled /></label>
-          <label>Y <input id="py" type="number" step="0.1" disabled /></label>
+          <span class="fields">
+            <label>X <input id="px" type="number" step="0.1" disabled /></label>
+            <label>Y <input id="py" type="number" step="0.1" disabled /></label>
+            <label>W <input id="pw" type="number" step="0.1" min="0" disabled /></label>
+            <label>H <input id="ph" type="number" step="0.1" min="0" disabled /></label>
+            <label class="lock" title="Keep proportions (circles stay circles)"><input id="lock" type="checkbox" checked /> Lock ratio</label>
+          </span>
         </span>
         <span>
           <button id="imp">Import DXF</button>

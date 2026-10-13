@@ -57,3 +57,63 @@ describe("exact arc bounds", () => {
     expect(bb).toEqual({ minX: -5, maxX: 5, minY: -5, maxY: 5 });
   });
 });
+
+import { scaleAboutAnchor } from "../src/anchor";
+import { transformPath } from "../src/geometry";
+
+describe("scaleAboutAnchor", () => {
+  const setup = () => {
+    const d = new Doc();
+    const id = d.add(rectangle(20, 40), translation(10, 100)).id; // bounds 10..30 x 100..140
+    return { d, id, bounds: selectionBounds(d.state.objects, [id])! };
+  };
+  const resize = (axis: "w" | "h", size: number, lock: boolean, anchor: Anchor) => {
+    const { d, id, bounds } = setup();
+    d.transform(id, scaleAboutAnchor(bounds, anchor, axis, size, lock)!);
+    return { after: selectionBounds(d.state.objects, [id])!, anchorBefore: anchorPoint(bounds, anchor), d, id };
+  };
+  const BL: Anchor = { col: 0, row: 2 }, TR: Anchor = { col: 2, row: 0 }, C: Anchor = { col: 1, row: 1 };
+
+  it("sets the width and keeps the anchor fixed", () => {
+    for (const a of [BL, TR, C]) {
+      const r = resize("w", 50, false, a);
+      expect(r.after.maxX - r.after.minX).toBeCloseTo(50, 9);
+      expect(r.after.maxY - r.after.minY).toBeCloseTo(40, 9); // height untouched
+      const p = anchorPoint(r.after, a);
+      expect(p.x).toBeCloseTo(r.anchorBefore.x, 9);
+      expect(p.y).toBeCloseTo(r.anchorBefore.y, 9);
+    }
+  });
+
+  it("sets the height and keeps the anchor fixed", () => {
+    const r = resize("h", 10, false, TR);
+    expect(r.after.maxY - r.after.minY).toBeCloseTo(10, 9);
+    expect(r.after.maxX).toBeCloseTo(30, 9); // top-right anchor stays
+    expect(r.after.maxY).toBeCloseTo(140, 9);
+  });
+
+  it("lock keeps the aspect ratio", () => {
+    const r = resize("w", 40, true, C); // 20x40 -> 40x80
+    expect(r.after.maxX - r.after.minX).toBeCloseTo(40, 9);
+    expect(r.after.maxY - r.after.minY).toBeCloseTo(80, 9);
+  });
+
+  it("rejects non-positive sizes and zero-extent axes", () => {
+    const { bounds } = setup();
+    expect(scaleAboutAnchor(bounds, BL, "w", 0, false)).toBeNull();
+    expect(scaleAboutAnchor(bounds, BL, "w", -5, false)).toBeNull();
+    expect(scaleAboutAnchor({ ...bounds, maxY: bounds.minY }, BL, "h", 10, false)).toBeNull(); // flat line
+  });
+
+  it("locked scaling keeps circles as true arcs; unlocked turns them into curves", () => {
+    const c = circle(5);
+    const bounds = { minX: -5, maxX: 5, minY: -5, maxY: 5 };
+    const locked = transformPath(c, scaleAboutAnchor(bounds, C, "w", 20, true)!);
+    expect(locked.segs.every((s) => s.t === "a")).toBe(true);
+    const free = transformPath(c, scaleAboutAnchor(bounds, C, "w", 20, false)!);
+    expect(free.segs.every((s) => s.t === "c")).toBe(true);
+    const fb = boundsOf(free);
+    expect(fb.maxX - fb.minX).toBeCloseTo(20, 1);
+    expect(fb.maxY - fb.minY).toBeCloseTo(10, 1);
+  });
+});

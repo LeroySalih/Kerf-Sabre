@@ -4,7 +4,7 @@ import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
-import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, selectionBounds, type Anchor } from "./anchor";
+import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, scaleAboutAnchor, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf } from "./geometry";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
@@ -54,16 +54,20 @@ function shapeFor(t: Tool, a: Point, b: Point): { path: Path; at: Point } | null
 
 const pxEl = document.getElementById("px") as HTMLInputElement;
 const pyEl = document.getElementById("py") as HTMLInputElement;
+const pwEl = document.getElementById("pw") as HTMLInputElement;
+const phEl = document.getElementById("ph") as HTMLInputElement;
+const lockEl = document.getElementById("lock") as HTMLInputElement;
+const fieldEls = [pxEl, pyEl, pwEl, phEl];
 const round = (n: number) => String(Math.round(n * 1000) / 1000);
 
-/** Show the selection's anchor position (bed mm); disabled when nothing is selected. */
+/** Show the selection's anchor position and size (bed mm); disabled when nothing is selected. */
 function updatePositionFields(): void {
   const b = selectionBounds(doc.state.objects, selected);
-  pxEl.disabled = pyEl.disabled = !b;
-  if (!b) { pxEl.value = pyEl.value = ""; return; }
+  for (const el of fieldEls) el.disabled = !b;
+  if (!b) { for (const el of fieldEls) el.value = ""; return; }
   const p = anchorPoint(b, anchor);
-  if (document.activeElement !== pxEl) pxEl.value = round(p.x);
-  if (document.activeElement !== pyEl) pyEl.value = round(p.y);
+  const values = [p.x, p.y, b.maxX - b.minX, b.maxY - b.minY];
+  fieldEls.forEach((el, i) => { if (document.activeElement !== el) el.value = round(values[i]!); });
 }
 
 /** Move the selection so its anchor lands on the typed value. Only the edited axis changes. */
@@ -76,9 +80,19 @@ function applyPosition(axis: "x" | "y"): void {
   edit(() => { for (const id of selected) doc.transform(id, translation(d.x, d.y)); });
 }
 
+/** Resize the selection about its anchor. Invalid or impossible sizes snap the field back. */
+function applySize(axis: Axis): void {
+  const b = selectionBounds(doc.state.objects, selected);
+  const m = b && scaleAboutAnchor(b, anchor, axis, parseFloat((axis === "w" ? pwEl : phEl).value), lockEl.checked);
+  if (!m) { updatePositionFields(); return; }
+  edit(() => { for (const id of selected) doc.transform(id, m); });
+}
+
 pxEl.addEventListener("change", () => applyPosition("x"));
 pyEl.addEventListener("change", () => applyPosition("y"));
-for (const el of [pxEl, pyEl]) el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
+pwEl.addEventListener("change", () => applySize("w"));
+phEl.addEventListener("change", () => applySize("h"));
+for (const el of fieldEls) el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
 document.querySelectorAll<HTMLInputElement>('input[name="anchor"]').forEach((r) =>
   r.addEventListener("change", () => {
     anchor = { col: Number(r.dataset.col), row: Number(r.dataset.row) } as Anchor;

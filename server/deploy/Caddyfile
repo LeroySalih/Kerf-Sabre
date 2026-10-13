@@ -1,0 +1,8 @@
+# Automatic HTTPS for the domain in KERF_DOMAIN. WebSockets (/api/v1/ws/cutter) pass through without extra config.
+{$KERF_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy kerf:8000
+}

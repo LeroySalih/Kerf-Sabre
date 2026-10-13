@@ -111,3 +111,20 @@ class TestDxfCleanupEndpoint:
         import pathlib
         blob = b"".join(p.read_bytes() for p in pathlib.Path(app.state.settings.data_dir).rglob("*") if p.is_file())
         assert b"any name" not in blob
+
+
+class TestServesEditor:
+    def test_editor_is_served_at_the_root_next_to_the_api(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from kerf_server.app import create_app
+        from kerf_server.config import Settings
+
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_text("<title>Kerf</title>")
+        app = create_app(Settings.from_env(data_dir=tmp_path / "d", editor_dist=dist))
+        with TestClient(app) as c:
+            assert "Kerf" in c.get("/").text
+            assert c.get("/health").json()["status"] == "ok"
+            assert c.get(f"{API}/auth/me").status_code == 401  # the API is not shadowed by the static mount

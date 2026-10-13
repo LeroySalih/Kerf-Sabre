@@ -1,0 +1,26 @@
+# Run from server/deploy:   cp .env.example .env   (edit it)   then   docker compose up -d --build
+services:
+  kerf:
+    build: {context: ../.., dockerfile: server/Dockerfile}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      KERF_FORWARDED_ALLOW_IPS: "*"   # only caddy can reach this container
+    volumes:
+      - kerf-data:/data
+    expose: ["8000"]
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [kerf]
+    ports: ["80:80", "443:443"]
+    environment:
+      KERF_DOMAIN: ${KERF_DOMAIN:?set KERF_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  kerf-data:
+  caddy-data:
+  caddy-config:

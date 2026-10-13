@@ -23,6 +23,7 @@ postgres = ["psycopg[binary]>=3.1"]
 
 [project.scripts]
 kerf-admin = "kerf_server.admin:main"
+kerf-server = "kerf_server.main:run"
 
 [tool.setuptools.packages.find]
 include = ["kerf_server*"]

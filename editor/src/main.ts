@@ -8,7 +8,7 @@ import { IDENTITY, arcMid, circle, ellipse, line, star, multiply, polylinePath, 
 import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } from "./gizmo";
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
-import { planTrim } from "./trim";
+import { distToPrim, explicit as explicitPath, planTrim, primOf as primsFor } from "./trim";
 import { circularMatrices, linearOffsets, mirrorMatrix, validateCircular, validateLinear, type CircularParams, type LinearParams } from "./arrays";
 import { alignDeltas, distributeDeltas, unionBounds, type AlignKind, type Unit } from "./align";
 import { booleanOp, type BoolOp } from "./boolean";
@@ -24,6 +24,7 @@ import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { filletAll, filletVertices, nearestCorner, roundedRectangle, type CornerMode } from "./fillet";
 import { mountIcons } from "./icons";
+import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
 mountIcons();
@@ -36,10 +37,12 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text";
+type Tool = "select" | "nodes" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
+let nodeSel: { id: number; index: number } | null = null; // the node picked in the Nodes tool
+let nodeDrag: { id: number; index: number; base: Path; started: boolean } | null = null;
 let activeLayer: LayerType = "cut"; // layer for newly drawn shapes; the chips in the bottom bar change it
 let penPoints: Point[] = []; // vertices placed so far by the Pen tool (bed mm)
 let penCursor: Point | null = null; // snapped cursor, for the rubber band
@@ -234,6 +237,20 @@ function drawGizmo(): void {
   }
 }
 
+/** Node handles of the single selected shape (Nodes tool). */
+function drawNodes(): void {
+  const o = nodeTarget();
+  if (!o) return;
+  nodePoints(transformPath(o.path, o.matrix)).forEach((q, i) => {
+    const c = toScreen(q);
+    const h = new paper.Path.Rectangle(new paper.Point(c.x - 4.5, c.y - 4.5), new paper.Size(9, 9));
+    const picked = nodeSel?.id === o.id && nodeSel.index === i;
+    h.fillColor = new paper.Color(picked ? "#f97316" : "#ffffff");
+    h.strokeColor = new paper.Color(picked ? "#c2410c" : "#2563eb");
+    h.strokeWidth = 1.5;
+  });
+}
+
 function drawSnapMarker(pt: Point, kind: SnapKind): void {
   const c = toScreen(pt);
   const box = new paper.Path.Rectangle(new paper.Point(c.x - 6, c.y - 6), new paper.Size(12, 12));
@@ -320,6 +337,7 @@ function draw(): void {
     box.strokeColor = new paper.Color("#2563eb");
     box.dashArray = [2, 3];
   }
+  if (tool === "nodes") drawNodes();
   if (penPoints.length) {
     const pts = penCursor ? [...penPoints, penCursor] : penPoints;
     const g = new paper.Path();
@@ -384,6 +402,8 @@ select.addEventListener("change", () => {
 });
 function setTool(next: Tool): void {
   tool = next;
+  nodeSel = null;
+  nodeDrag = null;
   (document.getElementById("opt-polygon") as HTMLElement).hidden = tool !== "polygon";
   (document.getElementById("opt-radius") as HTMLElement).hidden = tool !== "radius";
   (document.getElementById("opt-rrect") as HTMLElement).hidden = tool !== "rrect";
@@ -394,7 +414,7 @@ function setTool(next: Tool): void {
   trimPreview = null;
   snapMarker = null;
   if (tool !== "measure") measureLine = null;
-  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" ? "crosshair" : "";
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" ? "crosshair" : "";
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
   draw();
 }
@@ -420,6 +440,9 @@ function refreshActions(): void {
   for (const id of ["b-union", "b-intersect", "b-subtract", "group"]) set(id, units >= 2);
   set("ungroup", objs.some((o) => o.group !== undefined));
   for (const id of ["flip-h", "flip-v", "round-all", "act-linear", "act-circular", "copy", "dup", "del"]) set(id, objs.length >= 1);
+  set("act-join", objs.filter((o) => !o.path.closed).length >= 2);
+  set("act-close", objs.some((o) => !o.path.closed));
+  set("act-explode", objs.some((o) => o.path.segs.length >= 2 || (o.path.closed && o.path.segs.length >= 1)));
   for (const id of ["dist-h", "dist-v"]) set(id, units >= 3);
   document.querySelectorAll<HTMLButtonElement>("[data-align]").forEach((b) => { b.disabled = objs.length < 1; });
   set("paste", clipboard !== null);
@@ -489,11 +512,22 @@ function importDXF(text: string, name: string): void {
   const k = mmPerUnit(r.insunits) ?? DEFAULT_MM_PER_UNIT; // no units in file: assume cm (Onshape default)
   const paths = r.shapes.map((s) => scalePath(s.path, k));
   const min = designMin(paths); // bounding box bottom-left -> (0,0)
+  // Onshape exports every edge as its own entity: chain the ones that meet into real shapes, per layer.
+  const tol = joinTol();
+  let merges = 0, closed = 0;
+  const items: { path: Path; layer: LayerType }[] = [];
+  for (const layer of ["cut", "score"] as LayerType[]) {
+    const mine = paths.filter((_, i) => r.shapes[i]!.layer === layer);
+    if (!mine.length) continue;
+    const j = joinPaths(mine, tol);
+    merges += j.merges; closed += j.newlyClosed;
+    items.push(...j.paths.map((path) => ({ path, layer })));
+  }
   edit(() => {
-    selected = new Set(r.shapes.map((s, i) => doc.add(paths[i]!, translation(-min.x, -min.y), s.layer).id));
+    selected = new Set(items.map((it) => doc.add(it.path, translation(-min.x, -min.y), it.layer).id));
   });
   const skipped = Object.entries(r.skipped).map(([t, n]) => `${n} ${t}`).join(", ");
-  if (skipped) alert(`Imported ${r.shapes.length} shapes. Skipped unsupported: ${skipped}.`);
+  notify(`Imported ${r.shapes.length} entities as ${items.length} shapes${closed ? ` (${closed} closed)` : ""}${merges ? `, joining ends within ${tol} mm` : ""}.${skipped ? ` Skipped unsupported: ${skipped}.` : ""}`);
 }
 
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -662,6 +696,7 @@ window.addEventListener("keydown", (e) => {
   if (tool === "pen" && penPoints.length && e.key === "Enter") { e.preventDefault(); penFinish(false); }
   else if (tool === "pen" && penPoints.length && e.key === "Escape") penCancel();
   else if (tool === "pen" && penPoints.length && (e.key === "Backspace" || e.key === "Delete")) { penPoints.pop(); draw(); }
+  else if ((e.key === "Delete" || e.key === "Backspace") && deleteSelectedNode()) { e.preventDefault(); }
   else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSelected(); }
   else if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) setGimbal(!showGimbal);
@@ -910,6 +945,22 @@ canvas.addEventListener("mousedown", (e) => {
   }
   const rr = canvas.getBoundingClientRect();
   if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
+  if (tool === "nodes") {
+    if (e.button !== 0) return;
+    const hit = nodeAt(e);
+    if (hit) {
+      nodeSel = { id: hit.o.id, index: hit.index };
+      nodeDrag = { id: hit.o.id, index: hit.index, base: transformPath(hit.o.path, hit.o.matrix), started: false };
+      draw();
+      return;
+    }
+    const r = canvas.getBoundingClientRect();
+    const id = pickObject(new paper.Point(e.clientX - r.left, e.clientY - r.top));
+    selected = id === undefined ? new Set() : new Set([id]);
+    nodeSel = null;
+    draw();
+    return;
+  }
   const gh = gizmoAt(e);
   if (gh) { e.preventDefault(); startGizmoDrag(gh, e); return; }
   if (tool === "radius") { if (e.button === 0) doCorner(bedPt(e)); return; }
@@ -934,6 +985,16 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("mousemove", (e) => {
+  if (nodeDrag) {
+    const o = doc.get(nodeDrag.id);
+    if (!o) return;
+    if (!nodeDrag.started) { doc.checkpoint(); doc.convertText([o.id]); nodeDrag.started = true; }
+    const cur = snapPt(bedPt(e), e);
+    o.path = moveNode(nodeDrag.base, nodeDrag.index, cur);
+    o.matrix = [...IDENTITY] as Matrix;
+    draw();
+    return;
+  }
   if (gizmoDrag) { updateGizmoDrag(e); return; }
   if (!panning) return;
   view = panBy(view, e.clientX - panning.x, e.clientY - panning.y);
@@ -980,6 +1041,7 @@ canvas.addEventListener("mousemove", (e) => {
 
 window.addEventListener("mouseup", (e) => {
   if (panning) { panning = null; setSpace(spaceDown); return; }
+  if (nodeDrag) { nodeDrag = null; snapMarker = null; draw(); return; }
   if (gizmoDrag) { gizmoDrag = null; moveBounds = null; snapMarker = null; gizmoHover = null; canvas.style.cursor = ""; draw(); return; }
   if (dragStart && tool !== "select") {
     const sh = shapeFor(tool, dragStart, snapPt(bedPt(e), e));
@@ -1123,6 +1185,117 @@ function flipSelected(axis: "h" | "v"): void {
 }
 on("flip-h", () => flipSelected("h"));
 on("flip-v", () => flipSelected("v"));
+
+// ---- repair: join, close, explode, nodes ----
+const joinTol = () => Math.max(0.001, parseFloat((document.getElementById("join-tol") as HTMLInputElement).value) || 0.05);
+
+/** Join the selected open paths (per layer). Closed shapes are left alone. */
+function joinSelected(): void {
+  const objs = doc.state.objects.filter((o) => selected.has(o.id));
+  const open = objs.filter((o) => !o.path.closed);
+  if (open.length < 2) { notify("Select two or more open paths to join."); return; }
+  const tol = joinTol();
+  let merges = 0, closed = 0;
+  const made: { path: Path; layer: LayerType }[] = [];
+  for (const layer of ["cut", "score"] as LayerType[]) {
+    const mine = open.filter((o) => o.layer === layer);
+    if (!mine.length) continue;
+    const r = joinPaths(mine.map((o) => transformPath(o.path, o.matrix)), tol);
+    merges += r.merges; closed += r.newlyClosed;
+    made.push(...r.paths.map((path) => ({ path, layer })));
+  }
+  if (!merges) { notify(`Nothing to join: no ends are within ${tol} mm. Raise the tolerance in Options.`); return; }
+  edit(() => {
+    doc.convertText(open.map((o) => o.id));
+    doc.remove(open.map((o) => o.id));
+    const ids = made.map(({ path, layer }) => doc.add(path, IDENTITY, layer).id);
+    selected = new Set([...objs.filter((o) => o.path.closed).map((o) => o.id), ...ids]);
+  });
+  notify(`Joined ${merges} ${merges === 1 ? "piece" : "pieces"}${closed ? `, closing ${closed} ${closed === 1 ? "shape" : "shapes"}` : ""}.`);
+}
+
+function closeSelected(): void {
+  const open = doc.state.objects.filter((o) => selected.has(o.id) && !o.path.closed);
+  if (!open.length) { notify("No open paths are selected."); return; }
+  const tol = joinTol();
+  edit(() => {
+    for (const o of open) {
+      doc.convertText([o.id]);
+      o.path = closePath(transformPath(o.path, o.matrix), tol);
+      o.matrix = [...IDENTITY] as Matrix;
+    }
+  });
+  notify(`Closed ${open.length} ${open.length === 1 ? "path" : "paths"}.`);
+}
+
+function explodeSelected(): void {
+  const objs = doc.state.objects.filter((o) => selected.has(o.id));
+  const jobs = objs.map((o) => ({ o, pieces: explodePath(transformPath(o.path, o.matrix)) })).filter((j) => j.pieces.length > 1);
+  if (!jobs.length) { notify("Nothing to explode: the selected shapes are single edges."); return; }
+  edit(() => { selected = new Set(jobs.flatMap((j) => { const ids = replaceWith(j.o, j.pieces); for (const id of ids) delete doc.get(id)!.group; return ids; })); });
+  notify(`Exploded into ${jobs.reduce((n, j) => n + j.pieces.length, 0)} edges.`);
+}
+on("act-join", joinSelected);
+on("act-close", closeSelected);
+on("act-explode", explodeSelected);
+
+/** The single shape the Nodes tool works on. */
+function nodeTarget(): DocObject | null {
+  if (selected.size !== 1) return null;
+  return doc.get([...selected][0]!) ?? null;
+}
+
+/** Make an object's placement part of its path so nodes can be edited in bed space. */
+function bakeForNodes(o: DocObject): void {
+  doc.convertText([o.id]);
+  o.path = transformPath(o.path, o.matrix);
+  o.matrix = [...IDENTITY] as Matrix;
+}
+
+function nodeAt(e: MouseEvent): { o: DocObject; index: number } | null {
+  const o = nodeTarget();
+  if (!o) return null;
+  const r = canvas.getBoundingClientRect();
+  const m = { x: e.clientX - r.left, y: e.clientY - r.top };
+  let best: { index: number; d: number } | null = null;
+  nodePoints(transformPath(o.path, o.matrix)).forEach((q, index) => {
+    const c = bedToScreen(view, q);
+    const d = Math.hypot(c.x - m.x, c.y - m.y);
+    if (d <= 8 && (!best || d < best.d)) best = { index, d };
+  });
+  return best ? { o, index: (best as { index: number }).index } : null;
+}
+
+function deleteSelectedNode(): boolean {
+  if (tool !== "nodes" || !nodeSel) return false;
+  const o = doc.get(nodeSel.id);
+  if (!o) return false;
+  const base = transformPath(o.path, o.matrix);
+  const next = deleteNode(base, nodeSel.index);
+  if (!next) { notify("A shape needs at least two nodes (three if it is closed)."); return true; }
+  edit(() => { doc.convertText([o.id]); o.path = next; o.matrix = [...IDENTITY] as Matrix; });
+  nodeSel = null;
+  return true;
+}
+
+/** Double-click an edge in the Nodes tool to add a node there. */
+canvas.addEventListener("dblclick", (e) => {
+  if (tool !== "nodes") return;
+  const o = nodeTarget();
+  if (!o) return;
+  const p = bedPt(e);
+  const base = transformPath(o.path, o.matrix);
+  const q = explicitPath(base);
+  const tol = 8 / view.scale;
+  let best: { si: number; d: number } | null = null;
+  let cur = q.start;
+  q.segs.forEach((sg, si) => {
+    for (const prim of primsFor(cur, sg)) { const d = distToPrim(p, prim).d; if (d <= tol && (!best || d < best.d)) best = { si, d }; }
+    cur = sg.to;
+  });
+  if (!best) return;
+  edit(() => { doc.convertText([o.id]); o.path = insertNode(base, (best as { si: number }).si, p); o.matrix = [...IDENTITY] as Matrix; });
+});
 
 // ---- corner radius / chamfer ----
 const radiusEl = document.getElementById("radius") as HTMLInputElement;

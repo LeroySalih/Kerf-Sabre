@@ -16,6 +16,10 @@ export const ICONS: Record<string, string> = {
   trim: '<circle cx="6.5" cy="7" r="2.4"/><circle cx="6.5" cy="17" r="2.4"/><path d="M8.6 8.3L20 17.5M8.6 15.7L20 6.5"/>',
   radius: '<path d="M5 20v-8.5A6.5 6.5 0 0 1 11.5 5H20"/><path d="M5 20h2M17 5v0" stroke-dasharray="1 0"/>',
   "round-all": '<rect x="4.5" y="4.5" width="15" height="15" rx="5"/>',
+  nodes: '<path d="M4 18c3-9 8-12 16-9"/><rect x="2.2" y="16.2" width="3.6" height="3.6" fill="currentColor"/><rect x="18.2" y="7.2" width="3.6" height="3.6" fill="currentColor"/><rect x="10" y="8.4" width="3.4" height="3.4" fill="#fff"/>',
+  join: '<path d="M3 12h7M14 12h7"/><path d="M8 9l3 3-3 3M16 9l-3 3 3 3"/>',
+  "close-path": '<path d="M5 18V8l7-4 7 4v10"/><path d="M5 18h14" stroke-dasharray="2 2.5"/>',
+  explode: '<path d="M5 6h8M18 8v8M16 19H8M6 17V9"/>',
   measure: '<g transform="rotate(-35 12 12)"><rect x="2" y="8.5" width="20" height="7" rx="1"/><path d="M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3" /></g>',
   gimbal: '<circle cx="12" cy="12" r="1.8"/><path d="M12 10.2V3.8M9.9 5.9L12 3.8l2.1 2.1M13.8 12h6.4M18.1 9.9l2.1 2.1-2.1 2.1"/><path d="M7.2 16.8a6.5 6.5 0 0 0 9.6 0"/>',
   // ---- boolean ----

@@ -1,4 +1,5 @@
 import paper from "paper";
+import "./style.css";
 import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View } from "./coords";
 import { Doc, type ClipData, type DocObject, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
@@ -14,6 +15,7 @@ import { parseClip, serializeClip } from "./clipboard";
 import { outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
 import { DEFAULT_FONT, getFont, listFonts, loadBundledFonts, registerOutlineFont, textToPaths, type TextSpec } from "./text";
+import { PLACEHOLDER_PRESETS, findPreset, formatOperation, presetLabel, resolvePreset, type Operation } from "./presets";
 import { selectionSummary } from "./status";
 import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
@@ -32,6 +34,7 @@ type Tool = "select" | "rect" | "circle" | "line" | "polygon" | "pen" | "trim" |
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
+let activeLayer: LayerType = "cut"; // layer for newly drawn shapes; the chips in the bottom bar change it
 let penPoints: Point[] = []; // vertices placed so far by the Pen tool (bed mm)
 let penCursor: Point | null = null; // snapped cursor, for the rubber band
 let showGimbal = false;
@@ -94,6 +97,7 @@ const round = (n: number) => String(Math.round(n * 1000) / 1000);
 /** Show the selection's anchor position and size (bed mm); disabled when nothing is selected. */
 function updatePositionFields(): void {
   refreshTextPanel();
+  refreshLayerUI();
   const b = selectionBounds(doc.state.objects, selected);
   document.getElementById("selinfo")!.textContent = selectionSummary(selected.size, b);
   for (const el of fieldEls) el.disabled = !b;
@@ -365,6 +369,7 @@ select.addEventListener("change", () => {
 });
 function setTool(next: Tool): void {
   tool = next;
+  (document.getElementById("opt-polygon") as HTMLElement).hidden = tool !== "polygon";
   penPoints = [];
   penCursor = null;
   trimPreview = null;
@@ -378,8 +383,40 @@ document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((btn) =>
   btn.addEventListener("click", () => setTool(btn.dataset.tool as Tool)),
 );
 const on = (id: string, fn: () => void) => document.getElementById(id)!.addEventListener("click", fn);
-on("score", () => selected.size && edit(() => doc.setLayer([...selected], "score")));
-on("cut", () => selected.size && edit(() => doc.setLayer([...selected], "cut")));
+// Layer chips: choose the layer for new shapes, and move the selection onto it.
+document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) =>
+  b.addEventListener("click", () => {
+    activeLayer = b.dataset.layer as LayerType;
+    if (selected.size) edit(() => doc.setLayer([...selected], activeLayer));
+    else refreshLayerUI();
+  }),
+);
+
+/** Chips show the selection's layer (or the layer for new shapes); the table counts shapes per layer; material settings are locked. */
+function refreshLayerUI(): void {
+  const layers = new Set(doc.state.objects.filter((o) => selected.has(o.id)).map((o) => o.layer));
+  const shown: LayerType = layers.size === 1 ? [...layers][0]! : activeLayer;
+  document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => b.classList.toggle("on", b.dataset.layer === shown));
+
+  const preset = findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!;
+  const r = resolvePreset(preset, machine.id);
+  const op = (o: Operation) => `${o.powerPct}% \u00b7 ${o.speedMmPerS} mm/s \u00b7 \u00d7${o.passes} \u00b7 air ${o.airAssist ? "on" : "off"}`;
+  document.getElementById("mat-kerf")!.textContent = `Kerf ${r.kerfMm} mm`;
+  document.getElementById("mat-cut")!.innerHTML = `<i class="sw cut"></i>Cut ${op(r.cut)}`;
+  document.getElementById("mat-score")!.innerHTML = `<i class="sw score"></i>Score ${op(r.score)}`;
+  document.getElementById("mat-flag")!.textContent = r.untested ? `Not tested on ${machine.name}: a teacher must run a test grid first` : "";
+  (document.getElementById("material") as HTMLSelectElement).value = preset.id;
+
+  const count = (l: LayerType) => doc.state.objects.filter((o) => o.layer === l).length;
+  const row = (l: LayerType, label: string, o: Operation) =>
+    `<tr><td><i class="sw ${l}"></i>${label}</td><td>${o.speedMmPerS}</td><td>${o.powerPct}%</td><td>${o.passes}</td><td>${o.airAssist ? "on" : "off"}</td><td>${count(l)}</td></tr>`;
+  document.getElementById("layertable")!.innerHTML = row("cut", "Cut", r.cut) + row("score", "Score", r.score);
+}
+
+// Material: pupils pick one and the settings follow, locked. Presets are placeholders until the Server provides them.
+const materialSel = document.getElementById("material") as HTMLSelectElement;
+for (const p of PLACEHOLDER_PRESETS) materialSel.add(new Option(presetLabel(p), p.id));
+materialSel.addEventListener("change", () => edit(() => { doc.state.materialId = materialSel.value; }));
 on("del", () => deleteSelected());
 const gimbalBtn = document.getElementById("gimbal") as HTMLButtonElement;
 function setGimbal(on: boolean): void {
@@ -697,7 +734,7 @@ function penFinish(closed: boolean): void {
   const path = polylinePath(penPoints, closed);
   penPoints = [];
   penCursor = null;
-  if (path) edit(() => { selected = new Set([doc.add(path, IDENTITY).id]); });
+  if (path) edit(() => { selected = new Set([doc.add(path, IDENTITY, activeLayer).id]); });
   else draw();
 }
 const penCancel = () => { if (penPoints.length) { penPoints = []; penCursor = null; draw(); } };
@@ -913,7 +950,7 @@ window.addEventListener("mouseup", (e) => {
   if (gizmoDrag) { gizmoDrag = null; moveBounds = null; snapMarker = null; gizmoHover = null; canvas.style.cursor = ""; draw(); return; }
   if (dragStart && tool !== "select") {
     const sh = shapeFor(tool, dragStart, snapPt(bedPt(e), e));
-    if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y) ?? IDENTITY).id]); });
+    if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y), activeLayer).id]); });
   }
   marquee = null;
   moveBounds = null;
@@ -931,6 +968,21 @@ canvas.addEventListener("wheel", (e) => {
   view = zoomAt(view, { x: e.clientX - r.left, y: e.clientY - r.top }, e.deltaY < 0 ? 1.1 : 1 / 1.1);
   draw();
 }, { passive: false });
+
+// ---- Tools menu (less-used tools) ----
+const toolsBtn = document.getElementById("tools-btn") as HTMLButtonElement;
+const toolsList = document.getElementById("tools-list") as HTMLElement;
+function setToolsMenu(open: boolean): void {
+  toolsList.hidden = !open;
+  toolsBtn.setAttribute("aria-expanded", String(open));
+}
+toolsBtn.addEventListener("click", (e) => { e.stopPropagation(); setToolsMenu(toolsList.hasAttribute("hidden")); });
+document.addEventListener("click", (e) => { if (!toolsList.hasAttribute("hidden") && !(e.target as Element).closest("#tools-menu")) setToolsMenu(false); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !toolsList.hasAttribute("hidden")) { setToolsMenu(false); toolsBtn.focus(); } }, true);
+const menuActions: Record<string, () => void> = {};
+toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
+  b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
+);
 
 paper.view.onResize = fit;
 fit();

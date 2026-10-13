@@ -1,5 +1,6 @@
 // Document state with snapshot undo/redo. Edits change object matrices, never source geometry.
 import { multiply, translation, type Matrix, type Path } from "./geometry";
+import { DEFAULT_MATERIAL_ID } from "./presets";
 import type { TextSpec } from "./text";
 
 export type LayerType = "score" | "cut";
@@ -29,10 +30,12 @@ export interface DocState {
   /** Editable text behind textId contours: change the spec and the contours are regenerated. */
   texts: Record<number, TextSpec>;
   nextText: number;
+  /** Selected material preset (shared/preset.schema.json id). A job records it with its version. */
+  materialId: string;
 }
 
 export class Doc {
-  state: DocState = { objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1 };
+  state: DocState = { objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1, materialId: DEFAULT_MATERIAL_ID };
   private undoStack: DocState[] = [];
   private redoStack: DocState[] = [];
 

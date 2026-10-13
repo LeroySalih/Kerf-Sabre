@@ -1,7 +1,7 @@
 import paper from "paper";
 import { bedToScreen, fitView, screenToBed, zoomAt, type Point, type View } from "./coords";
 import { Doc, type LayerType } from "./doc";
-import { designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
+import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
@@ -118,8 +118,7 @@ fileInput.addEventListener("change", async () => {
 function importDXF(text: string, name: string): void {
   const r = parseDXF(text);
   if (!r.shapes.length) { alert(`No importable shapes in ${name}.`); return; }
-  let k = mmPerUnit(r.insunits);
-  if (k === null) k = confirm(`${name} has no unit information.\n\nOK = millimetres, Cancel = inches`) ? 1 : 25.4;
+  const k = mmPerUnit(r.insunits) ?? DEFAULT_MM_PER_UNIT; // no units in file: assume cm (Onshape default)
   const paths = r.shapes.map((s) => scalePath(s.path, k));
   const min = designMin(paths); // bounding box bottom-left -> (0,0)
   edit(() => {

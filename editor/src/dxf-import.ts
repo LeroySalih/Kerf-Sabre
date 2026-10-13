@@ -19,6 +19,9 @@ export interface ImportResult {
 
 const UNIT_TO_MM: Record<number, number> = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000, 8: 0.0000254, 9: 0.0254, 10: 914.4 };
 
+/** Onshape exports centimetres and often omits $INSUNITS, so a file without units is assumed to be cm. */
+export const DEFAULT_MM_PER_UNIT = 10;
+
 /** Millimetres per DXF unit for an $INSUNITS value, or null if unknown. */
 export function mmPerUnit(insunits: number | null): number | null {
   return insunits === null ? null : (UNIT_TO_MM[insunits] ?? null);

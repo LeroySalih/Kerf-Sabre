@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Doc } from "../src/doc";
 import { toDXF } from "../src/export";
 import { boundsOf, circle, rectangle, transformPath, translation } from "../src/geometry";
-import { designMin, layerFor, mmPerUnit, parseDXF, scalePath } from "../src/dxf-import";
+import { DEFAULT_MM_PER_UNIT, designMin, layerFor, mmPerUnit, parseDXF, scalePath } from "../src/dxf-import";
 
 const dxf = (entities: string, header = "") =>
   `0\nSECTION\n2\nHEADER\n${header}0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${entities}0\nENDSEC\n0\nEOF\n`;
@@ -27,6 +27,7 @@ describe("DXF import", () => {
   it("reports missing units as null", () => {
     expect(parseDXF(dxf("0\nCIRCLE\n8\n0\n10\n0\n20\n0\n40\n5\n")).insunits).toBeNull();
     expect(mmPerUnit(null)).toBeNull();
+    expect(DEFAULT_MM_PER_UNIT).toBe(10); // Onshape default: centimetres
   });
 
   it("parses CIRCLE as two true arcs and ARC as ccw", () => {

@@ -50,7 +50,9 @@ export function parseClip(text: string | null | undefined): ClipData | null {
     if (c.layer !== "score" && c.layer !== "cut") return null;
     if (c.group !== undefined && !isNum(c.group)) return null;
     if (c.textId !== undefined && (!isNum(c.textId) || !texts[c.textId])) return null;
-    objects.push({ path: path as ClipData["objects"][number]["path"], matrix: c.matrix as ClipData["objects"][number]["matrix"], layer: c.layer, group: c.group as number | undefined, textId: c.textId as number | undefined });
+    const st = c.settings as { powerPct?: unknown; speedMmPerS?: unknown } | undefined;
+    if (st !== undefined && !(st && isNum(st.powerPct) && isNum(st.speedMmPerS) && st.powerPct >= 0 && st.powerPct <= 100 && st.speedMmPerS > 0)) return null;
+    objects.push({ path: path as ClipData["objects"][number]["path"], matrix: c.matrix as ClipData["objects"][number]["matrix"], layer: c.layer, group: c.group as number | undefined, textId: c.textId as number | undefined, settings: st ? { powerPct: st.powerPct as number, speedMmPerS: st.speedMmPerS as number } : undefined });
   }
   return { kerfSabre: 1, objects, texts };
 }

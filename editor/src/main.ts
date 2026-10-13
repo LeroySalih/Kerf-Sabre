@@ -12,6 +12,8 @@ import { planTrim } from "./trim";
 import { alignDeltas, distributeDeltas, unionBounds, type AlignKind, type Unit } from "./align";
 import { booleanOp, type BoolOp } from "./boolean";
 import { parseClip, serializeClip } from "./clipboard";
+import { openDialog } from "./dialog";
+import { kerfTest, testGrid, validateKerfTest, validateTestGrid, type TestGridParams, type TestItem } from "./testgrid";
 import { outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
 import { DEFAULT_FONT, getFont, listFonts, loadBundledFonts, registerOutlineFont, textToPaths, type TextSpec } from "./text";
@@ -979,7 +981,61 @@ function setToolsMenu(open: boolean): void {
 toolsBtn.addEventListener("click", (e) => { e.stopPropagation(); setToolsMenu(toolsList.hasAttribute("hidden")); });
 document.addEventListener("click", (e) => { if (!toolsList.hasAttribute("hidden") && !(e.target as Element).closest("#tools-menu")) setToolsMenu(false); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !toolsList.hasAttribute("hidden")) { setToolsMenu(false); toolsBtn.focus(); } }, true);
-const menuActions: Record<string, () => void> = {};
+/** Add generated shapes as one group, bounding box bottom-left at (20, 20) mm on the bed, ready to move. */
+function insertGenerated(items: TestItem[], what: string): void {
+  const paths = items.map((i) => i.path);
+  const min = designMin(paths);
+  edit(() => {
+    const group = doc.state.nextGroup++;
+    selected = new Set(items.map((i) => {
+      const o = doc.add(i.path, translation(20 - min.x, 20 - min.y), i.layer);
+      o.group = group;
+      if (i.settings) o.settings = { ...i.settings };
+      return o.id;
+    }));
+  });
+  notify(`${what} added. Move it where you want it, then cut it.`);
+}
+
+async function materialTestGridDialog(): Promise<void> {
+  const r = resolvePreset(findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!, machine.id);
+  const v = await openDialog("Material test grid", [
+    { key: "mode", label: "Cells", type: "select", value: "cut", options: [{ value: "cut", label: "Cut through" }, { value: "score", label: "Score only" }] },
+    { key: "cellMm", label: "Cell size (mm)", type: "number", value: 10, min: 2, step: 0.5 },
+    { key: "powerMin", label: "Power min (%)", type: "number", value: Math.max(5, Math.round(r.cut.powerPct * 0.4)), min: 0, max: 100 },
+    { key: "powerMax", label: "Power max (%)", type: "number", value: 100, min: 0, max: 100 },
+    { key: "powerSteps", label: "Power steps", type: "number", value: 5, min: 1, max: 12, step: 1 },
+    { key: "speedMin", label: "Speed min (mm/s)", type: "number", value: Math.round(r.cut.speedMmPerS * 50) / 100, min: 0.1 },
+    { key: "speedMax", label: "Speed max (mm/s)", type: "number", value: Math.round(r.cut.speedMmPerS * 200) / 100, min: 0.1 },
+    { key: "speedSteps", label: "Speed steps", type: "number", value: 5, min: 1, max: 12, step: 1 },
+    { key: "gapMm", label: "Gap (mm)", type: "number", value: 4, min: 0, step: 0.5 },
+    { key: "labelMm", label: "Label size (mm)", type: "number", value: 3, min: 1.5, step: 0.5 },
+  ], { intro: "Cuts a grid of squares, power left to right and speed bottom to top, each with a scored label. The best cell shows the setting to use.", ok: "Add grid" });
+  if (!v) return;
+  const p = v as unknown as TestGridParams;
+  const error = validateTestGrid(p);
+  if (error) { notify(error); return; }
+  insertGenerated(testGrid(p), "Material test grid");
+}
+
+async function kerfTestDialog(): Promise<void> {
+  const preset = findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!;
+  const v = await openDialog("Kerf test", [
+    { key: "thicknessMm", label: "Material thickness (mm)", type: "number", value: preset.thicknessMm, min: 0.1, step: 0.05 },
+    { key: "count", label: "Slots", type: "number", value: 8, min: 2, max: 20, step: 1 },
+    { key: "minWidthMm", label: "Narrowest slot (mm)", type: "number", value: Math.round((preset.thicknessMm - 0.3) * 100) / 100, min: 0.1, step: 0.05 },
+    { key: "stepMm", label: "Step between slots (mm)", type: "number", value: 0.05, min: 0.01, max: 1, step: 0.01 },
+    { key: "slotLengthMm", label: "Slot length (mm)", type: "number", value: 12, min: 5, step: 1 },
+    { key: "labelMm", label: "Label size (mm)", type: "number", value: 3, min: 1.5, step: 0.5 },
+  ], { intro: "Cut the coupon, then push a strip of the same material into each slot. Kerf = thickness minus the width of the slot that grips it. Enter that value in the material.", ok: "Add coupon" });
+  if (!v) return;
+  const p = v as unknown as Parameters<typeof validateKerfTest>[0];
+  const error = validateKerfTest(p);
+  if (error) { notify(error); return; }
+  insertGenerated(kerfTest(p), "Kerf test coupon");
+}
+
+const menuActions: Record<string, () => void> = { "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog() };
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
   b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
 );

@@ -14,12 +14,19 @@ export interface DocObject {
   group?: number;
   /** Set on every contour of a live text object; see DocState.texts. Cleared by Convert to Path. */
   textId?: number;
+  /** Per-shape override of the material's power/speed, e.g. one cell of a material test grid. */
+  settings?: ShapeSettings;
+}
+
+export interface ShapeSettings {
+  powerPct: number;
+  speedMmPerS: number;
 }
 
 /** What a copy carries: the shapes with their groups, layers and (live) text specs. Ids are renumbered on paste. */
 export interface ClipData {
   kerfSabre: 1;
-  objects: { path: Path; matrix: Matrix; layer: LayerType; group?: number; textId?: number }[];
+  objects: { path: Path; matrix: Matrix; layer: LayerType; group?: number; textId?: number; settings?: ShapeSettings }[];
   texts: Record<number, TextSpec>;
 }
 
@@ -152,7 +159,7 @@ export class Doc {
   copyOut(ids: Iterable<number>): ClipData {
     const want = new Set(this.expand(ids));
     for (const o of this.state.objects) if (o.textId !== undefined && this.state.objects.some((x) => want.has(x.id) && x.textId === o.textId)) want.add(o.id);
-    const objects = this.state.objects.filter((o) => want.has(o.id)).map((o) => structuredClone({ path: o.path, matrix: o.matrix, layer: o.layer, group: o.group, textId: o.textId }));
+    const objects = this.state.objects.filter((o) => want.has(o.id)).map((o) => structuredClone({ path: o.path, matrix: o.matrix, layer: o.layer, group: o.group, textId: o.textId, settings: o.settings }));
     const texts: Record<number, TextSpec> = {};
     for (const o of objects) if (o.textId !== undefined && this.state.texts[o.textId]) texts[o.textId] = structuredClone(this.state.texts[o.textId]!);
     return { kerfSabre: 1, objects, texts };
@@ -172,6 +179,7 @@ export class Doc {
         if (!texts.has(c.textId)) { const id = this.state.nextText++; texts.set(c.textId, id); this.state.texts[id] = structuredClone(data.texts[c.textId]!); }
         o.textId = texts.get(c.textId);
       }
+      if (c.settings) o.settings = { ...c.settings };
       return o.id;
     });
   }

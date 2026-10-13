@@ -13,9 +13,9 @@ const lerp = (a: Point, b: Point, t: number): Point => ({ x: a.x + (b.x - a.x) *
 
 // ---- primitives and intersections ----
 
-interface LinePrim { kind: "l"; a: Point; b: Point }
-interface ArcPrim { kind: "a"; c: Point; r: number; a0: number; sweep: number }
-type Prim = LinePrim | ArcPrim;
+export interface LinePrim { kind: "l"; a: Point; b: Point }
+export interface ArcPrim { kind: "a"; c: Point; r: number; a0: number; sweep: number }
+export type Prim = LinePrim | ArcPrim;
 
 interface Hit { tp: number; tq: number; pt: Point }
 
@@ -84,7 +84,7 @@ function arcArc(p: ArcPrim, q: ArcPrim): Hit[] {
   return out;
 }
 
-function intersect(p: Prim, q: Prim): Hit[] {
+export function intersect(p: Prim, q: Prim): Hit[] {
   if (p.kind === "l" && q.kind === "l") return lineLine(p, q);
   if (p.kind === "l" && q.kind === "a") return lineArc(p, q);
   if (p.kind === "a" && q.kind === "l") return lineArc(q, p).map((h) => ({ tp: h.tq, tq: h.tp, pt: h.pt }));
@@ -94,18 +94,18 @@ function intersect(p: Prim, q: Prim): Hit[] {
 // ---- path helpers ----
 
 /** Closed paths get an explicit closing segment so every closed path loops through its segments. */
-function explicit(path: Path): Path {
+export function explicit(path: Path): Path {
   if (!path.closed || !path.segs.length) return path;
   const last = path.segs[path.segs.length - 1]!.to;
   if (dist(last, path.start) < 1e-9) return path;
   return { ...path, segs: [...path.segs, { t: "l", to: path.start }] };
 }
 
-function startsOf(path: Path): Point[] {
+export function startsOf(path: Path): Point[] {
   return path.segs.map((_, i) => (i === 0 ? path.start : path.segs[i - 1]!.to));
 }
 
-function primOf(start: Point, s: Seg): Prim[] {
+export function primOf(start: Point, s: Seg): Prim[] {
   if (s.t === "l") return [{ kind: "l", a: start, b: s.to }];
   if (s.t === "a") {
     const r = dist(start, s.c);
@@ -188,7 +188,7 @@ export interface TrimPlan {
 
 interface Placed { id: number; path: Path }
 
-function distToPrim(pt: Point, prim: Prim): { d: number; t: number } {
+export function distToPrim(pt: Point, prim: Prim): { d: number; t: number } {
   if (prim.kind === "l") {
     const dx = prim.b.x - prim.a.x, dy = prim.b.y - prim.a.y, l2 = dx * dx + dy * dy;
     const t = l2 < 1e-18 ? 0 : Math.min(1, Math.max(0, ((pt.x - prim.a.x) * dx + (pt.y - prim.a.y) * dy) / l2));

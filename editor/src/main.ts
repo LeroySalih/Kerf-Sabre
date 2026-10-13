@@ -5,9 +5,10 @@ import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
-import { boundsOf } from "./geometry";
+import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
 import { outOfBounds } from "./bounds";
+import { snapTo, type SnapKind } from "./snap";
 import { selectionSummary } from "./status";
 import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
@@ -26,6 +27,10 @@ type Tool = "select" | "rect" | "circle" | "line" | "trim" | "measure";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
+let snapOn = true;
+let snapMarker: { pt: Point; kind: SnapKind } | null = null;
+let moveBounds: Bounds | null = null; // selection bounds when a drag-move began
+let moveApplied: Point = { x: 0, y: 0 }; // total translation applied so far this drag
 let panning: { x: number; y: number } | null = null;
 let anchor: Anchor = DEFAULT_ANCHOR;
 let trimPreview: Path | null = null;
@@ -146,6 +151,14 @@ function drawGrid(widthMm: number, heightMm: number): void {
   for (let y = 0; y <= heightMm; y += STEP) line({ x: 0, y }, { x: widthMm, y }, y % 100 === 0);
 }
 
+function drawSnapMarker(pt: Point, kind: SnapKind): void {
+  const c = toScreen(pt);
+  const box = new paper.Path.Rectangle(new paper.Point(c.x - 6, c.y - 6), new paper.Size(12, 12));
+  box.strokeColor = new paper.Color("#059669");
+  box.strokeWidth = 2;
+  new paper.PointText({ point: c.add(new paper.Point(10, -8)), content: kind, fontSize: 11, fontWeight: "bold", fillColor: new paper.Color("#047857") });
+}
+
 function drawMeasure(a: Point, b: Point): void {
   const line = new paper.Path.Line(toScreen(a), toScreen(b));
   line.strokeColor = new paper.Color("#7c3aed");
@@ -250,6 +263,7 @@ function draw(): void {
     if (mode === "crossing") box.dashArray = [5, 4];
   }
   if (measureLine) drawMeasure(measureLine.a, measureLine.b);
+  if (snapMarker) drawSnapMarker(snapMarker.pt, snapMarker.kind);
   drawRulers();
   paper.view.update();
   updatePositionFields();
@@ -276,6 +290,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((btn) =>
   btn.addEventListener("click", () => {
     tool = btn.dataset.tool as Tool;
     trimPreview = null;
+    snapMarker = null;
     if (tool !== "measure") measureLine = null;
     canvas.style.cursor = tool === "trim" || tool === "measure" ? "crosshair" : "";
     draw();
@@ -364,6 +379,48 @@ window.addEventListener("keydown", (e) => {
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }
 });
 
+// ---- snapping ----
+(document.getElementById("snap") as HTMLInputElement).addEventListener("change", (e) => {
+  snapOn = (e.target as HTMLInputElement).checked;
+  if (!snapOn) snapMarker = null;
+  draw();
+});
+const snapTolMm = () => 10 / view.scale; // a 10 px snap radius
+const snapActive = (e: MouseEvent) => snapOn && !e.altKey; // hold Alt/Option to disable
+
+/** Snap a point (drawing, measuring). Updates the on-screen marker. */
+function snapPt(p: Point, e: MouseEvent): Point {
+  if (!snapActive(e)) { snapMarker = null; return p; }
+  const s = snapTo(doc.state.objects, p, snapTolMm(), { grid: true });
+  snapMarker = s ? { pt: s.point, kind: s.kind } : null;
+  return s?.point ?? p;
+}
+
+/** Adjust a drag delta so the selection's nearest bounding-box point lands on a snap target. */
+function snapMove(delta: Point, e: MouseEvent): Point {
+  snapMarker = null;
+  if (!snapActive(e) || !moveBounds) return delta;
+  const b = moveBounds;
+  type Best = { adj: Point; dist: number; pt: Point; kind: SnapKind };
+  // Object snaps (corners, midpoints, centres, intersections) beat the grid: try them across all 9 points first.
+  for (const grid of [false, true]) {
+    let best: Best | null = null;
+    for (const x of [b.minX, (b.minX + b.maxX) / 2, b.maxX])
+      for (const y of [b.minY, (b.minY + b.maxY) / 2, b.maxY]) {
+        const q = { x: x + delta.x, y: y + delta.y };
+        const s = snapTo(doc.state.objects, q, snapTolMm(), { grid, exclude: selected });
+        if (s && (!best || s.dist < best.dist)) best = { adj: { x: s.point.x - q.x, y: s.point.y - q.y }, dist: s.dist, pt: s.point, kind: s.kind };
+      }
+    if (best) {
+      snapMarker = { pt: best.pt, kind: best.kind };
+      return { x: delta.x + best.adj.x, y: delta.y + best.adj.y };
+    }
+  }
+  return delta;
+}
+
+const isDrawTool = () => tool === "rect" || tool === "circle" || tool === "line" || tool === "measure";
+
 // ---- pointer ----
 const bedPt = (e: MouseEvent): Point => {
   const r = canvas.getBoundingClientRect();
@@ -406,7 +463,7 @@ canvas.addEventListener("mousedown", (e) => {
   }
   const rr = canvas.getBoundingClientRect();
   if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
-  const p = bedPt(e);
+  const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
   dragStart = dragLast = p;
   moved = false;
   if (tool === "measure") { measureLine = { a: p, b: p }; draw(); return; }
@@ -433,8 +490,10 @@ window.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mousemove", (e) => {
   if (panning) return;
-  const p = bedPt(e);
-  cursorEl.textContent = `X ${p.x.toFixed(1)}  Y ${p.y.toFixed(1)} mm`;
+  const raw = bedPt(e);
+  cursorEl.textContent = `X ${raw.x.toFixed(1)}  Y ${raw.y.toFixed(1)} mm`;
+  const p = isDrawTool() ? snapPt(raw, e) : raw;
+  if (isDrawTool() && !dragStart) draw(); // show the snap marker while hovering
   if (tool === "measure") {
     if (dragStart && measureLine) { measureLine = { a: measureLine.a, b: p }; draw(); }
     return;
@@ -449,8 +508,11 @@ canvas.addEventListener("mousemove", (e) => {
     marquee.b = p;
     selected = new Set([...marquee.base, ...doc.expand(boxSelect(doc.state.objects, marquee.a, p))]);
   } else if (tool === "select" && selected.size) {
-    if (!moved) { doc.checkpoint(); moved = true; }
-    for (const id of selected) doc.transform(id, translation(p.x - dragLast.x, p.y - dragLast.y));
+    if (!moved) { doc.checkpoint(); moved = true; moveBounds = selectionBounds(doc.state.objects, selected); moveApplied = { x: 0, y: 0 }; }
+    const want = snapMove({ x: p.x - dragStart.x, y: p.y - dragStart.y }, e);
+    const step = { x: want.x - moveApplied.x, y: want.y - moveApplied.y };
+    for (const id of selected) doc.transform(id, translation(step.x, step.y));
+    moveApplied = want;
     dragLast = p;
   } else if (tool !== "select") {
     preview = { tool, a: dragStart, b: p };
@@ -461,10 +523,12 @@ canvas.addEventListener("mousemove", (e) => {
 window.addEventListener("mouseup", (e) => {
   if (panning) { panning = null; setSpace(spaceDown); return; }
   if (dragStart && tool !== "select") {
-    const sh = shapeFor(tool, dragStart, bedPt(e));
+    const sh = shapeFor(tool, dragStart, snapPt(bedPt(e), e));
     if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y) ?? IDENTITY).id]); });
   }
   marquee = null;
+  moveBounds = null;
+  snapMarker = null;
   dragStart = dragLast = null;
   preview = null;
   draw();

@@ -22,8 +22,11 @@ import { PLACEHOLDER_PRESETS, findPreset, formatOperation, presetLabel, resolveP
 import { selectionSummary } from "./status";
 import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
+import { filletAll, filletVertices, nearestCorner, type CornerMode } from "./fillet";
+import { mountIcons } from "./icons";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
+mountIcons();
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const select = document.getElementById("machine") as HTMLSelectElement;
 const cursorEl = document.getElementById("cursor") as HTMLElement;
@@ -33,7 +36,7 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "circle" | "line" | "polygon" | "pen" | "trim" | "measure" | "text";
+type Tool = "select" | "rect" | "circle" | "line" | "polygon" | "pen" | "trim" | "radius" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
@@ -101,6 +104,7 @@ const round = (n: number) => String(Math.round(n * 1000) / 1000);
 function updatePositionFields(): void {
   refreshTextPanel();
   refreshLayerUI();
+  refreshActions();
   const b = selectionBounds(doc.state.objects, selected);
   document.getElementById("selinfo")!.textContent = selectionSummary(selected.size, b);
   for (const el of fieldEls) el.disabled = !b;
@@ -373,12 +377,14 @@ select.addEventListener("change", () => {
 function setTool(next: Tool): void {
   tool = next;
   (document.getElementById("opt-polygon") as HTMLElement).hidden = tool !== "polygon";
+  (document.getElementById("opt-radius") as HTMLElement).hidden = tool !== "radius";
+  (document.getElementById("opt-none") as HTMLElement).hidden = tool === "polygon" || tool === "radius";
   penPoints = [];
   penCursor = null;
   trimPreview = null;
   snapMarker = null;
   if (tool !== "measure") measureLine = null;
-  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" ? "crosshair" : "";
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" ? "crosshair" : "";
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
   draw();
 }
@@ -396,6 +402,19 @@ document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) =>
 );
 
 /** Chips show the selection's layer (or the layer for new shapes); the table counts shapes per layer; material settings are locked. */
+/** Disable toolbar actions that can't apply to the current selection. */
+function refreshActions(): void {
+  const objs = doc.state.objects.filter((o) => selected.has(o.id));
+  const units = new Set(objs.map((o) => (o.group !== undefined ? `g${o.group}` : `o${o.id}`))).size;
+  const set = (id: string, enabled: boolean) => { (document.getElementById(id) as HTMLButtonElement).disabled = !enabled; };
+  for (const id of ["b-union", "b-intersect", "b-subtract", "group"]) set(id, units >= 2);
+  set("ungroup", objs.some((o) => o.group !== undefined));
+  for (const id of ["flip-h", "flip-v", "round-all", "act-linear", "act-circular", "copy", "dup", "del"]) set(id, objs.length >= 1);
+  for (const id of ["dist-h", "dist-v"]) set(id, units >= 3);
+  document.querySelectorAll<HTMLButtonElement>("[data-align]").forEach((b) => { b.disabled = objs.length < 1; });
+  set("paste", clipboard !== null);
+}
+
 function refreshLayerUI(): void {
   const layers = new Set(doc.state.objects.filter((o) => selected.has(o.id)).map((o) => o.layer));
   const shown: LayerType = layers.size === 1 ? [...layers][0]! : activeLayer;
@@ -883,6 +902,7 @@ canvas.addEventListener("mousedown", (e) => {
   if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
   const gh = gizmoAt(e);
   if (gh) { e.preventDefault(); startGizmoDrag(gh, e); return; }
+  if (tool === "radius") { if (e.button === 0) doCorner(bedPt(e)); return; }
   if (tool === "pen") { if (e.button === 0) penClick(snapPt(bedPt(e), e)); return; }
   if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
   const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
@@ -1094,7 +1114,44 @@ function flipSelected(axis: "h" | "v"): void {
 on("flip-h", () => flipSelected("h"));
 on("flip-v", () => flipSelected("v"));
 
+// ---- corner radius / chamfer ----
+const radiusEl = document.getElementById("radius") as HTMLInputElement;
+const radiusModeEl = document.getElementById("radius-mode") as HTMLSelectElement;
+const cornerSetting = (): { size: number; mode: CornerMode } => ({ size: Math.max(0.1, parseFloat(radiusEl.value) || 5), mode: radiusModeEl.value as CornerMode });
+
+/** Replace an object by baked paths, keeping layer, group and per-shape settings. Text is converted first. */
+function replaceWith(old: DocObject, paths: Path[]): number[] {
+  doc.convertText([old.id]);
+  const { layer, group, settings } = old;
+  doc.remove([old.id]);
+  return paths.map((p) => { const o = doc.add(p, IDENTITY, layer); o.group = group; if (settings) o.settings = { ...settings }; return o.id; });
+}
+
+/** Round (or chamfer) the corner nearest the click. */
+function doCorner(p: Point): void {
+  const placed = doc.state.objects.map((o) => ({ o, path: transformPath(o.path, o.matrix) }));
+  const hit = nearestCorner(placed, p, 10 / view.scale);
+  if (!hit) return;
+  const { size, mode } = cornerSetting();
+  const r = filletVertices(hit.item.path, [hit.vertex], size, mode);
+  if (!r.corners) { notify("That corner is too short to round."); return; }
+  edit(() => { selected = new Set(replaceWith(hit.item.o, [r.path])); });
+  if (r.clamped) notify("The corner size was reduced to fit the edges.");
+}
+
+/** Round (or chamfer) every straight corner of the selected shapes. */
+function roundAllSelected(): void {
+  const { size, mode } = cornerSetting();
+  const jobs = doc.state.objects.filter((o) => selected.has(o.id)).map((o) => ({ o, r: filletAll(transformPath(o.path, o.matrix), size, mode) })).filter((j) => j.r.corners > 0);
+  if (!jobs.length) { notify("No straight-edged corners to round in the selection."); return; }
+  edit(() => { selected = new Set(jobs.flatMap((j) => replaceWith(j.o, [j.r.path]))); });
+  if (jobs.some((j) => j.r.clamped)) notify("Some corners were reduced to fit their edges.");
+}
+on("round-all", roundAllSelected);
+
 const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog() };
+on("act-linear", () => menuActions["linear-repeat"]!());
+on("act-circular", () => menuActions["circular-array"]!());
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
   b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
 );

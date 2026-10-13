@@ -30,7 +30,6 @@
           <button id="del" title="Delete">Delete</button>
         </div>
         <div class="group" role="group" aria-label="View">
-          <button id="gimbal" title="Gimbal on the selection (G): arrows move along an axis, squares scale, the ring rotates (Shift = 15 degree steps). The pivot is the anchor chosen in Properties."><svg class="ico"><use href="#i-gimbal"/></svg>&nbsp;Gimbal</button>
           <label><input id="grid" type="checkbox" checked /> 1 cm grid</label>
           <label title="Snap to endpoints, midpoints, centres, intersections and the grid. Hold Alt/Option to disable."><input id="snap" type="checkbox" checked /> Snap</label>
         </div>
@@ -50,16 +49,39 @@
       </header>
 
       <nav id="palette" aria-label="Tools">
-      <button data-tool="select" title="Select (box left to right encloses, right to left touches)" aria-label="select" class="on"><svg class="ico"><use href="#i-select"/></svg></button>
-      <button data-tool="pen" title="Pen: click corner points. Click the first point or double-click to close, Enter finishes an open line, Esc cancels" aria-label="pen"><svg class="ico"><use href="#i-pen"/></svg></button>
-      <button data-tool="rect" title="Rectangle" aria-label="rect"><svg class="ico"><use href="#i-rect"/></svg></button>
-      <button data-tool="circle" title="Circle (drag from the centre)" aria-label="circle"><svg class="ico"><use href="#i-circle"/></svg></button>
-      <button data-tool="polygon" title="Polygon: drag from the centre to a corner. Set the number of sides in Properties" aria-label="polygon"><svg class="ico"><use href="#i-polygon"/></svg></button>
-      <button data-tool="line" title="Line" aria-label="line"><svg class="ico"><use href="#i-line"/></svg></button>
-      <hr />
-      <button data-tool="trim" title="Trim: click a line or arc to remove the part up to the nearest intersections" aria-label="trim"><svg class="ico"><use href="#i-trim"/></svg></button>
-      <button data-tool="text" title="Text: click on the bed to add text" aria-label="text"><svg class="ico"><use href="#i-text"/></svg></button>
-      <button data-tool="measure" title="Measure: drag between two points" aria-label="measure"><svg class="ico"><use href="#i-measure"/></svg></button>
+        <button data-tool="select" class="on" title="Select. Drag a box: left to right must enclose a shape, right to left may touch it" aria-label="Select"><svg class="ico"><use href="#i-select"/></svg></button>
+        <button data-tool="pen" title="Pen. Click corner points; click the first point or double-click to close, Enter finishes an open line, Esc cancels" aria-label="Pen"><svg class="ico"><use href="#i-pen"/></svg></button>
+        <button data-tool="rect" title="Rectangle" aria-label="Rectangle"><svg class="ico"><use href="#i-rect"/></svg></button>
+        <button data-tool="circle" title="Circle. Drag from the centre" aria-label="Circle"><svg class="ico"><use href="#i-circle"/></svg></button>
+        <button data-tool="polygon" title="Polygon. Drag from the centre to a corner; set the number of sides in Options" aria-label="Polygon"><svg class="ico"><use href="#i-polygon"/></svg></button>
+        <button data-tool="line" title="Line" aria-label="Line"><svg class="ico"><use href="#i-line"/></svg></button>
+        <button data-tool="text" title="Text. Click on the bed to add text" aria-label="Text"><svg class="ico"><use href="#i-text"/></svg></button>
+        <hr />
+        <button data-tool="trim" title="Trim. Click a line or arc to remove the part up to the nearest intersections" aria-label="Trim"><svg class="ico"><use href="#i-trim"/></svg></button>
+        <button data-tool="radius" title="Corner radius. Click a corner to round it; set the radius in Options" aria-label="Corner radius"><svg class="ico"><use href="#i-radius"/></svg></button>
+        <button id="round-all" title="Round all corners of the selection, using the radius in Options" aria-label="Round all corners of the selection, using the radius in Options"><svg class="ico"><use href="#i-round-all"/></svg></button>
+        <button data-tool="measure" title="Measure. Drag between two points" aria-label="Measure"><svg class="ico"><use href="#i-measure"/></svg></button>
+        <button id="gimbal" title="Gimbal (G). Arrows move along an axis, squares scale, the ring rotates (Shift = 15 degree steps). The pivot is the anchor chosen in Properties" aria-label="Gimbal"><svg class="ico"><use href="#i-gimbal"/></svg></button>
+        <hr />
+        <button id="b-union" title="Union. Merge the selected shapes into one outline" aria-label="Union"><svg class="ico"><use href="#i-union"/></svg></button>
+        <button id="b-intersect" title="Intersect. Keep only the area the selected shapes share" aria-label="Intersect"><svg class="ico"><use href="#i-intersect"/></svg></button>
+        <button id="b-subtract" title="Subtract. Remove the later-drawn shapes from the earliest-drawn one" aria-label="Subtract"><svg class="ico"><use href="#i-subtract"/></svg></button>
+        <button id="group" title="Group (Ctrl/Cmd+G)" aria-label="Group"><svg class="ico"><use href="#i-group"/></svg></button>
+        <button id="ungroup" title="Ungroup (Ctrl/Cmd+Shift+G)" aria-label="Ungroup"><svg class="ico"><use href="#i-ungroup"/></svg></button>
+        <button id="flip-h" title="Flip left to right, in place" aria-label="Flip left to right, in place"><svg class="ico"><use href="#i-flip-h"/></svg></button>
+        <button id="flip-v" title="Flip top to bottom, in place" aria-label="Flip top to bottom, in place"><svg class="ico"><use href="#i-flip-v"/></svg></button>
+        <button id="act-linear" title="Linear repeat. Copies in a grid" aria-label="Linear repeat"><svg class="ico"><use href="#i-linear-repeat"/></svg></button>
+        <button id="act-circular" title="Circular array. Copies around a centre" aria-label="Circular array"><svg class="ico"><use href="#i-circular-array"/></svg></button>
+        <hr />
+        <select id="align-to" class="wide" title="Align and space relative to the selection or to the bed" aria-label="Align to"><option value="selection">Selection</option><option value="bed">Bed</option></select>
+        <button data-align="left" title="Align left edges" aria-label="Align left edges"><svg class="ico"><use href="#i-align-left"/></svg></button>
+        <button data-align="centre" title="Centre horizontally" aria-label="Centre horizontally"><svg class="ico"><use href="#i-align-centre"/></svg></button>
+        <button data-align="right" title="Align right edges" aria-label="Align right edges"><svg class="ico"><use href="#i-align-right"/></svg></button>
+        <button data-align="top" title="Align top edges" aria-label="Align top edges"><svg class="ico"><use href="#i-align-top"/></svg></button>
+        <button data-align="middle" title="Centre vertically" aria-label="Centre vertically"><svg class="ico"><use href="#i-align-middle"/></svg></button>
+        <button data-align="bottom" title="Align bottom edges" aria-label="Align bottom edges"><svg class="ico"><use href="#i-align-bottom"/></svg></button>
+        <button id="dist-h" title="Space evenly, left to right (3 or more shapes)" aria-label="Space evenly, left to right"><svg class="ico"><use href="#i-space-h"/></svg></button>
+        <button id="dist-v" title="Space evenly, top to bottom (3 or more shapes)" aria-label="Space evenly, top to bottom"><svg class="ico"><use href="#i-space-v"/></svg></button>
       </nav>
 
       <main id="stage"><canvas id="canvas" resize></canvas></main>
@@ -82,9 +104,6 @@
                 <label class="lock" title="Keep proportions (circles stay circles)"><input id="lock" type="checkbox" checked /> Lock ratio</label>
               </span>
             </div>
-            <div id="opt-polygon" class="row" hidden>
-              <label title="Number of sides for the Polygon tool">Polygon sides <input id="sides" type="number" min="3" max="64" step="1" value="6" style="width:4.5em" /></label>
-            </div>
             <div id="textprops" hidden>
               <input id="t-content" type="text" placeholder="Text" title="Text content" />
               <select id="t-font" title="Font face"></select>
@@ -98,33 +117,15 @@
           </div>
         </details>
         <details open>
-          <summary>Arrange</summary>
+          <summary>Options</summary>
           <div class="body">
-            <div class="row" title="Align or space the selected shapes (a group moves as one)">
-              <label>Align to <select id="align-to"><option value="selection">selection</option><option value="bed">bed</option></select></label>
+            <p class="hint" id="opt-none">Pick a tool with options (Polygon, Corner radius) to see them here.</p>
+            <div id="opt-polygon" class="row" hidden>
+              <label title="Number of sides for the Polygon tool">Polygon sides <input id="sides" type="number" min="3" max="64" step="1" value="6" style="width:4.5em" /></label>
             </div>
-            <div class="seg">
-              <button data-align="left" title="Align left edges">Left</button>
-              <button data-align="centre" title="Centre horizontally">Centre</button>
-              <button data-align="right" title="Align right edges">Right</button>
-              <button data-align="top" title="Align top edges">Top</button>
-              <button data-align="middle" title="Centre vertically">Middle</button>
-              <button data-align="bottom" title="Align bottom edges">Bottom</button>
-            </div>
-            <div class="row">
-              <button id="dist-h" title="Equal gaps left to right (3 or more shapes)">Space H</button>
-              <button id="dist-v" title="Equal gaps top to bottom (3 or more shapes)">Space V</button>
-            </div>
-            <div class="seg">
-              <button id="b-union" title="Union: merge the selected shapes into one outline">Union</button>
-              <button id="b-intersect" title="Intersect: keep only the area the selected shapes share">Intersect</button>
-              <button id="b-subtract" title="Subtract: remove the later-drawn shapes from the earliest-drawn one">Subtract</button>
-            </div>
-            <div class="row">
-              <button id="group" title="Group (Ctrl/Cmd+G)">Group</button>
-              <button id="ungroup" title="Ungroup (Ctrl/Cmd+Shift+G)">Ungroup</button>
-              <button id="flip-h" title="Flip left to right, in place">Flip H</button>
-              <button id="flip-v" title="Flip top to bottom, in place">Flip V</button>
+            <div id="opt-radius" class="row" hidden>
+              <label title="Corner radius, or chamfer setback, in mm">Corner size <input id="radius" type="number" min="0.1" value="5" style="width:5em" /> mm</label>
+              <label>Style <select id="radius-mode"><option value="radius">Round (radius)</option><option value="chamfer">Chamfer (straight)</option></select></label>
             </div>
           </div>
         </details>

@@ -11,7 +11,7 @@
   --score: #2563eb;
   --warn: #b91c1c;
   --side-w: 300px;
-  --palette-w: 48px;
+  --palette-w: 96px;
   font-size: 13px;
 }
 * { box-sizing: border-box; }
@@ -53,12 +53,14 @@ label { display: inline-flex; align-items: center; gap: 4px; }
 .menu-list button:hover { background: #eef0f3; }
 .menu-list hr { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 
-/* ---- tool palette ---- */
-#palette { grid-area: palette; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+/* ---- tool palette: two columns of icon buttons, grouped by hairlines ---- */
+#palette { grid-area: palette; display: grid; grid-template-columns: repeat(2, 38px); grid-auto-rows: min-content; gap: 4px; justify-content: center; align-content: start; padding: 8px 0; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
 #palette button { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; border-color: transparent; background: transparent; }
 #palette button:hover:not(:disabled) { background: #eef0f3; }
 #palette button.on, #palette button.on:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-#palette hr { width: 28px; border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+#palette button:disabled { opacity: 0.32; }
+#palette hr { grid-column: 1 / -1; width: 100%; height: 0; border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+#palette .wide { grid-column: 1 / -1; width: 84px; height: 28px; padding: 0 4px; font-size: 11px; justify-self: center; }
 .ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---- canvas ---- */

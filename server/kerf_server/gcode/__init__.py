@@ -49,6 +49,16 @@ def _bbox(paths: list[BedPath]) -> tuple[float, float, float, float]:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+def probe_head(job: dict[str, Any]) -> Point:
+    """A head position that puts a current-position job's bounding box at the bed origin. For checking fit before a station is chosen."""
+    origin = job["origin"]
+    if origin["mode"] != "current-position":
+        return (0.0, 0.0)
+    x0, y0, x1, y1 = _bbox([to_bed(o) for o in job["objects"]])
+    fx, fy = ANCHORS[origin["anchor"]]
+    return ((x1 - x0) * fx, (y1 - y0) * fy)
+
+
 def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any], *, head: Point | None = None) -> Result:
     """`head` is the laser's current position (bed mm); needed when the job's origin mode is current-position."""
     rp = resolve(preset, machine["id"])
@@ -73,7 +83,7 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
         raise GcodeError("There is nothing left to cut.")
     bx0, by0, bx1, by1 = _bbox(paths)
     bw, bh = machine["bed"]["widthMm"], machine["bed"]["heightMm"]
-    eps = 0.01
+    eps = 0.01 + rp.kerf_mm / 2  # the kerf offset may nudge an edge-aligned part just past the bed edge
     if bx0 < -eps or by0 < -eps or bx1 > bw + eps or by1 > bh + eps:
         raise GcodeError(f"The design does not fit on this laser's bed ({bw:g} x {bh:g} mm).")
     if rp.untested:

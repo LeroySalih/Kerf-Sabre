@@ -20,6 +20,7 @@
       #bar .fields { display: grid; grid-template-columns: repeat(2, auto); gap: 0.2rem 0.6rem; justify-items: end; }
       #bar .fields .lock { grid-column: 1 / -1; justify-self: start; font-size: 0.8rem; }
       #bar input[type="number"] { width: 5.5rem; }
+      #bar #sides { width: 3.4rem; }
       #footer { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 1rem; background: #1f2937; color: #e5e7eb; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
       #bar [hidden] { display: none; }
       #bar input[type="text"] { width: 9rem; }
@@ -39,6 +40,9 @@
           <button data-tool="rect">Rectangle</button>
           <button data-tool="circle">Circle</button>
           <button data-tool="line">Line</button>
+          <button data-tool="polygon" title="Drag from the centre to a corner. Set the number of sides next to it.">Polygon</button>
+          <label class="sides" title="Number of sides for the Polygon tool">Sides <input id="sides" type="number" min="3" max="64" step="1" value="6" /></label>
+          <button data-tool="pen" title="Click corner points. Click the first point or double-click to close. Enter finishes an open line, Esc cancels.">Pen</button>
           <button data-tool="text" title="Click on the bed to add text">Text</button>
           <button data-tool="measure" title="Drag between two points to read distance, dx, dy and angle">Measure</button>
           <button data-tool="trim" title="Click a line or arc to remove the part up to the nearest intersections">Trim</button>

@@ -188,3 +188,16 @@ export function circle(r: number): Path {
 export function line(dx: number, dy: number): Path {
   return { start: { x: 0, y: 0 }, segs: [{ t: "l", to: { x: dx, y: dy } }], closed: false };
 }
+
+/** Regular polygon centred on the origin. The first vertex is at `startRad` (counter-clockwise from +X), radius `r` to every vertex. */
+export function regularPolygon(sides: number, r: number, startRad = 0): Path {
+  const n = Math.max(3, Math.round(sides));
+  const v = (k: number): Point => ({ x: r * Math.cos(startRad + (2 * Math.PI * k) / n), y: r * Math.sin(startRad + (2 * Math.PI * k) / n) });
+  return { start: v(0), segs: Array.from({ length: n - 1 }, (_, i): Seg => ({ t: "l", to: v(i + 1) })), closed: true };
+}
+
+/** Straight-line path through absolute points (bed mm). Needs 2+ points, or 3+ to close. Returns null otherwise. */
+export function polylinePath(points: Point[], closed: boolean): Path | null {
+  if (points.length < (closed ? 3 : 2)) return null;
+  return { start: points[0]!, segs: points.slice(1).map((to): Seg => ({ t: "l", to })), closed };
+}

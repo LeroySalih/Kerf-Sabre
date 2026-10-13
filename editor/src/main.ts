@@ -3,7 +3,7 @@ import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View
 import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
-import { IDENTITY, arcMid, circle, line, multiply, rectangle, translation, transformPath, type Matrix, type Path } from "./geometry";
+import { IDENTITY, arcMid, circle, line, multiply, polylinePath, rectangle, regularPolygon, translation, transformPath, type Matrix, type Path } from "./geometry";
 import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } from "./gizmo";
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
@@ -25,10 +25,12 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "circle" | "line" | "trim" | "measure" | "text";
+type Tool = "select" | "rect" | "circle" | "line" | "polygon" | "pen" | "trim" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
+let penPoints: Point[] = []; // vertices placed so far by the Pen tool (bed mm)
+let penCursor: Point | null = null; // snapped cursor, for the rubber band
 let showGimbal = false;
 let gizmoHover: Handle | null = null;
 let gizmoDrag: { handle: Handle; pivot: Point; start: Point; mats: Map<number, Matrix>; started: boolean; label: string } | null = null;
@@ -63,10 +65,14 @@ function toPaperPath(path: Path): paper.Path {
   return pp;
 }
 
+const sidesEl = document.getElementById("sides") as HTMLInputElement;
+const sides = () => Math.min(64, Math.max(3, Math.round(parseFloat(sidesEl.value) || 6)));
+
 function shapeFor(t: Tool, a: Point, b: Point): { path: Path; at: Point } | null {
   const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
   if (t === "rect" && w > 0.1 && h > 0.1) return { path: rectangle(w, h), at: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) } };
   if (t === "circle") { const r = Math.hypot(b.x - a.x, b.y - a.y); if (r > 0.1) return { path: circle(r), at: a }; }
+  if (t === "polygon") { const r = Math.hypot(b.x - a.x, b.y - a.y); if (r > 0.1) return { path: regularPolygon(sides(), r, Math.atan2(b.y - a.y, b.x - a.x)), at: a }; }
   if (t === "line" && Math.hypot(w, h) > 0.1) return { path: line(b.x - a.x, b.y - a.y), at: a };
   return null;
 }
@@ -292,6 +298,18 @@ function draw(): void {
     box.strokeColor = new paper.Color("#2563eb");
     box.dashArray = [2, 3];
   }
+  if (penPoints.length) {
+    const pts = penCursor ? [...penPoints, penCursor] : penPoints;
+    const g = new paper.Path();
+    pts.forEach((q) => g.add(toScreen(q)));
+    g.strokeColor = new paper.Color("#6b7280");
+    g.strokeWidth = 1.5;
+    g.dashArray = [4, 4];
+    penPoints.forEach((q, i) => {
+      const dot = new paper.Path.Circle(toScreen(q), i === 0 ? 5 : 3);
+      dot.fillColor = new paper.Color(i === 0 ? "#059669" : "#6b7280");
+    });
+  }
   if (trimPreview) {
     const g = toPaperPath(trimPreview);
     g.strokeColor = new paper.Color("#f97316");
@@ -344,10 +362,12 @@ select.addEventListener("change", () => {
 });
 function setTool(next: Tool): void {
   tool = next;
+  penPoints = [];
+  penCursor = null;
   trimPreview = null;
   snapMarker = null;
   if (tool !== "measure") measureLine = null;
-  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" ? "crosshair" : "";
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" ? "crosshair" : "";
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
   draw();
 }
@@ -440,7 +460,10 @@ window.addEventListener("blur", () => { panning = null; setSpace(false); });
 
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLSelectElement || (e.target instanceof HTMLInputElement && e.target.type !== "radio")) return; // typing in a field
-  if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
+  if (tool === "pen" && penPoints.length && e.key === "Enter") { e.preventDefault(); penFinish(false); }
+  else if (tool === "pen" && penPoints.length && e.key === "Escape") penCancel();
+  else if (tool === "pen" && penPoints.length && (e.key === "Backspace" || e.key === "Delete")) { penPoints.pop(); draw(); }
+  else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) setGimbal(!showGimbal);
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }
@@ -538,6 +561,29 @@ function placeText(p: Point): void {
   tContent.select();
 }
 
+// ---- pen (click-to-draw polygon) ----
+function penFinish(closed: boolean): void {
+  const path = polylinePath(penPoints, closed);
+  penPoints = [];
+  penCursor = null;
+  if (path) edit(() => { selected = new Set([doc.add(path, IDENTITY).id]); });
+  else draw();
+}
+const penCancel = () => { if (penPoints.length) { penPoints = []; penCursor = null; draw(); } };
+
+/** A click with the Pen tool: add a vertex, or close the shape when the first vertex is clicked again. */
+function penClick(p: Point): void {
+  const first = penPoints[0];
+  if (first && penPoints.length >= 3) {
+    const a = bedToScreen(view, first), b = bedToScreen(view, p);
+    if (Math.hypot(a.x - b.x, a.y - b.y) <= 10) { penFinish(true); return; } // clicked the first point again: close
+  }
+  const last = penPoints[penPoints.length - 1];
+  if (last && Math.hypot(last.x - p.x, last.y - p.y) < 1e-6) return; // the second click of a double-click
+  penPoints.push(p);
+  draw();
+}
+
 // ---- snapping ----
 (document.getElementById("snap") as HTMLInputElement).addEventListener("change", (e) => {
   snapOn = (e.target as HTMLInputElement).checked;
@@ -619,7 +665,7 @@ function updateGizmoDrag(e: MouseEvent): void {
   draw();
 }
 
-const isDrawTool = () => tool === "rect" || tool === "circle" || tool === "line" || tool === "measure";
+const isDrawTool = () => tool === "rect" || tool === "circle" || tool === "line" || tool === "polygon" || tool === "measure";
 
 // ---- pointer ----
 const bedPt = (e: MouseEvent): Point => {
@@ -666,6 +712,7 @@ canvas.addEventListener("mousedown", (e) => {
   if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
   const gh = gizmoAt(e);
   if (gh) { e.preventDefault(); startGizmoDrag(gh, e); return; }
+  if (tool === "pen") { if (e.button === 0) penClick(snapPt(bedPt(e), e)); return; }
   if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
   const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
   dragStart = dragLast = p;
@@ -701,6 +748,7 @@ canvas.addEventListener("mousemove", (e) => {
   }
   const raw = bedPt(e);
   cursorEl.textContent = `X ${raw.x.toFixed(1)}  Y ${raw.y.toFixed(1)} mm`;
+  if (tool === "pen") { penCursor = snapPt(raw, e); draw(); return; }
   const p = isDrawTool() ? snapPt(raw, e) : raw;
   if (isDrawTool() && !dragStart) draw(); // show the snap marker while hovering
   if (tool === "measure") {
@@ -743,6 +791,8 @@ window.addEventListener("mouseup", (e) => {
   preview = null;
   draw();
 });
+
+canvas.addEventListener("dblclick", () => { if (tool === "pen" && penPoints.length) penFinish(penPoints.length >= 3); });
 
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();

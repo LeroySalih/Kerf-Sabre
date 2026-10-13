@@ -4,6 +4,7 @@ import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
+import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -17,6 +18,7 @@ const doc = new Doc();
 let selected = new Set<number>();
 type Tool = "select" | "rect" | "circle" | "line";
 let tool: Tool = "select";
+let marquee: { a: Point; b: Point; base: Set<number> } | null = null;
 let preview: { tool: Tool; a: Point; b: Point } | null = null;
 
 paper.setup(canvas);
@@ -71,6 +73,17 @@ function draw(): void {
       g.strokeColor = new paper.Color("#6b7280");
       g.dashArray = [4, 4];
     }
+  }
+  if (marquee) {
+    const mode = boxMode(marquee.a, marquee.b);
+    const r = rectOf(marquee.a, marquee.b);
+    const tl = bedToScreen(view, { x: r.minX, y: r.maxY }), br = bedToScreen(view, { x: r.maxX, y: r.minY });
+    const box = new paper.Path.Rectangle(new paper.Point(tl.x, tl.y), new paper.Point(br.x, br.y));
+    const colour = mode === "window" ? "#2563eb" : "#16a34a"; // blue = must enclose, green = may touch
+    box.strokeColor = new paper.Color(colour);
+    box.fillColor = new paper.Color(colour);
+    box.fillColor.alpha = 0.08;
+    if (mode === "crossing") box.dashArray = [5, 4];
   }
   paper.view.update();
 }
@@ -171,7 +184,10 @@ canvas.addEventListener("mousedown", (e) => {
   if (tool === "select") {
     const r = canvas.getBoundingClientRect();
     const id = pickObject(new paper.Point(e.clientX - r.left, e.clientY - r.top));
-    if (id === undefined) { if (!e.shiftKey) selected.clear(); }
+    if (id === undefined) {
+      if (!e.shiftKey) selected.clear();
+      marquee = { a: p, b: p, base: new Set(selected) };
+    }
     else if (e.shiftKey) selected.has(id) ? selected.delete(id) : selected.add(id);
     else if (!selected.has(id)) selected = new Set([id]);
     draw();
@@ -182,7 +198,10 @@ canvas.addEventListener("mousemove", (e) => {
   const p = bedPt(e);
   cursorEl.textContent = `X ${p.x.toFixed(1)}  Y ${p.y.toFixed(1)} mm`;
   if (!dragStart || !dragLast) return;
-  if (tool === "select" && selected.size) {
+  if (marquee) {
+    marquee.b = p;
+    selected = new Set([...marquee.base, ...boxSelect(doc.state.objects, marquee.a, p)]);
+  } else if (tool === "select" && selected.size) {
     if (!moved) { doc.checkpoint(); moved = true; }
     for (const id of selected) doc.transform(id, translation(p.x - dragLast.x, p.y - dragLast.y));
     dragLast = p;
@@ -197,6 +216,7 @@ window.addEventListener("mouseup", (e) => {
     const sh = shapeFor(tool, dragStart, bedPt(e));
     if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y) ?? IDENTITY).id]); });
   }
+  marquee = null;
   dragStart = dragLast = null;
   preview = null;
   draw();

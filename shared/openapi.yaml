@@ -1,18 +1,46 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
-    Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name.
+    Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
+
+    **Roles** (bearer token, one role each): `pupil` (own jobs only), `teacher` (everything a pupil can do, plus
+    approval, presets, machines, all jobs, logs), `station` (a laser PC: queue, frame, assign, stop; and the Cutter agent).
+
+    **Job life cycle**: `draft` -> `submitted` (waiting for teacher approval) -> `approved` (in the station queue)
+    -> `assigned` (run_job sent to the Cutter) -> `running` -> `done` | `failed`. `queued` means approved and pinned to one
+    station. `cancelled` is used for rejected and cancelled jobs, with `statusReason`.
+
+    **At the station**: select a job, `frame` it (laser off) so the pupil can align the material, then `assign` it with
+    `materialConfirmed: true`. The server refuses unless the station is online and idle, the job was framed on that station,
+    the job fits that laser's bed, and the material has been tested on that laser (teachers may override).
 servers:
   - url: /api/v1
 security:
   - bearerAuth: []
 paths:
+  /auth/me:
+    get:
+      summary: Who the bearer token belongs to
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Me"}
+        "401":
+          description: Missing or unknown token
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /dxf/cleanup:
     post:
       summary: Run the DXF clean-up pipeline (brief section 7)
+      description: |
+        Units come from `$INSUNITS`. When it is missing the file is assumed to be in **centimetres** (the Onshape default)
+        unless `unitsOverride` says otherwise. The geometry is returned in millimetres with its bounding box bottom-left at (0,0).
       requestBody:
         required: true
         content:
@@ -23,21 +51,26 @@ paths:
               properties:
                 file: {type: string, format: binary}
                 toleranceMm: {type: number, default: 0.01}
-                unitsOverride: {type: string, enum: [mm, inch], description: Used when $INSUNITS is missing}
+                unitsOverride: {type: string, enum: [mm, cm, inch], description: "Used when $INSUNITS is missing. Default cm."}
       responses:
         "200":
           description: Cleaned geometry and change report
           content:
             application/json:
               schema: {$ref: "#/components/schemas/CleanupResult"}
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "422":
-          description: Needs units choice or file unreadable
+          description: File unreadable or has no usable geometry
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
   /presets:
     get:
-      summary: List presets
+      summary: List presets (latest version of each)
       responses:
         "200":
           description: OK
@@ -85,6 +118,14 @@ paths:
   /machines/{machineId}:
     parameters:
       - {name: machineId, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Get one machine profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "./machine-profile.schema.json"}
     put:
       summary: Replace profile (teacher only), e.g. from spike results
       requestBody:
@@ -96,9 +137,9 @@ paths:
         "200": {description: Updated}
   /jobs:
     get:
-      summary: List jobs (pupils see own; teachers see all)
+      summary: List jobs (pupils see their own; teachers and stations see all)
       parameters:
-        - {name: status, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}, description: "One status, or several separated by commas"}
         - {name: station, in: query, schema: {type: string}}
       responses:
         "200":
@@ -107,7 +148,11 @@ paths:
             application/json:
               schema: {type: array, items: {$ref: "./job.schema.json"}}
     post:
-      summary: Submit a job. Server validates bounds, closed Cut paths, preset, and generates G-code.
+      summary: Save or submit a job. Server validates bounds, closed Cut paths and preset, and generates G-code.
+      description: |
+        `status` may be `draft` (saved, not yet validated for cutting) or `submitted`. Pupils can only create jobs under
+        their own pupil ID. The server records the current preset version. With approval switched off in the server settings,
+        a submitted job goes straight to `approved`.
       requestBody:
         required: true
         content:
@@ -120,7 +165,40 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/JobReceipt"}
         "422":
-          description: Validation failed (out of bounds, open Cut path, untested material/laser)
+          description: Validation failed (out of bounds, open Cut path, unknown preset, untested material/laser)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/from-dxf:
+    post:
+      summary: Save a DXF as a job. The file is cleaned (see /dxf/cleanup) and kept as a draft.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, presetId]
+              properties:
+                file: {type: string, format: binary}
+                presetId: {type: string}
+                pupilId: {type: string, description: Teachers only; pupils always save under their own ID}
+                toleranceMm: {type: number, default: 0.01}
+                unitsOverride: {type: string, enum: [mm, cm, inch]}
+                submit: {type: boolean, default: false, description: Also submit the job for approval}
+      responses:
+        "201":
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DxfJobReceipt"}
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: File unreadable, no usable geometry, or validation failed
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -135,16 +213,96 @@ paths:
           content:
             application/json:
               schema: {$ref: "./job.schema.json"}
-  /jobs/{jobId}/approve:
+        "404":
+          description: No such job, or not yours
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+    put:
+      summary: Replace the geometry of a draft job (owner or teacher)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./job.schema.json"}
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/JobReceipt"}
+        "409":
+          description: Only drafts can be replaced
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/submit:
     post:
-      summary: Teacher approval
+      summary: Draft to submitted (validates, generates G-code, estimates)
       parameters:
         - {name: jobId, in: path, required: true, schema: {type: string}}
       responses:
-        "200": {description: Approved}
-  /jobs/{jobId}/assign:
+        "200":
+          description: Submitted
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/JobReceipt"}
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/approve:
     post:
-      summary: Station mode selects a job; resolves per-laser preset overrides
+      summary: Teacher approval. Optionally pins the job to one station.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                station: {type: string}
+      responses:
+        "200": {description: Approved}
+        "409":
+          description: Not waiting for approval
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/reject:
+    post:
+      summary: Teacher rejection. The job becomes cancelled with the reason.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string}
+      responses:
+        "200": {description: Rejected}
+  /jobs/{jobId}/cancel:
+    post:
+      summary: Cancel a job that is not running (owner or teacher). Running jobs are stopped from the station.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Cancelled}
+        "409":
+          description: Already running or finished
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/frame:
+    post:
+      summary: Station mode. Trace the job outline with the laser off so the pupil can align the material.
       parameters:
         - {name: jobId, in: path, required: true, schema: {type: string}}
       requestBody:
@@ -157,18 +315,134 @@ paths:
               properties:
                 station: {type: string}
       responses:
-        "200": {description: Assigned}
-  /jobs/{jobId}/gcode:
-    get:
-      summary: Download generated G-code (absolute, G21 G90, no G92)
+        "202":
+          description: Frame command sent to the Cutter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bounds: {$ref: "#/components/schemas/Bounds"}
+        "409":
+          description: Station offline or busy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: Job does not fit this laser's bed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/assign:
+    post:
+      summary: Station mode selects a job; resolves per-laser preset overrides and tells the Cutter to start.
       parameters:
         - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [station, materialConfirmed]
+              properties:
+                station: {type: string}
+                materialConfirmed: {type: boolean, description: "The pupil confirmed 'Load: <material>'. Must be true."}
+                allowUntested: {type: boolean, default: false, description: Teachers only}
+      responses:
+        "200":
+          description: Assigned; run_job sent
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/JobReceipt"}
+        "409":
+          description: Station offline, busy or not idle; job not approved; job not framed on this station
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: Out of bounds for this laser, untested material, or unknown laser settings
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/gcode:
+    get:
+      summary: Download generated G-code (absolute, G21 G90, no G92). Stations get the version made for them.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+        - {name: station, in: query, required: false, schema: {type: string}}
       responses:
         "200":
           description: G-code
           content:
             text/plain:
               schema: {type: string}
+  /stations:
+    get:
+      summary: Every laser station with its live state
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Station"}}
+  /stations/{stationId}:
+    parameters:
+      - {name: stationId, in: path, required: true, schema: {type: string}}
+    get:
+      summary: One station
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Station"}
+  /stations/{stationId}/control:
+    post:
+      summary: Stop, pause or resume the job running on a station
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command: {enum: [stop, pause, resume]}
+      responses:
+        "202": {description: Sent to the Cutter}
+        "409":
+          description: Station offline
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /stations/{stationId}/camera:
+    get:
+      summary: Latest camera frame for monitoring (never stored or recorded)
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: JPEG
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+        "404": {description: No frame available}
+  /stations/{stationId}/logs:
+    get:
+      summary: Recent Cutter log lines (teachers)
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, default: 200, maximum: 5000}}
+        - {name: level, in: query, schema: {$ref: "#/components/schemas/LogLevel"}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
   /stations/{stationId}/log-level:
     put:
       summary: Remote log-level control for a Cutter
@@ -192,9 +466,25 @@ paths:
         - {name: stationId, in: path, required: true, schema: {type: string}}
       responses:
         "202": {description: Requested}
+  /stations/{stationId}/diagnostics/upload:
+    post:
+      summary: The Cutter uploads the diagnostic bundle (a zip) it was asked for
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        "201": {description: Stored}
   /ws/cutter:
     get:
-      summary: "WebSocket upgrade, opened OUTBOUND by each Cutter. Messages are CutterMessage / ServerMessage JSON."
+      summary: "WebSocket upgrade, opened OUTBOUND by each Cutter with its station token. Messages are CutterMessage / ServerMessage JSON."
       responses:
         "101": {description: Switching protocols}
 components:
@@ -208,9 +498,23 @@ components:
         code: {type: string}
         message: {type: string}
         details: {type: array, items: {type: object}}
+    Me:
+      type: object
+      required: [role, id]
+      properties:
+        role: {enum: [pupil, teacher, station]}
+        id: {type: string, description: "Pupil ID, teacher ID or station id. Never a name."}
     LogLevel:
       type: string
       enum: [DEBUG, INFO, WARNING, ERROR]
+    Bounds:
+      type: object
+      required: [minX, minY, maxX, maxY]
+      properties:
+        minX: {type: number}
+        minY: {type: number}
+        maxX: {type: number}
+        maxY: {type: number}
     JobReceipt:
       type: object
       required: [id, status]
@@ -219,6 +523,32 @@ components:
         status: {type: string}
         warnings: {type: array, items: {type: string}}
         estimate: {type: object}
+    DxfJobReceipt:
+      allOf:
+        - {$ref: "#/components/schemas/JobReceipt"}
+        - type: object
+          properties:
+            report: {$ref: "#/components/schemas/CleanupReport"}
+            units: {$ref: "#/components/schemas/UnitsInfo"}
+    UnitsInfo:
+      type: object
+      required: [source, mmPerUnit]
+      properties:
+        source: {enum: [header, override, assumed-cm]}
+        mmPerUnit: {type: number}
+    CleanupReport:
+      type: object
+      required: [duplicatesRemoved, overlapsMerged, closedShapes, openPaths]
+      properties:
+        duplicatesRemoved: {type: integer}
+        overlapsMerged: {type: integer}
+        microSegmentsRemoved: {type: integer}
+        scoreCutConflicts: {type: integer}
+        closedShapes: {type: integer}
+        openPaths: {type: integer}
+        skippedEntities: {type: object, additionalProperties: {type: integer}}
+        summary: {type: string, description: "e.g. Removed 37 duplicates, merged 12 overlaps, joined into 8 closed shapes, 1 open path"}
+        changes: {type: array, items: {type: object}, description: For highlighting changes in the Editor}
     CleanupResult:
       type: object
       required: [objects, report]
@@ -226,15 +556,22 @@ components:
         objects:
           type: array
           items: {type: object, description: "Same shape as job.schema.json objects"}
-        report:
-          type: object
-          required: [duplicatesRemoved, overlapsMerged, closedShapes, openPaths]
-          properties:
-            duplicatesRemoved: {type: integer}
-            overlapsMerged: {type: integer}
-            closedShapes: {type: integer}
-            openPaths: {type: integer}
-            changes: {type: array, items: {type: object}, description: For highlighting changes in the Editor}
+        report: {$ref: "#/components/schemas/CleanupReport"}
+        units: {$ref: "#/components/schemas/UnitsInfo"}
+    Station:
+      type: object
+      required: [id, online]
+      properties:
+        id: {type: string, description: Machine profile id}
+        online: {type: boolean}
+        state: {type: string, description: "GRBL state from the last status (Idle, Run, Hold, Alarm, ...)"}
+        mpos: {type: array, items: {type: number}, minItems: 3, maxItems: 3}
+        currentJobId: {type: [string, "null"]}
+        cutterVersion: {type: [string, "null"]}
+        s30: {type: [number, "null"], description: "$30 reported by the Cutter"}
+        laserMode: {type: [boolean, "null"], description: "$32=1 reported by the Cutter"}
+        cameraAvailable: {type: boolean}
+        lastSeen: {type: [string, "null"], format: date-time}
     CutterMessage:
       description: Cutter to Server over /ws/cutter
       oneOf:
@@ -243,6 +580,8 @@ components:
         - {$ref: "#/components/schemas/CutterLogBatch"}
         - {$ref: "#/components/schemas/CutterCameraFrame"}
         - {$ref: "#/components/schemas/CutterJobProgress"}
+        - {$ref: "#/components/schemas/CutterAck"}
+        - {$ref: "#/components/schemas/CutterJobResult"}
       discriminator: {propertyName: type}
     CutterHello:
       type: object
@@ -251,6 +590,7 @@ components:
         type: {const: hello}
         station: {type: string}
         cutterVersion: {type: string}
+        grblBanner: {type: string}
         grblSettings:
           type: object
           description: "Parsed $$ values keyed by number; includes $30 and $32"
@@ -298,6 +638,27 @@ components:
         totalLines: {type: integer}
         estimatedS: {type: number}
         actualS: {type: number}
+    CutterAck:
+      description: The Cutter's answer to run_job. accepted false means it refused (for example its own bounds check failed).
+      type: object
+      required: [type, station, jobId, accepted]
+      properties:
+        type: {const: ack}
+        station: {type: string}
+        jobId: {type: string}
+        accepted: {type: boolean}
+        reason: {type: string}
+    CutterJobResult:
+      description: How a job ended. Sent once per job.
+      type: object
+      required: [type, station, jobId, outcome]
+      properties:
+        type: {const: result}
+        station: {type: string}
+        jobId: {type: string}
+        outcome: {enum: [done, failed, cancelled]}
+        message: {type: string}
+        actualS: {type: number}
     ServerMessage:
       description: Server to Cutter over /ws/cutter
       oneOf:
@@ -310,7 +671,11 @@ components:
       properties:
         type: {const: run_job}
         jobId: {type: string}
-        gcodeUrl: {type: string}
+        gcodeUrl: {type: string, description: "Path on this server, fetched with the station token"}
+        gcodeSha256: {type: string}
+        totalLines: {type: integer}
+        estimatedS: {type: number}
+        bounds: {$ref: "#/components/schemas/Bounds"}
         presetVersion: {type: integer}
         material: {type: string, description: Shown in the Load material confirmation}
     ServerControl:
@@ -321,3 +686,5 @@ components:
         command:
           enum: [stop, pause, resume, set_log_level, diagnostic_bundle, frame]
         level: {$ref: "#/components/schemas/LogLevel"}
+        jobId: {type: string, description: "For frame: the job being aligned"}
+        bounds: {$ref: "#/components/schemas/Bounds"}

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+node_modules/
+dist/
+# Spike build output and embedded runtime
+spike/build/
+spike/*.zip
+*.zip
+# Keep operator-collected spike results
+!spike/results/

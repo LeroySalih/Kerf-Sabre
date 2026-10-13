@@ -1,0 +1,323 @@
+openapi: 3.1.0
+info:
+  title: BISAK Kerf API
+  version: 0.1.0
+  description: |
+    Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
+    Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /dxf/cleanup:
+    post:
+      summary: Run the DXF clean-up pipeline (brief section 7)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+                toleranceMm: {type: number, default: 0.01}
+                unitsOverride: {type: string, enum: [mm, inch], description: Used when $INSUNITS is missing}
+      responses:
+        "200":
+          description: Cleaned geometry and change report
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CleanupResult"}
+        "422":
+          description: Needs units choice or file unreadable
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /presets:
+    get:
+      summary: List presets
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "./preset.schema.json"}}
+    post:
+      summary: Create preset (teacher only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./preset.schema.json"}
+      responses:
+        "201": {description: Created}
+  /presets/{presetId}:
+    parameters:
+      - {name: presetId, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Get preset (latest version)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "./preset.schema.json"}
+    put:
+      summary: Update preset (teacher only); server increments version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./preset.schema.json"}
+      responses:
+        "200": {description: Updated}
+  /machines:
+    get:
+      summary: List machine profiles
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "./machine-profile.schema.json"}}
+  /machines/{machineId}:
+    parameters:
+      - {name: machineId, in: path, required: true, schema: {type: string}}
+    put:
+      summary: Replace profile (teacher only), e.g. from spike results
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./machine-profile.schema.json"}
+      responses:
+        "200": {description: Updated}
+  /jobs:
+    get:
+      summary: List jobs (pupils see own; teachers see all)
+      parameters:
+        - {name: status, in: query, schema: {type: string}}
+        - {name: station, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "./job.schema.json"}}
+    post:
+      summary: Submit a job. Server validates bounds, closed Cut paths, preset, and generates G-code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "./job.schema.json"}
+      responses:
+        "201":
+          description: Accepted
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/JobReceipt"}
+        "422":
+          description: Validation failed (out of bounds, open Cut path, untested material/laser)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}:
+    parameters:
+      - {name: jobId, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Get job
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "./job.schema.json"}
+  /jobs/{jobId}/approve:
+    post:
+      summary: Teacher approval
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Approved}
+  /jobs/{jobId}/assign:
+    post:
+      summary: Station mode selects a job; resolves per-laser preset overrides
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [station]
+              properties:
+                station: {type: string}
+      responses:
+        "200": {description: Assigned}
+  /jobs/{jobId}/gcode:
+    get:
+      summary: Download generated G-code (absolute, G21 G90, no G92)
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: G-code
+          content:
+            text/plain:
+              schema: {type: string}
+  /stations/{stationId}/log-level:
+    put:
+      summary: Remote log-level control for a Cutter
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [level]
+              properties:
+                level: {$ref: "#/components/schemas/LogLevel"}
+      responses:
+        "204": {description: Sent}
+  /stations/{stationId}/diagnostics:
+    post:
+      summary: Request a diagnostic bundle from a Cutter
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      responses:
+        "202": {description: Requested}
+  /ws/cutter:
+    get:
+      summary: "WebSocket upgrade, opened OUTBOUND by each Cutter. Messages are CutterMessage / ServerMessage JSON."
+      responses:
+        "101": {description: Switching protocols}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        details: {type: array, items: {type: object}}
+    LogLevel:
+      type: string
+      enum: [DEBUG, INFO, WARNING, ERROR]
+    JobReceipt:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: string}
+        status: {type: string}
+        warnings: {type: array, items: {type: string}}
+        estimate: {type: object}
+    CleanupResult:
+      type: object
+      required: [objects, report]
+      properties:
+        objects:
+          type: array
+          items: {type: object, description: "Same shape as job.schema.json objects"}
+        report:
+          type: object
+          required: [duplicatesRemoved, overlapsMerged, closedShapes, openPaths]
+          properties:
+            duplicatesRemoved: {type: integer}
+            overlapsMerged: {type: integer}
+            closedShapes: {type: integer}
+            openPaths: {type: integer}
+            changes: {type: array, items: {type: object}, description: For highlighting changes in the Editor}
+    CutterMessage:
+      description: Cutter to Server over /ws/cutter
+      oneOf:
+        - {$ref: "#/components/schemas/CutterHello"}
+        - {$ref: "#/components/schemas/CutterStatus"}
+        - {$ref: "#/components/schemas/CutterLogBatch"}
+        - {$ref: "#/components/schemas/CutterCameraFrame"}
+        - {$ref: "#/components/schemas/CutterJobProgress"}
+      discriminator: {propertyName: type}
+    CutterHello:
+      type: object
+      required: [type, station, cutterVersion, grblSettings]
+      properties:
+        type: {const: hello}
+        station: {type: string}
+        cutterVersion: {type: string}
+        grblSettings:
+          type: object
+          description: "Parsed $$ values keyed by number; includes $30 and $32"
+          additionalProperties: {type: string}
+    CutterStatus:
+      type: object
+      required: [type, station, state]
+      properties:
+        type: {const: status}
+        station: {type: string}
+        state: {type: string, description: "GRBL state (Idle, Run, Hold, Alarm, ...)"}
+        mpos: {type: array, items: {type: number}, minItems: 3, maxItems: 3}
+    CutterLogBatch:
+      type: object
+      required: [type, station, lines]
+      properties:
+        type: {const: logs}
+        station: {type: string}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [timestamp, level, station, event]
+            properties:
+              timestamp: {type: string}
+              level: {$ref: "#/components/schemas/LogLevel"}
+              station: {type: string}
+              job_id: {type: [string, "null"]}
+              event: {type: string}
+    CutterCameraFrame:
+      type: object
+      required: [type, station, jpegBase64]
+      properties:
+        type: {const: camera}
+        station: {type: string}
+        jpegBase64: {type: string}
+    CutterJobProgress:
+      type: object
+      required: [type, station, jobId, line, totalLines]
+      properties:
+        type: {const: progress}
+        station: {type: string}
+        jobId: {type: string}
+        line: {type: integer}
+        totalLines: {type: integer}
+        estimatedS: {type: number}
+        actualS: {type: number}
+    ServerMessage:
+      description: Server to Cutter over /ws/cutter
+      oneOf:
+        - {$ref: "#/components/schemas/ServerRunJob"}
+        - {$ref: "#/components/schemas/ServerControl"}
+      discriminator: {propertyName: type}
+    ServerRunJob:
+      type: object
+      required: [type, jobId, gcodeUrl, presetVersion]
+      properties:
+        type: {const: run_job}
+        jobId: {type: string}
+        gcodeUrl: {type: string}
+        presetVersion: {type: integer}
+        material: {type: string, description: Shown in the Load material confirmation}
+    ServerControl:
+      type: object
+      required: [type, command]
+      properties:
+        type: {const: control}
+        command:
+          enum: [stop, pause, resume, set_log_level, diagnostic_bundle, frame]
+        level: {$ref: "#/components/schemas/LogLevel"}

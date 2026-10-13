@@ -5,14 +5,14 @@
 1. Read this whole brief before doing anything.
 2. The project runs on **two parallel tracks** (section 13):
    - **Track A, Machine:** spike, then production Cutter. Risky, gated on hardware results.
-   - **Track B, Design:** shared schemas, then Client + Server. Independent of the lasers.
-   Kerf Client is valuable **on its own** as a free DXF editor for pupils (import, clean-up, edit, export DXF/SVG/G-code), even if direct machine control never works. Track B must not depend on Track A.
+   - **Track B, Design:** shared schemas, then Editor + Server. Independent of the lasers.
+   Kerf Editor is valuable **on its own** as a free DXF editor for pupils (import, clean-up, edit, export DXF/SVG/G-code), even if direct machine control never works. Track B must not depend on Track A.
 3. Enter plan mode and produce an implementation plan for the **repository scaffold**, the **spike** (Track A step 1) and the **shared schemas** (Track B step 1). Wait for approval.
 4. After approval:
    - Create the repository structure (section 12), the root `CLAUDE.md` and the per-folder `CLAUDE.md` files, encoding the rules in this brief.
    - Build the spike (section 14).
    - Draft the shared schemas and API contract.
-5. **Gating applies to Track A only:** do not start production Cutter work until the spike has run on all four station PCs and the results are reviewed. Client and Server work may proceed in parallel. Anything in Client or Server that depends on machine facts (bed size, origin, `$30`, air assist) reads from machine profiles, using placeholder profiles until spike results replace them.
+5. **Gating applies to Track A only:** do not start production Cutter work until the spike has run on all four station PCs and the results are reviewed. Editor and Server work may proceed in parallel. Anything in Editor or Server that depends on machine facts (bed size, origin, `$30`, air assist) reads from machine profiles, using placeholder profiles until spike results replace them.
 6. Keep this brief in the repo as `docs/BRIEF.md`. It is the source of truth.
 7. **Git workflow: solo developer, worktrees for features, no pull requests.**
    - Each feature is developed in its own git worktree on a local feature branch (e.g. `feature/dxf-cleanup`).
@@ -37,17 +37,17 @@
 - **Current workflow:** pupils design in Onshape in a separate classroom, export DXF, and take files to the laser PCs.
 - **Goal:** an in-house suite that replaces LightBurn for the department's workflow.
 - **Not for publication.** Internal school use only.
-- **Project / repository name: Kerf Sabre** (GitHub repo `kerf-sabre`). The three components keep their names: BISAK Kerf Client, Server and Cutter.
+- **Project / repository name: Kerf Sabre** (GitHub repo `kerf-sabre`). The three components keep their names: BISAK Kerf Editor, Server and Cutter.
 
 ## 2. Architecture and names
 
 | Component | Name | Language | Runs on | Role |
 |---|---|---|---|---|
-| Web PWA | **BISAK Kerf Client** | TypeScript | Served from Leroy's server; used in Chrome/Edge | **Design mode** (pupils, classroom): import DXF, assign layers, edit, submit job. **Station mode** (laser PCs): queue, camera view, frame, run/stop |
-| Central service | **BISAK Kerf Server** | Python | Leroy's own server/VPS | DXF clean-up, G-code generation, material presets, job queue, relay between Client and Cutters, log collection |
+| Web PWA | **BISAK Kerf Editor** | TypeScript | Served from Leroy's server; used in Chrome/Edge | **Design mode** (pupils, classroom): import DXF, assign layers, edit, submit job. **Station mode** (laser PCs): queue, camera view, frame, run/stop |
+| Central service | **BISAK Kerf Server** | Python | Leroy's own server/VPS | DXF clean-up, G-code generation, material presets, job queue, relay between Editor and Cutters, log collection |
 | Station agent (×4) | **BISAK Kerf Cutter** | Python | Each station PC | GRBL serial streaming, camera capture, status reporting, local + shipped logs |
 
-**Data flow:** pupil submits from Client → Server validates and generates G-code → job queued → at a station, Client (station mode) selects job → Server assigns to that station's Cutter → Cutter streams to laser and reports status/camera back via Server.
+**Data flow:** pupil submits from Editor → Server validates and generates G-code → job queued → at a station, Editor (station mode) selects job → Server assigns to that station's Cutter → Cutter streams to laser and reports status/camera back via Server.
 
 **Networking:** Cutter makes an **outbound** WebSocket/HTTPS connection to Server. No inbound ports on the school network. Pupil devices never talk to hardware directly; no Web Serial.
 
@@ -59,7 +59,7 @@ Jobs run in the Cutter process, so closing a browser never interrupts a cut.
 - **No installers on station PCs.** Python code (spike and Cutter) is deployed as a **portable folder**: the official Windows **embeddable Python** package (python.org zip) with all dependencies bundled inside, launched by a `.bat` file. No admin rights, no registry changes; deleting the folder removes everything. A PyInstaller `.exe` is a fallback only, since `.exe` files are hard to get installed and school antivirus may flag unsigned executables.
 - Application whitelisting (e.g. AppLocker) may block executables run from user folders, including `python.exe`. If so, IT must allow-list the folder.
 - Cutter must be trivially replaceable: updating means replacing the folder (or the Python source within it).
-- Client targets **Chrome/Edge desktop**. Pupil devices need no installs.
+- Editor targets **Chrome/Edge desktop**. Pupil devices need no installs.
 - **Data protection:** logs carry pupil IDs, never names. No camera frames in logs by default. No recording by default.
 - Per Leroy's standing rule: code changes are made through Claude Code only.
 
@@ -161,7 +161,7 @@ Open paths on the Cut layer block submission, or warn and are treated as no-kerf
 
 Suggested stack (confirm in plan): FastAPI, PostgreSQL, `ezdxf`, `shapely`/`pyclipper`.
 
-## 8. Kerf Client — features
+## 8. Kerf Editor — features
 
 Stack: TypeScript PWA; `paper.js` (geometry, intersections, hit-testing); `opentype.js` (text to paths).
 
@@ -231,7 +231,7 @@ Stack: TypeScript PWA; `paper.js` (geometry, intersections, hit-testing); `opent
 - **Alignment** (last phase), in OpenCV:
   - Lens calibration (checkerboard, once per camera).
   - Bed mapping: laser burns 4+ reference marks; compute homography.
-  - Per job: still → undistort → warp to top-down bed view → Client editor background at true scale.
+  - Per job: still → undistort → warp to top-down bed view → Editor background at true scale.
   - "Verify" function: burn one dot, check position.
 - Approach depends on model: USB UVC (easy) vs network-only (reverse-engineering).
 - Camera points at the bed only. Clear with the school's safeguarding/data policy.
@@ -254,7 +254,7 @@ kerf-sabre/
   shared/
     CLAUDE.md      schema rules: versioned, changelog, no silent breaking changes
     job.schema.json, preset.schema.json, machine-profile.schema.json, api contract
-  client/          Kerf Client (CLAUDE.md: TS/PWA conventions, tests)
+  editor/          Kerf Editor (CLAUDE.md: TS/PWA conventions, tests)
   server/          Kerf Server (CLAUDE.md: Python conventions, tests)
   cutter/          Kerf Cutter (CLAUDE.md)
   spike/           Step 1 connectivity spike (throwaway)
@@ -271,7 +271,7 @@ kerf-sabre/
 **Optional:** a custom review subagent in `.claude/agents/` that checks diffs against the schema and coordinate rules.
 
 **Where work runs:**
-- The repo is **`kerf-sabre`** on GitHub (private). Client and Server development and tests can run in Claude Code cloud sessions.
+- The repo is **`kerf-sabre`** on GitHub (private). Editor and Server development and tests can run in Claude Code cloud sessions.
 - The spike and Cutter **cannot run in the cloud**: they need physical USB access to a laser. Cloud sessions build and unit-test them (with a mocked serial port), and assemble the portable Windows folder. Leroy runs them on the station PCs and commits the resulting report folders back into the repo (`spike/results/<station>/`) for review.
 - Deploying Server to Leroy's VPS is done from a local or SSH Claude Code session, not a cloud session.
 
@@ -282,15 +282,15 @@ Two tracks run **in parallel from day one**. Track B never waits for Track A.
 ### Track A — Machine (gated on hardware)
 1. **Kerf Cutter Spike**: prove connectivity on the real station PCs (section 14).
 2. **Kerf Cutter** (production), built from spike findings. Starts only after spike results from all 4 PCs are reviewed.
-3. Client station mode + camera monitoring.
+3. Editor station mode + camera monitoring.
 4. Camera alignment.
 
 ### Track B — Design (independent of the lasers)
 1. **Shared schemas + API contract**, with placeholder machine profiles.
 2. **Server**: DXF clean-up, G-code generation, presets, duration, wastage, test grid.
-3. **Client design mode**: the standalone pupil editor. Import, clean-up, edit, layer assignment, preview, and **export DXF / SVG / G-code**.
+3. **Editor design mode**: the standalone pupil editor. Import, clean-up, edit, layer assignment, preview, and **export DXF / SVG / G-code**.
 4. Job submission and queue (only useful once Track A delivers, but buildable now).
-5. v2 Client features.
+5. v2 Editor features.
 
 ### Convergence
 Integration of the two tracks happens when Track A step 2 is done: real machine profiles replace the placeholders, and the queue connects to the Cutters.

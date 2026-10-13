@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "station-3",
+  "name": "Station 3 (PLACEHOLDER)",
+  "model": null,
+  "placeholder": true,
+  "bed": {"widthMm": 400, "heightMm": 400, "originCorner": "front-left"},
+  "grbl": {"s30Max": 1000, "laserMode": true, "homingEnabled": null, "baud": 115200},
+  "airAssist": {"supported": null, "command": "M8"},
+  "camera": {"type": "unknown"}
+}

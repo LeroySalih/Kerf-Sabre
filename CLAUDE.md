@@ -1,0 +1,26 @@
+# Kerf Sabre (BISAK Kerf) — root rules
+
+Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal school use only.
+
+## Components
+- **BISAK Kerf Editor** (`editor/`): TypeScript PWA. Design mode (pupils) and Station mode (laser PCs).
+- **BISAK Kerf Server** (`server/`): Python. DXF clean-up, G-code, presets, queue, log collection.
+- **BISAK Kerf Cutter** (`cutter/`): Python station agent. GRBL serial, camera, logs. Outbound connection only.
+- `shared/`: versioned JSON schemas and API contract. `spike/`: throwaway connectivity spike. `fixtures/dxf/`: real Onshape DXFs.
+
+## Rules
+- Units are millimetres (float) everywhere. Bed space is Y-up, origin = machine origin from the machine profile.
+- G-code is absolute: start with `G21` and `G90`. **Never use `G92`.**
+- Machine facts (bed size, origin, `$30`, air assist) come from machine profiles, never hard-coded.
+- Only two layer types: Score and Cut. No engraving.
+- Logs carry pupil IDs, never names. No camera frames in logs.
+- Each session edits only its own folder. `shared/` changes need a version bump and a `shared/CHANGELOG.md` entry; only one feature at a time may change `shared/`.
+- Production Cutter work is gated on spike results from all four station PCs. Editor and Server work is not.
+- Station PCs: no installers, no Claude Code. Deploy as portable folders (embeddable Python + bundled deps + `.bat`). Everything must be debuggable from logs.
+
+## Git workflow
+- Brief describes worktrees + merge to `main`, no PRs. In cloud sessions, develop on the branch the session designates, commit small, push that branch. Never open a pull request unless asked.
+
+## Tests
+- Python: `pytest` from the component folder (`spike/`, `shared/`, later `server/`, `cutter/`).
+- Editor: set when the editor is scaffolded.

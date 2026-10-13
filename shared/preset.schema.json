@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kerf-sabre.local/schemas/preset.schema.json",
+  "title": "Material preset",
+  "description": "Base preset with optional per-laser overrides. Resolved when a job is assigned to a station.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "version", "material", "thicknessMm", "sheet", "kerfMm", "cut", "score"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "0.1.0"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "version": {"type": "integer", "minimum": 1, "description": "Incremented on every edit; jobs record it"},
+    "material": {"type": "string", "minLength": 1},
+    "thicknessMm": {"type": "number", "exclusiveMinimum": 0},
+    "sheet": {
+      "type": "object",
+      "required": ["widthMm", "heightMm"],
+      "additionalProperties": false,
+      "properties": {
+        "widthMm": {"type": "number", "exclusiveMinimum": 0},
+        "heightMm": {"type": "number", "exclusiveMinimum": 0},
+        "costSar": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "kerfMm": {"type": "number", "minimum": 0},
+    "cut": {"$ref": "#/$defs/operation"},
+    "score": {"$ref": "#/$defs/operation"},
+    "laserOverrides": {
+      "type": "object",
+      "description": "Keyed by machine profile id",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kerfMm": {"type": "number", "minimum": 0},
+          "cut": {"$ref": "#/$defs/operationPatch"},
+          "score": {"$ref": "#/$defs/operationPatch"}
+        }
+      }
+    },
+    "testedOn": {"type": "array", "items": {"type": "string"},
+                 "description": "Machine ids with a completed test grid. Others are flagged untested."},
+    "updatedBy": {"type": "string", "description": "Teacher ID, never a name"}
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "required": ["powerPct", "speedMmPerS", "passes", "airAssist"],
+      "additionalProperties": false,
+      "properties": {
+        "powerPct": {"type": "number", "minimum": 0, "maximum": 100},
+        "speedMmPerS": {"type": "number", "exclusiveMinimum": 0, "description": "Output F = mm/s x 60"},
+        "passes": {"type": "integer", "minimum": 1},
+        "airAssist": {"type": "boolean"}
+      }
+    },
+    "operationPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "powerPct": {"type": "number", "minimum": 0, "maximum": 100},
+        "speedMmPerS": {"type": "number", "exclusiveMinimum": 0},
+        "passes": {"type": "integer", "minimum": 1},
+        "airAssist": {"type": "boolean"}
+      }
+    }
+  }
+}

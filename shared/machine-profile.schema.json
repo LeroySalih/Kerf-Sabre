@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kerf-sabre.local/schemas/machine-profile.schema.json",
+  "title": "Machine profile",
+  "description": "Facts about one laser. Never hard-code these elsewhere. Units: mm, bed space Y-up.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "name", "placeholder", "bed", "grbl", "airAssist", "camera"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "0.1.0"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "name": {"type": "string", "minLength": 1},
+    "model": {"type": ["string", "null"], "description": "Falcon model, null until confirmed"},
+    "placeholder": {"type": "boolean", "description": "true until values are replaced from spike results"},
+    "bed": {
+      "type": "object",
+      "required": ["widthMm", "heightMm", "originCorner"],
+      "additionalProperties": false,
+      "properties": {
+        "widthMm": {"type": "number", "exclusiveMinimum": 0},
+        "heightMm": {"type": "number", "exclusiveMinimum": 0},
+        "originCorner": {"enum": ["front-left", "front-right", "back-left", "back-right"],
+                         "description": "Physical corner where machine origin (0,0) sits"}
+      }
+    },
+    "grbl": {
+      "type": "object",
+      "required": ["s30Max", "laserMode"],
+      "additionalProperties": false,
+      "properties": {
+        "s30Max": {"type": ["number", "null"], "exclusiveMinimum": 0,
+                   "description": "$30 max spindle speed; read by Cutter, never assumed"},
+        "laserMode": {"type": ["boolean", "null"], "description": "$32=1"},
+        "homingEnabled": {"type": ["boolean", "null"], "description": "$22"},
+        "maxRateXY": {"type": ["number", "null"], "description": "$110/$111 mm/min"},
+        "accelerationXY": {"type": ["number", "null"], "description": "$120/$121 mm/s^2"},
+        "baud": {"type": "integer", "default": 115200}
+      }
+    },
+    "airAssist": {
+      "type": "object",
+      "required": ["supported", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "supported": {"type": ["boolean", "null"], "description": "null = unverified"},
+        "command": {"enum": ["M8", "M7", "none"]}
+      }
+    },
+    "camera": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["usb-uvc", "network", "none", "unknown"]}
+      }
+    }
+  }
+}

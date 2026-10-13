@@ -1,5 +1,6 @@
 // Document state with snapshot undo/redo. Edits change object matrices, never source geometry.
 import { multiply, type Matrix, type Path } from "./geometry";
+import type { TextSpec } from "./text";
 
 export type LayerType = "score" | "cut";
 
@@ -10,16 +11,21 @@ export interface DocObject {
   layer: LayerType;
   /** Objects sharing a group id are selected and moved together. One level only. */
   group?: number;
+  /** Set on every contour of a live text object; see DocState.texts. Cleared by Convert to Path. */
+  textId?: number;
 }
 
 export interface DocState {
   objects: DocObject[];
   nextId: number;
   nextGroup: number;
+  /** Editable text behind textId contours: change the spec and the contours are regenerated. */
+  texts: Record<number, TextSpec>;
+  nextText: number;
 }
 
 export class Doc {
-  state: DocState = { objects: [], nextId: 1, nextGroup: 1 };
+  state: DocState = { objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1 };
   private undoStack: DocState[] = [];
   private redoStack: DocState[] = [];
 
@@ -89,5 +95,46 @@ export class Doc {
   /** Dissolve every group that any of the given objects belong to. */
   ungroup(ids: number[]): void {
     for (const o of this.state.objects) if (this.expand(ids).includes(o.id)) delete o.group;
+  }
+
+  /** Add a live text object (one contour object per glyph contour, grouped). Returns its text id. */
+  addText(spec: TextSpec, paths: Path[], matrix: Matrix, layer: LayerType): number {
+    const id = this.state.nextText++;
+    this.state.texts[id] = spec;
+    this.fillText(id, paths, matrix, layer, paths.length > 1 ? this.state.nextGroup++ : undefined);
+    return id;
+  }
+
+  private fillText(textId: number, paths: Path[], matrix: Matrix, layer: LayerType, group: number | undefined): number[] {
+    return paths.map((path) => {
+      const o = this.add(path, matrix, layer);
+      o.textId = textId;
+      if (group !== undefined) o.group = group;
+      return o.id;
+    });
+  }
+
+  /** Ids of the contour objects that make up a text object. */
+  textMembers(textId: number): number[] {
+    return this.state.objects.filter((o) => o.textId === textId).map((o) => o.id);
+  }
+
+  /** Replace a text object's contours after its spec changed, keeping placement, layer and group. Returns the new ids. */
+  retext(textId: number, spec: TextSpec, paths: Path[]): number[] {
+    const members = this.state.objects.filter((o) => o.textId === textId);
+    const first = members[0];
+    if (!first) return [];
+    const { matrix, layer } = first;
+    const group = first.group ?? (paths.length > 1 ? this.state.nextGroup++ : undefined);
+    this.remove(members.map((o) => o.id));
+    this.state.texts[textId] = spec;
+    return this.fillText(textId, paths, matrix, layer, group);
+  }
+
+  /** Convert text to plain paths: the contours stay, the editable text goes. */
+  convertText(ids: Iterable<number>): void {
+    const textIds = new Set(this.state.objects.filter((o) => new Set(this.expand(ids)).has(o.id) && o.textId !== undefined).map((o) => o.textId!));
+    for (const o of this.state.objects) if (o.textId !== undefined && textIds.has(o.textId)) delete o.textId;
+    for (const t of textIds) delete this.state.texts[t];
   }
 }

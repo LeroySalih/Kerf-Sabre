@@ -21,6 +21,8 @@
       #bar .fields .lock { grid-column: 1 / -1; justify-self: start; font-size: 0.8rem; }
       #bar input[type="number"] { width: 5.5rem; }
       #footer { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 1rem; background: #1f2937; color: #e5e7eb; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+      #bar [hidden] { display: none; }
+      #bar input[type="text"] { width: 9rem; }
       #warn { color: #fecaca; font-weight: 600; }
       #bar button { padding: 0.25rem 0.6rem; }
       #bar button.on { background: #f97316; color: #fff; border-color: #f97316; }
@@ -37,6 +39,7 @@
           <button data-tool="rect">Rectangle</button>
           <button data-tool="circle">Circle</button>
           <button data-tool="line">Line</button>
+          <button data-tool="text" title="Click on the bed to add text">Text</button>
           <button data-tool="measure" title="Drag between two points to read distance, dx, dy and angle">Measure</button>
           <button data-tool="trim" title="Click a line or arc to remove the part up to the nearest intersections">Trim</button>
         </span>
@@ -48,6 +51,14 @@
           <button id="del">Delete</button>
           <button id="undo">Undo</button>
           <button id="redo">Redo</button>
+        </span>
+        <span id="textprops" hidden>
+          <input id="t-content" type="text" placeholder="Text" size="14" title="Text content" />
+          <select id="t-font" title="Font face"></select>
+          <label>Size <input id="t-size" type="number" min="1" step="0.5" /> mm</label>
+          <button id="t-load" title="Add a .ttf or .otf font file">Load font&hellip;</button>
+          <input id="t-file" type="file" accept=".ttf,.otf" hidden />
+          <button id="t-convert" title="Turn the text into plain paths (no longer editable as text)">Convert to path</button>
         </span>
         <span id="position" title="Position of the selection's anchor point on the bed (mm)">
           <span class="anchors"><input type="radio" name="anchor" data-col="0" data-row="0" title="Anchor: top-left" /><input type="radio" name="anchor" data-col="1" data-row="0" title="Anchor: top" /><input type="radio" name="anchor" data-col="2" data-row="0" title="Anchor: top-right" /><input type="radio" name="anchor" data-col="0" data-row="1" title="Anchor: left" /><input type="radio" name="anchor" data-col="1" data-row="1" title="Anchor: centre" /><input type="radio" name="anchor" data-col="2" data-row="1" title="Anchor: right" /><input type="radio" name="anchor" data-col="0" data-row="2" title="Anchor: bottom-left" checked /><input type="radio" name="anchor" data-col="1" data-row="2" title="Anchor: bottom" /><input type="radio" name="anchor" data-col="2" data-row="2" title="Anchor: bottom-right" /></span>

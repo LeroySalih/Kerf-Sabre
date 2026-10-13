@@ -9,6 +9,7 @@ import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
 import { outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
+import { DEFAULT_FONT, getFont, listFonts, loadBundledFonts, registerOutlineFont, textToPaths, type TextSpec } from "./text";
 import { selectionSummary } from "./status";
 import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
@@ -23,7 +24,7 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "circle" | "line" | "trim" | "measure";
+type Tool = "select" | "rect" | "circle" | "line" | "trim" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
@@ -79,6 +80,7 @@ const round = (n: number) => String(Math.round(n * 1000) / 1000);
 
 /** Show the selection's anchor position and size (bed mm); disabled when nothing is selected. */
 function updatePositionFields(): void {
+  refreshTextPanel();
   const b = selectionBounds(doc.state.objects, selected);
   document.getElementById("selinfo")!.textContent = selectionSummary(selected.size, b);
   for (const el of fieldEls) el.disabled = !b;
@@ -227,7 +229,7 @@ function draw(): void {
     item.strokeColor = new paper.Color(out ? "#ff0000" : COLOURS[o.layer]);
     item.strokeWidth = selected.has(o.id) || out ? 3 : 1.5;
     if (o.path.closed) item.fillColor = out ? new paper.Color(1, 0, 0, 0.18) : new paper.Color(0, 0, 0, 0.01); // faint fill keeps it hit-testable
-    if (selected.has(o.id)) item.dashArray = [6, 3];
+    if (selected.has(o.id) && o.group === undefined) item.dashArray = [6, 3]; // grouped shapes get the group outline instead
   }
   for (const g of new Set(doc.state.objects.filter((o) => selected.has(o.id) && o.group !== undefined).map((o) => o.group))) {
     const bs = doc.state.objects.filter((o) => o.group === g).map((o) => boundsOf(transformPath(o.path, o.matrix)));
@@ -286,16 +288,17 @@ select.addEventListener("change", () => {
   machine = profiles.find((p) => p.id === select.value) ?? machine;
   fit();
 });
+function setTool(next: Tool): void {
+  tool = next;
+  trimPreview = null;
+  snapMarker = null;
+  if (tool !== "measure") measureLine = null;
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" ? "crosshair" : "";
+  document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
+  draw();
+}
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    tool = btn.dataset.tool as Tool;
-    trimPreview = null;
-    snapMarker = null;
-    if (tool !== "measure") measureLine = null;
-    canvas.style.cursor = tool === "trim" || tool === "measure" ? "crosshair" : "";
-    draw();
-    document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b === btn));
-  }),
+  btn.addEventListener("click", () => setTool(btn.dataset.tool as Tool)),
 );
 const on = (id: string, fn: () => void) => document.getElementById(id)!.addEventListener("click", fn);
 on("score", () => selected.size && edit(() => doc.setLayer([...selected], "score")));
@@ -356,7 +359,8 @@ function download(name: string, text: string, type: string): void {
 }
 
 const typingInField = (e: KeyboardEvent) =>
-  e.target instanceof HTMLInputElement && e.target.type !== "radio" && e.target.type !== "checkbox";
+  e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement ||
+  (e.target instanceof HTMLInputElement && e.target.type !== "radio" && e.target.type !== "checkbox");
 
 function setSpace(down: boolean): void {
   spaceDown = down;
@@ -373,11 +377,103 @@ window.addEventListener("keyup", (e) => {
 window.addEventListener("blur", () => { panning = null; setSpace(false); });
 
 window.addEventListener("keydown", (e) => {
-  if (e.target instanceof HTMLInputElement && e.target.type !== "radio") return; // typing in a field
+  if (e.target instanceof HTMLSelectElement || (e.target instanceof HTMLInputElement && e.target.type !== "radio")) return; // typing in a field
   if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }
 });
+
+// ---- text ----
+const textPanel = document.getElementById("textprops") as HTMLElement;
+const tContent = document.getElementById("t-content") as HTMLInputElement;
+const tFont = document.getElementById("t-font") as HTMLSelectElement;
+const tSize = document.getElementById("t-size") as HTMLInputElement;
+const tFile = document.getElementById("t-file") as HTMLInputElement;
+let defaultFont = DEFAULT_FONT;
+let defaultSize = 10; // mm
+let textEditing = false; // one undo step per editing session, not per keystroke
+
+function fillFontSelect(select?: string): void {
+  tFont.replaceChildren();
+  const groups: [string, boolean][] = [["Outline fonts", false], ["Single-line fonts (for Score)", true]];
+  for (const [label, single] of groups) {
+    const og = document.createElement("optgroup");
+    og.label = label;
+    for (const f of listFonts().filter((x) => (x.kind === "single") === single)) og.append(new Option(f.label, f.id));
+    if (og.children.length) tFont.append(og);
+  }
+  if (select) tFont.value = select;
+}
+
+/** The text object a selection is exactly one of, if any. */
+function selectedTextIds(): number[] {
+  return [...new Set(doc.state.objects.filter((o) => selected.has(o.id) && o.textId !== undefined).map((o) => o.textId!))];
+}
+
+function refreshTextPanel(): void {
+  const ids = selectedTextIds();
+  textPanel.hidden = ids.length === 0 && tool !== "text";
+  const one = ids.length === 1 ? doc.state.texts[ids[0]!] : undefined;
+  for (const el of [tContent, tFont, tSize]) el.disabled = !one;
+  if (!one) return;
+  if (document.activeElement !== tContent) tContent.value = one.content;
+  if (document.activeElement !== tFont) tFont.value = one.font;
+  if (document.activeElement !== tSize) tSize.value = String(one.sizeMm);
+}
+
+function readTextSpec(): TextSpec | null {
+  const spec = { content: tContent.value, font: tFont.value, sizeMm: parseFloat(tSize.value) };
+  if (!spec.content.trim() || !(spec.sizeMm > 0)) return null; // ignore half-typed values
+  return textToPaths(spec).length ? spec : null;
+}
+
+function applyText(): void {
+  const ids = selectedTextIds();
+  const spec = readTextSpec();
+  if (ids.length !== 1 || !spec) return;
+  if (!textEditing) { doc.checkpoint(); textEditing = true; }
+  const kindChanged = getFont(doc.state.texts[ids[0]!]!.font)?.kind !== getFont(spec.font)?.kind;
+  const newIds = doc.retext(ids[0]!, spec, textToPaths(spec));
+  // Single-line fonts are for scoring and outline fonts for cutting: follow the font when its kind changes.
+  if (kindChanged) doc.setLayer(newIds, getFont(spec.font)?.kind === "single" ? "score" : "cut");
+  selected = new Set(newIds);
+  defaultFont = spec.font;
+  defaultSize = spec.sizeMm;
+  draw();
+}
+for (const el of [tContent, tSize]) el.addEventListener("input", applyText);
+tFont.addEventListener("change", applyText);
+for (const el of [tContent, tSize, tFont]) el.addEventListener("blur", () => { textEditing = false; });
+
+on("t-convert", () => { if (selectedTextIds().length) edit(() => doc.convertText(selected)); });
+on("t-load", () => tFile.click());
+tFile.addEventListener("change", async () => {
+  const f = tFile.files?.[0];
+  tFile.value = "";
+  if (!f) return;
+  try {
+    const id = `user-${Date.now()}`;
+    registerOutlineFont(id, f.name.replace(/\.[^.]+$/, ""), await f.arrayBuffer());
+    fillFontSelect(id);
+    if (selectedTextIds().length === 1) applyText();
+    else defaultFont = id;
+  } catch (err) {
+    alert(`Could not read that font file: ${err instanceof Error ? err.message : err}`);
+  }
+});
+
+/** Add a new text object at the clicked point, then hand over to the Select tool and the text box. */
+function placeText(p: Point): void {
+  const spec: TextSpec = { content: "Text", font: getFont(defaultFont) ? defaultFont : DEFAULT_FONT, sizeMm: defaultSize };
+  const paths = textToPaths(spec);
+  if (!paths.length) return; // fonts still loading
+  const layer: LayerType = getFont(spec.font)?.kind === "single" ? "score" : "cut";
+  edit(() => { selected = new Set(doc.textMembers(doc.addText(spec, paths, translation(p.x, p.y), layer))); });
+  setTool("select");
+  refreshTextPanel(); // the panel must be enabled before it can take focus
+  tContent.focus();
+  tContent.select();
+}
 
 // ---- snapping ----
 (document.getElementById("snap") as HTMLInputElement).addEventListener("change", (e) => {
@@ -438,6 +534,7 @@ function doTrim(p: Point): void {
   if (!plan) return;
   const old = doc.get(plan.objectId)!;
   edit(() => {
+    doc.convertText([old.id]); // trimmed contours can no longer be regenerated from the text
     doc.remove([old.id]);
     selected.delete(old.id);
     for (const path of plan.keep) { const o = doc.add(path, IDENTITY, old.layer); o.group = old.group; }
@@ -463,6 +560,7 @@ canvas.addEventListener("mousedown", (e) => {
   }
   const rr = canvas.getBoundingClientRect();
   if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
+  if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
   const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
   dragStart = dragLast = p;
   moved = false;
@@ -543,6 +641,10 @@ canvas.addEventListener("wheel", (e) => {
 
 paper.view.onResize = fit;
 fit();
+fillFontSelect();
+loadBundledFonts(async (file) => (await fetch(`/fonts/${file}`)).arrayBuffer())
+  .then(() => fillFontSelect(defaultFont))
+  .catch((err) => console.error("Could not load bundled fonts", err));
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});

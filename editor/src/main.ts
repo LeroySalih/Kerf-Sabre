@@ -8,6 +8,8 @@ import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAbo
 import { boundsOf } from "./geometry";
 import { planTrim } from "./trim";
 import { outOfBounds } from "./bounds";
+import { selectionSummary } from "./status";
+import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
@@ -20,13 +22,15 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "circle" | "line" | "trim";
+type Tool = "select" | "rect" | "circle" | "line" | "trim" | "measure";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
 let panning: { x: number; y: number } | null = null;
 let anchor: Anchor = DEFAULT_ANCHOR;
 let trimPreview: Path | null = null;
+let measureLine: { a: Point; b: Point } | null = null;
+const RULER = 20; // ruler thickness in px
 let marquee: { a: Point; b: Point; base: Set<number> } | null = null;
 let preview: { tool: Tool; a: Point; b: Point } | null = null;
 
@@ -71,6 +75,7 @@ const round = (n: number) => String(Math.round(n * 1000) / 1000);
 /** Show the selection's anchor position and size (bed mm); disabled when nothing is selected. */
 function updatePositionFields(): void {
   const b = selectionBounds(doc.state.objects, selected);
+  document.getElementById("selinfo")!.textContent = selectionSummary(selected.size, b);
   for (const el of fieldEls) el.disabled = !b;
   if (!b) { for (const el of fieldEls) el.value = ""; return; }
   const p = anchorPoint(b, anchor);
@@ -141,6 +146,50 @@ function drawGrid(widthMm: number, heightMm: number): void {
   for (let y = 0; y <= heightMm; y += STEP) line({ x: 0, y }, { x: widthMm, y }, y % 100 === 0);
 }
 
+function drawMeasure(a: Point, b: Point): void {
+  const line = new paper.Path.Line(toScreen(a), toScreen(b));
+  line.strokeColor = new paper.Color("#7c3aed");
+  line.strokeWidth = 1.5;
+  for (const p of [a, b]) {
+    const dot = new paper.Path.Circle(toScreen(p), 3);
+    dot.fillColor = new paper.Color("#7c3aed");
+  }
+  const mid = toScreen({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const label = new paper.PointText({ point: mid.add(new paper.Point(8, -8)), content: formatMeasurement(measure(a, b)), fontSize: 12, fillColor: new paper.Color("#4c1d95"), fontWeight: "bold" });
+  const bg = new paper.Path.Rectangle(label.bounds.expand(4));
+  bg.fillColor = new paper.Color(1, 1, 1, 0.9);
+  label.insertAbove(bg);
+}
+
+/** mm rulers along the top and left edges; they follow zoom and pan. */
+function drawRulers(): void {
+  const w = paper.view.viewSize.width, h = paper.view.viewSize.height;
+  const strip = (x: number, y: number, rw: number, rh: number) => {
+    const r = new paper.Path.Rectangle(new paper.Point(x, y), new paper.Size(rw, rh));
+    r.fillColor = new paper.Color("#e5e7eb");
+  };
+  strip(0, 0, w, RULER);
+  strip(0, 0, RULER, h);
+  const ink = new paper.Color("#374151");
+  for (const t of rulerTicks(view, "x", w)) {
+    if (t.px < RULER) continue;
+    const len = t.major ? RULER : RULER * 0.4;
+    const l = new paper.Path.Line(new paper.Point(t.px, RULER - len), new paper.Point(t.px, RULER));
+    l.strokeColor = ink; l.strokeWidth = 1;
+    if (t.major) new paper.PointText({ point: new paper.Point(t.px + 2, 9), content: String(t.mm), fontSize: 9, fillColor: ink });
+  }
+  for (const t of rulerTicks(view, "y", h)) {
+    if (t.px < RULER) continue;
+    const len = t.major ? RULER : RULER * 0.4;
+    const l = new paper.Path.Line(new paper.Point(RULER - len, t.px), new paper.Point(RULER, t.px));
+    l.strokeColor = ink; l.strokeWidth = 1;
+    if (t.major) new paper.PointText({ point: new paper.Point(1, t.px - 2), content: String(t.mm), fontSize: 9, fillColor: ink });
+  }
+  const corner = new paper.Path.Rectangle(new paper.Point(0, 0), new paper.Size(RULER, RULER));
+  corner.fillColor = new paper.Color("#d1d5db");
+  new paper.PointText({ point: new paper.Point(3, 14), content: "mm", fontSize: 8, fillColor: ink });
+}
+
 function draw(): void {
   paper.project.clear();
   const { widthMm, heightMm } = machine.bed;
@@ -200,6 +249,8 @@ function draw(): void {
     box.fillColor.alpha = 0.08;
     if (mode === "crossing") box.dashArray = [5, 4];
   }
+  if (measureLine) drawMeasure(measureLine.a, measureLine.b);
+  drawRulers();
   paper.view.update();
   updatePositionFields();
 }
@@ -225,7 +276,9 @@ document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((btn) =>
   btn.addEventListener("click", () => {
     tool = btn.dataset.tool as Tool;
     trimPreview = null;
-    canvas.style.cursor = tool === "trim" ? "crosshair" : "";
+    if (tool !== "measure") measureLine = null;
+    canvas.style.cursor = tool === "trim" || tool === "measure" ? "crosshair" : "";
+    draw();
     document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b === btn));
   }),
 );
@@ -351,9 +404,12 @@ canvas.addEventListener("mousedown", (e) => {
     e.preventDefault();
     return;
   }
+  const rr = canvas.getBoundingClientRect();
+  if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
   const p = bedPt(e);
   dragStart = dragLast = p;
   moved = false;
+  if (tool === "measure") { measureLine = { a: p, b: p }; draw(); return; }
   if (tool === "trim") { doTrim(p); trimPreview = null; draw(); return; }
   if (tool === "select") {
     const r = canvas.getBoundingClientRect();
@@ -379,6 +435,10 @@ canvas.addEventListener("mousemove", (e) => {
   if (panning) return;
   const p = bedPt(e);
   cursorEl.textContent = `X ${p.x.toFixed(1)}  Y ${p.y.toFixed(1)} mm`;
+  if (tool === "measure") {
+    if (dragStart && measureLine) { measureLine = { a: measureLine.a, b: p }; draw(); }
+    return;
+  }
   if (tool === "trim") {
     const next = planTrim(doc.state.objects, p, trimTolMm())?.removed ?? null;
     if ((next === null) !== (trimPreview === null) || next) { trimPreview = next; draw(); }

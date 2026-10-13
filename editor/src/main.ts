@@ -4,6 +4,7 @@ import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
+import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, selectionBounds, type Anchor } from "./anchor";
 import { boundsOf } from "./geometry";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
@@ -20,6 +21,7 @@ let selected = new Set<number>();
 type Tool = "select" | "rect" | "circle" | "line";
 let tool: Tool = "select";
 let showGrid = true;
+let anchor: Anchor = DEFAULT_ANCHOR;
 let marquee: { a: Point; b: Point; base: Set<number> } | null = null;
 let preview: { tool: Tool; a: Point; b: Point } | null = null;
 
@@ -49,6 +51,40 @@ function shapeFor(t: Tool, a: Point, b: Point): { path: Path; at: Point } | null
   if (t === "line" && Math.hypot(w, h) > 0.1) return { path: line(b.x - a.x, b.y - a.y), at: a };
   return null;
 }
+
+const pxEl = document.getElementById("px") as HTMLInputElement;
+const pyEl = document.getElementById("py") as HTMLInputElement;
+const round = (n: number) => String(Math.round(n * 1000) / 1000);
+
+/** Show the selection's anchor position (bed mm); disabled when nothing is selected. */
+function updatePositionFields(): void {
+  const b = selectionBounds(doc.state.objects, selected);
+  pxEl.disabled = pyEl.disabled = !b;
+  if (!b) { pxEl.value = pyEl.value = ""; return; }
+  const p = anchorPoint(b, anchor);
+  if (document.activeElement !== pxEl) pxEl.value = round(p.x);
+  if (document.activeElement !== pyEl) pyEl.value = round(p.y);
+}
+
+/** Move the selection so its anchor lands on the typed value. Only the edited axis changes. */
+function applyPosition(axis: "x" | "y"): void {
+  const b = selectionBounds(doc.state.objects, selected);
+  const v = parseFloat((axis === "x" ? pxEl : pyEl).value);
+  if (!b || !Number.isFinite(v)) { updatePositionFields(); return; }
+  const d = deltaToAnchor(b, anchor, { [axis]: v });
+  if (d.x === 0 && d.y === 0) return;
+  edit(() => { for (const id of selected) doc.transform(id, translation(d.x, d.y)); });
+}
+
+pxEl.addEventListener("change", () => applyPosition("x"));
+pyEl.addEventListener("change", () => applyPosition("y"));
+for (const el of [pxEl, pyEl]) el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
+document.querySelectorAll<HTMLInputElement>('input[name="anchor"]').forEach((r) =>
+  r.addEventListener("change", () => {
+    anchor = { col: Number(r.dataset.col), row: Number(r.dataset.row) } as Anchor;
+    updatePositionFields();
+  }),
+);
 
 /** 1 cm grid inside the bed, heavier every 10 cm. Hidden when lines would be under ~5 px apart. */
 function drawGrid(widthMm: number, heightMm: number): void {
@@ -111,6 +147,7 @@ function draw(): void {
     if (mode === "crossing") box.dashArray = [5, 4];
   }
   paper.view.update();
+  updatePositionFields();
 }
 
 function fit(): void {
@@ -195,6 +232,7 @@ function download(name: string, text: string, type: string): void {
 }
 
 window.addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLInputElement && e.target.type !== "radio") return; // typing in a field
   if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }

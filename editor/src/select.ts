@@ -2,7 +2,7 @@
 // drag right->left = crossing (may touch the shape's outline).
 import type { Point } from "./coords";
 import type { DocObject } from "./doc";
-import { flatten, transformPath } from "./geometry";
+import { boundsOf, flatten, transformPath } from "./geometry";
 
 export interface Rect { minX: number; minY: number; maxX: number; maxY: number }
 
@@ -45,10 +45,11 @@ export function boxSelect(objects: DocObject[], a: Point, b: Point): number[] {
   const ids: number[] = [];
   for (const o of objects) {
     const path = transformPath(o.path, o.matrix);
-    const pts = flatten(path);
     if (mode === "window") {
-      if (pts.every((p) => inside(r, p))) ids.push(o.id);
+      const b = boundsOf(path);
+      if (b.minX >= r.minX && b.maxX <= r.maxX && b.minY >= r.minY && b.maxY <= r.maxY) ids.push(o.id);
     } else {
+      const pts = flatten(path);
       const pairs = pts.slice(1).map((p, i) => [pts[i]!, p] as const);
       if (path.closed) pairs.push([pts[pts.length - 1]!, pts[0]!]);
       if (pairs.some(([p, q]) => segmentTouchesRect(r, p, q)) || (pairs.length === 0 && inside(r, pts[0]!))) ids.push(o.id);

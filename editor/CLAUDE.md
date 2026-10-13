@@ -7,6 +7,6 @@ TypeScript PWA for Chrome/Edge desktop. paper.js for geometry, opentype.js for t
 - `src/coords.ts` holds Bed<->Screen conversion; do not convert elsewhere. `public/sw.js` is the offline app-shell cache.
 
 ## Modules
-- `geometry.ts` (segments/matrices/shapes), `select.ts` (box select), `doc.ts` (objects + undo/redo), `export.ts` (DXF/SVG), `dxf-import.ts` (LINE, ARC, CIRCLE, LWPOLYLINE, POLYLINE, SPLINE), `main.ts` (UI).
+- `geometry.ts` (segments/matrices/shapes), `select.ts` (box select), `anchor.ts` (3x3 anchor + numeric X/Y position), `doc.ts` (objects + undo/redo), `export.ts` (DXF/SVG), `dxf-import.ts` (LINE, ARC, CIRCLE, LWPOLYLINE, POLYLINE, SPLINE), `main.ts` (UI).
 - Import only converts and normalises (units -> mm; a file with no `$INSUNITS` is assumed to be centimetres, the Onshape default; bbox bottom-left -> 0,0). Dedupe/merge/join clean-up is Server work. Unsupported entities (TEXT, HATCH, ELLIPSE...) are counted and reported, not imported.
 - Groups are a `group` id on `DocObject` (one level; grouping again merges). Selection and moves always go through `Doc.expand()` so group members act together. The 1 cm grid is drawn by `drawGrid` in `main.ts` (toggle in the toolbar).

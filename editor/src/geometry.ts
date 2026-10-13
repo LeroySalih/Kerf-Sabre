@@ -140,8 +140,23 @@ export function flatten(path: Path, tolMm = 0.05): Point[] {
 
 export interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
 
+/** Exact bounds: flattened curve points plus the cardinal extremes of every true arc. */
 export function boundsOf(path: Path): Bounds {
   const pts = flatten(path);
+  let cur = path.start;
+  for (const s of path.segs) {
+    if (s.t === "a") {
+      const r = Math.hypot(cur.x - s.c.x, cur.y - s.c.y);
+      const a0 = Math.atan2(cur.y - s.c.y, cur.x - s.c.x);
+      const sweep = arcSweep(s.c, cur, s.to, s.ccw);
+      for (let k = 0; k < 4; k++) {
+        const target = (k * Math.PI) / 2;
+        const d = s.ccw ? mod(target - a0) : -mod(a0 - target);
+        if (Math.abs(d) <= Math.abs(sweep)) pts.push({ x: s.c.x + r * Math.cos(target), y: s.c.y + r * Math.sin(target) });
+      }
+    }
+    cur = s.to;
+  }
   return {
     minX: Math.min(...pts.map((p) => p.x)), maxX: Math.max(...pts.map((p) => p.x)),
     minY: Math.min(...pts.map((p) => p.y)), maxY: Math.max(...pts.map((p) => p.y)),

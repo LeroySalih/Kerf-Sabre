@@ -15,6 +15,9 @@
       #stage { flex: 1; min-height: 0; }
       #bar span { display: flex; gap: 0.25rem; align-items: center; white-space: nowrap; }
       #bar { flex-wrap: wrap; }
+      #bar .anchors { display: grid; grid-template-columns: repeat(3, 16px); gap: 0; }
+      #bar .anchors input { margin: 0; width: 16px; height: 16px; }
+      #bar input[type="number"] { width: 5.5rem; }
       #bar button { padding: 0.25rem 0.6rem; }
       #bar button.on { background: #f97316; color: #fff; border-color: #f97316; }
       canvas { display: block; width: 100%; height: 100%; }
@@ -39,6 +42,11 @@
           <button id="del">Delete</button>
           <button id="undo">Undo</button>
           <button id="redo">Redo</button>
+        </span>
+        <span id="position" title="Position of the selection's anchor point on the bed (mm)">
+          <span class="anchors"><input type="radio" name="anchor" data-col="0" data-row="0" title="Anchor: top-left" /><input type="radio" name="anchor" data-col="1" data-row="0" title="Anchor: top" /><input type="radio" name="anchor" data-col="2" data-row="0" title="Anchor: top-right" /><input type="radio" name="anchor" data-col="0" data-row="1" title="Anchor: left" /><input type="radio" name="anchor" data-col="1" data-row="1" title="Anchor: centre" /><input type="radio" name="anchor" data-col="2" data-row="1" title="Anchor: right" /><input type="radio" name="anchor" data-col="0" data-row="2" title="Anchor: bottom-left" checked /><input type="radio" name="anchor" data-col="1" data-row="2" title="Anchor: bottom" /><input type="radio" name="anchor" data-col="2" data-row="2" title="Anchor: bottom-right" /></span>
+          <label>X <input id="px" type="number" step="0.1" disabled /></label>
+          <label>Y <input id="py" type="number" step="0.1" disabled /></label>
         </span>
         <span>
           <button id="imp">Import DXF</button>

@@ -138,7 +138,7 @@ function subSeg(start: Point, s: Seg, a: number, b: number): { from: Point; seg:
 }
 
 /** Chain from position u0 to u1 (segment index + fraction; may exceed n on closed paths). */
-function extract(path: Path, u0: number, u1: number): Path | null {
+export function extract(path: Path, u0: number, u1: number): Path | null {
   const n = path.segs.length;
   const starts = startsOf(path);
   const segs: Seg[] = [];

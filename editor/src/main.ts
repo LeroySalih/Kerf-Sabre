@@ -24,6 +24,7 @@ import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { filletAll, filletVertices, nearestCorner, roundedRectangle, type CornerMode } from "./fillet";
 import { mountIcons } from "./icons";
+import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs";
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
@@ -37,7 +38,7 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "nodes" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text";
+type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
@@ -328,6 +329,17 @@ function draw(): void {
     item.strokeWidth = selected.has(o.id) || out ? 3 : 1.5;
     if (o.path.closed) item.fillColor = out ? new paper.Color(1, 0, 0, 0.18) : new paper.Color(0, 0, 0, 0.01); // faint fill keeps it hit-testable
     if (selected.has(o.id) && o.group === undefined) item.dashArray = [6, 3]; // grouped shapes get the group outline instead
+    if (o.tabs && o.layer === "cut" && o.path.closed) {
+      for (const piece of tabPieces(transformPath(o.path, o.matrix), o.tabs)) { // a tab is a gap in the cut: paint over the line
+        const gap = toPaperPath(piece);
+        gap.strokeColor = new paper.Color("#ffffff");
+        gap.strokeWidth = 6;
+        for (const end of [piece.start, piece.segs[piece.segs.length - 1]!.to]) {
+          const dot = new paper.Path.Circle(toScreen(end), 2.2);
+          dot.fillColor = new paper.Color("#f97316");
+        }
+      }
+    }
   }
   for (const g of new Set(doc.state.objects.filter((o) => selected.has(o.id) && o.group !== undefined).map((o) => o.group))) {
     const bs = doc.state.objects.filter((o) => o.group === g).map((o) => boundsOf(transformPath(o.path, o.matrix)));
@@ -404,17 +416,13 @@ function setTool(next: Tool): void {
   tool = next;
   nodeSel = null;
   nodeDrag = null;
-  (document.getElementById("opt-polygon") as HTMLElement).hidden = tool !== "polygon";
-  (document.getElementById("opt-radius") as HTMLElement).hidden = tool !== "radius";
-  (document.getElementById("opt-rrect") as HTMLElement).hidden = tool !== "rrect";
-  (document.getElementById("opt-star") as HTMLElement).hidden = tool !== "star";
-  (document.getElementById("opt-none") as HTMLElement).hidden = ["polygon", "radius", "rrect", "star"].includes(tool);
+  refreshOptions();
   penPoints = [];
   penCursor = null;
   trimPreview = null;
   snapMarker = null;
   if (tool !== "measure") measureLine = null;
-  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" ? "crosshair" : "";
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" || tool === "tab" ? "crosshair" : "";
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
   draw();
 }
@@ -432,14 +440,30 @@ document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) =>
 );
 
 /** Chips show the selection's layer (or the layer for new shapes); the table counts shapes per layer; material settings are locked. */
+/** Show the Options sections that apply: the tool's own, plus Tabs whenever a selected shape has tabs. */
+function refreshOptions(): void {
+  const hasTabs = doc.state.objects.some((o) => selected.has(o.id) && o.tabs);
+  const show: Record<string, boolean> = {
+    "opt-polygon": tool === "polygon",
+    "opt-radius": tool === "radius",
+    "opt-rrect": tool === "rrect",
+    "opt-star": tool === "star",
+    "opt-tabs": tool === "tab" || hasTabs,
+  };
+  for (const [id, on] of Object.entries(show)) (document.getElementById(id) as HTMLElement).hidden = !on;
+  (document.getElementById("opt-none") as HTMLElement).hidden = Object.values(show).some(Boolean);
+}
+
 /** Disable toolbar actions that can't apply to the current selection. */
 function refreshActions(): void {
+  refreshOptions();
   const objs = doc.state.objects.filter((o) => selected.has(o.id));
   const units = new Set(objs.map((o) => (o.group !== undefined ? `g${o.group}` : `o${o.id}`))).size;
   const set = (id: string, enabled: boolean) => { (document.getElementById(id) as HTMLButtonElement).disabled = !enabled; };
   for (const id of ["b-union", "b-intersect", "b-subtract", "group"]) set(id, units >= 2);
   set("ungroup", objs.some((o) => o.group !== undefined));
   for (const id of ["flip-h", "flip-v", "round-all", "act-linear", "act-circular", "copy", "dup", "del"]) set(id, objs.length >= 1);
+  set("act-tabs", objs.some(tabbable));
   set("act-join", objs.filter((o) => !o.path.closed).length >= 2);
   set("act-close", objs.some((o) => !o.path.closed));
   set("act-explode", objs.some((o) => o.path.segs.length >= 2 || (o.path.closed && o.path.segs.length >= 1)));
@@ -603,6 +627,7 @@ function copySelected(): string | null {
   clipboard = doc.copyOut(selected);
   clipboardText = serializeClip(clipboard);
   pasteCount = 0;
+  refreshActions(); // Paste becomes available straight away
   return clipboardText;
 }
 
@@ -964,6 +989,7 @@ canvas.addEventListener("mousedown", (e) => {
   const gh = gizmoAt(e);
   if (gh) { e.preventDefault(); startGizmoDrag(gh, e); return; }
   if (tool === "radius") { if (e.button === 0) doCorner(bedPt(e)); return; }
+  if (tool === "tab") { if (e.button === 0) doTab(bedPt(e)); return; }
   if (tool === "pen") { if (e.button === 0) penClick(snapPt(bedPt(e), e)); return; }
   if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
   const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
@@ -1296,6 +1322,44 @@ canvas.addEventListener("dblclick", (e) => {
   if (!best) return;
   edit(() => { doc.convertText([o.id]); o.path = insertNode(base, (best as { si: number }).si, p); o.matrix = [...IDENTITY] as Matrix; });
 });
+
+// ---- tabs (bridges) ----
+const tabWidth = () => Math.max(0.5, parseFloat((document.getElementById("tab-width") as HTMLInputElement).value) || 3);
+const tabCount = () => Math.min(50, Math.max(1, Math.round(parseFloat((document.getElementById("tab-count") as HTMLInputElement).value) || 4)));
+const tabbable = (o: DocObject) => o.layer === "cut" && o.path.closed;
+
+/** Click an outline to add a tab there, or click an existing tab to remove it. */
+function doTab(p: Point): void {
+  const tol = 8 / view.scale;
+  for (const o of [...doc.state.objects].reverse().filter(tabbable)) {
+    const placed = transformPath(o.path, o.matrix);
+    const f = nearestFraction(placed, p, tol);
+    if (f === null) continue;
+    edit(() => {
+      const next = toggleTab(o.tabs, f, tabWidth(), placed);
+      if (next.at.length) o.tabs = next; else delete o.tabs;
+      selected = new Set(doc.expand([o.id]));
+    });
+    return;
+  }
+  notify("Click on the outline of a closed Cut shape.");
+}
+
+function autoTabsSelected(): void {
+  const objs = doc.state.objects.filter((o) => selected.has(o.id) && tabbable(o));
+  if (!objs.length) { notify("Select a closed Cut outline first."); return; }
+  const n = tabCount(), w = tabWidth();
+  edit(() => { for (const o of objs) o.tabs = { widthMm: w, at: autoTabFractions(n) }; });
+  notify(`Added ${n} ${n === 1 ? "tab" : "tabs"} of ${w} mm to ${objs.length} ${objs.length === 1 ? "shape" : "shapes"}.`);
+}
+
+function clearTabsSelected(): void {
+  const objs = doc.state.objects.filter((o) => selected.has(o.id) && o.tabs);
+  if (!objs.length) { notify("The selection has no tabs."); return; }
+  edit(() => { for (const o of objs) delete o.tabs; });
+}
+on("act-tabs", autoTabsSelected);
+on("tab-clear", clearTabsSelected);
 
 // ---- corner radius / chamfer ----
 const radiusEl = document.getElementById("radius") as HTMLInputElement;

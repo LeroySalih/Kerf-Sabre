@@ -2,21 +2,24 @@
 import type { Point } from "./coords";
 import type { DocObject } from "./doc";
 import { arcSweep, boundsOf, flatten, transformPath, type Path } from "./geometry";
+import { splitByTabs } from "./tabs";
 
 const num = (n: number) => (Math.round(n * 1e4) / 1e4).toString();
 const placed = (o: DocObject): Path => transformPath(o.path, o.matrix);
+/** The shape as the laser cuts it: a closed Cut outline with tabs becomes open pieces with a gap at each tab. */
+const placedParts = (o: DocObject): Path[] => splitByTabs(placed(o), o.layer === "cut" ? o.tabs : undefined);
 
 const SVG_STROKE = { score: "#0000ff", cut: "#ff0000" } as const;
 const DXF_COLOUR = { score: 5, cut: 1 } as const; // ACI blue, red
 
 export function toSVG(objects: DocObject[]): string {
-  const paths = objects.map((o) => ({ o, p: placed(o) }));
-  const bs = paths.map(({ p }) => boundsOf(p));
+  const paths = objects.flatMap((o) => { const parts = placedParts(o); return parts.map((p, i) => ({ o, p, suffix: parts.length > 1 ? `-${i + 1}` : "" })); });
+  const bs = objects.map((o) => boundsOf(placed(o))); // the whole outline, so tabs at the edge don't shrink the drawing
   const minX = Math.min(0, ...bs.map((b) => b.minX)), maxX = Math.max(0, ...bs.map((b) => b.maxX));
   const minY = Math.min(0, ...bs.map((b) => b.minY)), maxY = Math.max(0, ...bs.map((b) => b.maxY));
   const w = maxX - minX, h = maxY - minY;
   const Y = (y: number) => num(-y); // SVG is Y-down
-  const body = paths.map(({ o, p }) => {
+  const body = paths.map(({ o, p, suffix }) => {
     let d = `M${num(p.start.x)} ${Y(p.start.y)}`;
     let cur: Point = p.start;
     for (const s of p.segs) {
@@ -30,7 +33,7 @@ export function toSVG(objects: DocObject[]): string {
       cur = s.to;
     }
     if (p.closed) d += "Z";
-    return `  <path id="${o.layer}-${o.id}" data-layer="${o.layer}" d="${d}" fill="none" stroke="${SVG_STROKE[o.layer]}" stroke-width="0.1"/>`;
+    return `  <path id="${o.layer}-${o.id}${suffix}" data-layer="${o.layer}" d="${d}" fill="none" stroke="${SVG_STROKE[o.layer]}" stroke-width="0.1"/>`;
   });
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${num(w)}mm" height="${num(h)}mm" viewBox="${num(minX)} ${num(-maxY)} ${num(w)} ${num(h)}">\n${body.join("\n")}\n</svg>\n`;
 }
@@ -48,9 +51,8 @@ export function toDXF(objects: DocObject[]): string {
   const line = (layer: string, a: Point, b: Point) => {
     g(0, "LINE"); g(8, layer); g(10, num(a.x)); g(20, num(a.y)); g(30, 0); g(11, num(b.x)); g(21, num(b.y)); g(31, 0);
   };
-  for (const o of objects) {
+  for (const o of objects) for (const p of placedParts(o)) {
     const layer = o.layer.toUpperCase();
-    const p = placed(o);
     let cur = p.start;
     for (const s of p.segs) {
       if (s.t === "l") line(layer, cur, s.to);

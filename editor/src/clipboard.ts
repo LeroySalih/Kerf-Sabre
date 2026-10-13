@@ -52,7 +52,9 @@ export function parseClip(text: string | null | undefined): ClipData | null {
     if (c.textId !== undefined && (!isNum(c.textId) || !texts[c.textId])) return null;
     const st = c.settings as { powerPct?: unknown; speedMmPerS?: unknown } | undefined;
     if (st !== undefined && !(st && isNum(st.powerPct) && isNum(st.speedMmPerS) && st.powerPct >= 0 && st.powerPct <= 100 && st.speedMmPerS > 0)) return null;
-    objects.push({ path: path as ClipData["objects"][number]["path"], matrix: c.matrix as ClipData["objects"][number]["matrix"], layer: c.layer, group: c.group as number | undefined, textId: c.textId as number | undefined, settings: st ? { powerPct: st.powerPct as number, speedMmPerS: st.speedMmPerS as number } : undefined });
+    const tb = c.tabs as { widthMm?: unknown; at?: unknown } | undefined;
+    if (tb !== undefined && !(tb && isNum(tb.widthMm) && tb.widthMm > 0 && Array.isArray(tb.at) && tb.at.length <= 500 && tb.at.every((f) => isNum(f) && f >= 0 && f <= 1))) return null;
+    objects.push({ path: path as ClipData["objects"][number]["path"], matrix: c.matrix as ClipData["objects"][number]["matrix"], layer: c.layer, group: c.group as number | undefined, textId: c.textId as number | undefined, settings: st ? { powerPct: st.powerPct as number, speedMmPerS: st.speedMmPerS as number } : undefined, tabs: tb ? { widthMm: tb.widthMm as number, at: [...(tb.at as number[])] } : undefined });
   }
   return { kerfSabre: 1, objects, texts };
 }

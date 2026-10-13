@@ -64,6 +64,8 @@
         <button id="act-join" title="Join. Chain the selected open paths whose ends meet (tolerance in Options)" aria-label="Join"><svg class="ico"><use href="#i-join"/></svg></button>
         <button id="act-close" title="Close path. Close the selected open paths" aria-label="Close path"><svg class="ico"><use href="#i-close-path"/></svg></button>
         <button id="act-explode" title="Explode. Split the selected shapes into separate edges" aria-label="Explode"><svg class="ico"><use href="#i-explode"/></svg></button>
+        <button data-tool="tab" title="Tab. Click on a closed Cut outline to leave a bridge there; click a tab again to remove it" aria-label="Tab"><svg class="ico"><use href="#i-tab"/></svg></button>
+        <button id="act-tabs" title="Auto tabs. Add evenly spaced tabs to the selected Cut outlines (count and width in Options)" aria-label="Auto tabs"><svg class="ico"><use href="#i-tabs-auto"/></svg></button>
         <button data-tool="trim" title="Trim. Click a line or arc to remove the part up to the nearest intersections" aria-label="Trim"><svg class="ico"><use href="#i-trim"/></svg></button>
         <button data-tool="radius" title="Corner radius. Click a corner to round it; set the radius in Options" aria-label="Corner radius"><svg class="ico"><use href="#i-radius"/></svg></button>
         <button id="round-all" title="Round all corners of the selection, using the radius in Options" aria-label="Round all corners of the selection, using the radius in Options"><svg class="ico"><use href="#i-round-all"/></svg></button>
@@ -126,9 +128,14 @@
         <details open>
           <summary>Options</summary>
           <div class="body">
-            <p class="hint" id="opt-none">Tools with options (Polygon, Rounded rectangle, Star, Corner radius) show them here.</p>
+            <p class="hint" id="opt-none">Tools with options (Polygon, Rounded rectangle, Star, Corner radius, Tab) show them here.</p>
             <div id="opt-repair" class="row" title="Ends closer than this are joined by Join and by DXF import">
               <label>Join tolerance <input id="join-tol" type="number" min="0.001" value="0.05" style="width:5em" /> mm</label>
+            </div>
+            <div id="opt-tabs" class="row" hidden>
+              <label title="How wide each bridge is, in mm">Tab width <input id="tab-width" type="number" min="0.5" value="3" style="width:4.5em" /> mm</label>
+              <label title="Number of evenly spaced tabs for Auto tabs">Count <input id="tab-count" type="number" min="1" max="50" step="1" value="4" style="width:4em" /></label>
+              <button id="tab-clear" title="Remove the tabs from the selected shapes">Remove tabs</button>
             </div>
             <div id="opt-polygon" class="row" hidden>
               <label title="Number of sides for the Polygon tool">Polygon sides <input id="sides" type="number" min="3" max="64" step="1" value="6" style="width:4.5em" /></label>

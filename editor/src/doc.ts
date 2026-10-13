@@ -1,6 +1,7 @@
 // Document state with snapshot undo/redo. Edits change object matrices, never source geometry.
 import { multiply, translation, type Matrix, type Path } from "./geometry";
 import { DEFAULT_MATERIAL_ID } from "./presets";
+import type { TabSpec } from "./tabs";
 import type { TextSpec } from "./text";
 
 export type LayerType = "score" | "cut";
@@ -16,6 +17,8 @@ export interface DocObject {
   textId?: number;
   /** Per-shape override of the material's power/speed, e.g. one cell of a material test grid. */
   settings?: ShapeSettings;
+  /** Tabs (bridges) left uncut on a closed Cut outline. Applied when exporting and when generating G-code. */
+  tabs?: TabSpec;
 }
 
 export interface ShapeSettings {
@@ -26,7 +29,7 @@ export interface ShapeSettings {
 /** What a copy carries: the shapes with their groups, layers and (live) text specs. Ids are renumbered on paste. */
 export interface ClipData {
   kerfSabre: 1;
-  objects: { path: Path; matrix: Matrix; layer: LayerType; group?: number; textId?: number; settings?: ShapeSettings }[];
+  objects: { path: Path; matrix: Matrix; layer: LayerType; group?: number; textId?: number; settings?: ShapeSettings; tabs?: TabSpec }[];
   texts: Record<number, TextSpec>;
 }
 
@@ -159,7 +162,7 @@ export class Doc {
   copyOut(ids: Iterable<number>): ClipData {
     const want = new Set(this.expand(ids));
     for (const o of this.state.objects) if (o.textId !== undefined && this.state.objects.some((x) => want.has(x.id) && x.textId === o.textId)) want.add(o.id);
-    const objects = this.state.objects.filter((o) => want.has(o.id)).map((o) => structuredClone({ path: o.path, matrix: o.matrix, layer: o.layer, group: o.group, textId: o.textId, settings: o.settings }));
+    const objects = this.state.objects.filter((o) => want.has(o.id)).map((o) => structuredClone({ path: o.path, matrix: o.matrix, layer: o.layer, group: o.group, textId: o.textId, settings: o.settings, tabs: o.tabs }));
     const texts: Record<number, TextSpec> = {};
     for (const o of objects) if (o.textId !== undefined && this.state.texts[o.textId]) texts[o.textId] = structuredClone(this.state.texts[o.textId]!);
     return { kerfSabre: 1, objects, texts };
@@ -180,6 +183,7 @@ export class Doc {
         o.textId = texts.get(c.textId);
       }
       if (c.settings) o.settings = { ...c.settings };
+      if (c.tabs) o.tabs = { widthMm: c.tabs.widthMm, at: [...c.tabs.at] };
       return o.id;
     });
   }

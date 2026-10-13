@@ -9,6 +9,7 @@ import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } fr
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
+import { circularMatrices, linearOffsets, mirrorMatrix, validateCircular, validateLinear, type CircularParams, type LinearParams } from "./arrays";
 import { alignDeltas, distributeDeltas, unionBounds, type AlignKind, type Unit } from "./align";
 import { booleanOp, type BoolOp } from "./boolean";
 import { parseClip, serializeClip } from "./clipboard";
@@ -1001,15 +1002,15 @@ async function materialTestGridDialog(): Promise<void> {
   const r = resolvePreset(findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!, machine.id);
   const v = await openDialog("Material test grid", [
     { key: "mode", label: "Cells", type: "select", value: "cut", options: [{ value: "cut", label: "Cut through" }, { value: "score", label: "Score only" }] },
-    { key: "cellMm", label: "Cell size (mm)", type: "number", value: 10, min: 2, step: 0.5 },
+    { key: "cellMm", label: "Cell size (mm)", type: "number", value: 10, min: 2 },
     { key: "powerMin", label: "Power min (%)", type: "number", value: Math.max(5, Math.round(r.cut.powerPct * 0.4)), min: 0, max: 100 },
     { key: "powerMax", label: "Power max (%)", type: "number", value: 100, min: 0, max: 100 },
-    { key: "powerSteps", label: "Power steps", type: "number", value: 5, min: 1, max: 12, step: 1 },
+    { key: "powerSteps", label: "Power steps", type: "number", value: 5, min: 1, max: 12, integer: true },
     { key: "speedMin", label: "Speed min (mm/s)", type: "number", value: Math.round(r.cut.speedMmPerS * 50) / 100, min: 0.1 },
     { key: "speedMax", label: "Speed max (mm/s)", type: "number", value: Math.round(r.cut.speedMmPerS * 200) / 100, min: 0.1 },
-    { key: "speedSteps", label: "Speed steps", type: "number", value: 5, min: 1, max: 12, step: 1 },
-    { key: "gapMm", label: "Gap (mm)", type: "number", value: 4, min: 0, step: 0.5 },
-    { key: "labelMm", label: "Label size (mm)", type: "number", value: 3, min: 1.5, step: 0.5 },
+    { key: "speedSteps", label: "Speed steps", type: "number", value: 5, min: 1, max: 12, integer: true },
+    { key: "gapMm", label: "Gap (mm)", type: "number", value: 4, min: 0 },
+    { key: "labelMm", label: "Label size (mm)", type: "number", value: 3, min: 1.5 },
   ], { intro: "Cuts a grid of squares, power left to right and speed bottom to top, each with a scored label. The best cell shows the setting to use.", ok: "Add grid" });
   if (!v) return;
   const p = v as unknown as TestGridParams;
@@ -1021,12 +1022,12 @@ async function materialTestGridDialog(): Promise<void> {
 async function kerfTestDialog(): Promise<void> {
   const preset = findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!;
   const v = await openDialog("Kerf test", [
-    { key: "thicknessMm", label: "Material thickness (mm)", type: "number", value: preset.thicknessMm, min: 0.1, step: 0.05 },
-    { key: "count", label: "Slots", type: "number", value: 8, min: 2, max: 20, step: 1 },
-    { key: "minWidthMm", label: "Narrowest slot (mm)", type: "number", value: Math.round((preset.thicknessMm - 0.3) * 100) / 100, min: 0.1, step: 0.05 },
-    { key: "stepMm", label: "Step between slots (mm)", type: "number", value: 0.05, min: 0.01, max: 1, step: 0.01 },
-    { key: "slotLengthMm", label: "Slot length (mm)", type: "number", value: 12, min: 5, step: 1 },
-    { key: "labelMm", label: "Label size (mm)", type: "number", value: 3, min: 1.5, step: 0.5 },
+    { key: "thicknessMm", label: "Material thickness (mm)", type: "number", value: preset.thicknessMm, min: 0.1 },
+    { key: "count", label: "Slots", type: "number", value: 8, min: 2, max: 20, integer: true },
+    { key: "minWidthMm", label: "Narrowest slot (mm)", type: "number", value: Math.round((preset.thicknessMm - 0.3) * 100) / 100, min: 0.1 },
+    { key: "stepMm", label: "Step between slots (mm)", type: "number", value: 0.05, min: 0.01, max: 1 },
+    { key: "slotLengthMm", label: "Slot length (mm)", type: "number", value: 12, min: 5, integer: true },
+    { key: "labelMm", label: "Label size (mm)", type: "number", value: 3, min: 1.5 },
   ], { intro: "Cut the coupon, then push a strip of the same material into each slot. Kerf = thickness minus the width of the slot that grips it. Enter that value in the material.", ok: "Add coupon" });
   if (!v) return;
   const p = v as unknown as Parameters<typeof validateKerfTest>[0];
@@ -1035,7 +1036,65 @@ async function kerfTestDialog(): Promise<void> {
   insertGenerated(kerfTest(p), "Kerf test coupon");
 }
 
-const menuActions: Record<string, () => void> = { "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog() };
+/** Make copies of the selection, one per matrix (applied on top of each shape's own placement), then select everything. */
+function repeatSelected(matrices: Matrix[], what: string): void {
+  const data = doc.copyOut(selected);
+  if (matrices.length * data.objects.length > 20000) { notify("That would make too many shapes. Use fewer copies."); return; }
+  const original = [...selected];
+  edit(() => {
+    const made: number[] = [];
+    for (const m of matrices) for (const id of doc.pasteIn(data, 0, 0)) { doc.transform(id, m); made.push(id); }
+    selected = new Set([...original, ...made]);
+  });
+  notify(`${what}: ${matrices.length} ${matrices.length === 1 ? "copy" : "copies"} added.`);
+}
+
+async function linearRepeatDialog(): Promise<void> {
+  const b = selectionBounds(doc.state.objects, selected);
+  if (!b) { notify("Select the shapes to repeat first."); return; }
+  const v = await openDialog("Linear repeat", [
+    { key: "countX", label: "Columns (to the right)", type: "number", value: 3, min: 1, max: 100, integer: true },
+    { key: "countY", label: "Rows (upwards)", type: "number", value: 2, min: 1, max: 100, integer: true },
+    { key: "gapX", label: "Gap between columns (mm)", type: "number", value: 5 },
+    { key: "gapY", label: "Gap between rows (mm)", type: "number", value: 5 },
+    { key: "rowShiftMm", label: "Shift each row sideways (mm)", type: "number", value: 0, hint: "Offsets every further row along X, for brick patterns" },
+  ], { intro: "Counts include the original. Gaps are the space between neighbouring shapes, edge to edge.", ok: "Repeat" });
+  if (!v) return;
+  const p = v as unknown as LinearParams;
+  const error = validateLinear(p);
+  if (error) { notify(error); return; }
+  repeatSelected(linearOffsets(b, p).map((o): Matrix => translation(o.x, o.y)), "Linear repeat");
+}
+
+async function circularArrayDialog(): Promise<void> {
+  const b = selectionBounds(doc.state.objects, selected);
+  if (!b) { notify("Select the shapes to repeat first."); return; }
+  const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+  const v = await openDialog("Circular array", [
+    { key: "count", label: "Shapes around the circle", type: "number", value: 6, min: 2, max: 360, integer: true },
+    { key: "sweepDeg", label: "Sweep (degrees)", type: "number", value: 360, min: -360, max: 360, hint: "360 = full circle. Negative goes clockwise." },
+    { key: "centreX", label: "Centre X (mm)", type: "number", value: Math.round(cx * 100) / 100 },
+    { key: "centreY", label: "Centre Y (mm)", type: "number", value: Math.round((cy - 40) * 100) / 100 },
+    { key: "rotate", label: "Turn copies with the circle", type: "select", value: "yes", options: [{ value: "yes", label: "Yes" }, { value: "no", label: "No: keep them upright" }] },
+  ], { intro: "Counts include the original. The centre starts 40 mm below the selection: change it to put the circle where you want.", ok: "Make array" });
+  if (!v) return;
+  const p: CircularParams = { count: v.count as number, sweepDeg: v.sweepDeg as number, centre: { x: v.centreX as number, y: v.centreY as number }, rotate: v.rotate === "yes" };
+  const error = validateCircular(p);
+  if (error) { notify(error); return; }
+  repeatSelected(circularMatrices(b, p), "Circular array");
+}
+
+/** Flip the selection left-right or top-bottom, in place. */
+function flipSelected(axis: "h" | "v"): void {
+  const b = selectionBounds(doc.state.objects, selected);
+  if (!b) return;
+  const m = mirrorMatrix(b, axis);
+  edit(() => { for (const id of selected) doc.transform(id, m); });
+}
+on("flip-h", () => flipSelected("h"));
+on("flip-v", () => flipSelected("v"));
+
+const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog() };
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
   b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
 );

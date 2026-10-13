@@ -37,6 +37,9 @@
         <div class="group menu" id="tools-menu">
           <button id="tools-btn" aria-haspopup="true" aria-expanded="false">Tools &#9662;</button>
           <div class="menu-list" id="tools-list" role="menu" hidden>
+            <button role="menuitem" data-menu="linear-repeat" title="Copies in a grid: columns and rows, with gaps">Linear repeat&hellip;</button>
+            <button role="menuitem" data-menu="circular-array" title="Copies around a centre point">Circular array&hellip;</button>
+            <hr />
             <button role="menuitem" data-menu="test-grid">Material test grid&hellip;</button>
             <button role="menuitem" data-menu="kerf-test">Kerf test&hellip;</button>
           </div>
@@ -120,6 +123,8 @@
             <div class="row">
               <button id="group" title="Group (Ctrl/Cmd+G)">Group</button>
               <button id="ungroup" title="Ungroup (Ctrl/Cmd+Shift+G)">Ungroup</button>
+              <button id="flip-h" title="Flip left to right, in place">Flip H</button>
+              <button id="flip-v" title="Flip top to bottom, in place">Flip V</button>
             </div>
           </div>
         </details>

@@ -8,7 +8,8 @@ export interface DialogField {
   value: DialogValue;
   min?: number;
   max?: number;
-  step?: number;
+  /** Whole numbers only (counts). Other number fields accept any decimal. */
+  integer?: boolean;
   options?: { value: string; label: string }[];
   hint?: string;
 }
@@ -46,7 +47,7 @@ export function openDialog(title: string, fields: DialogField[], opts: { intro?:
         el.required = true;
         if (f.min !== undefined) el.min = String(f.min);
         if (f.max !== undefined) el.max = String(f.max);
-        el.step = f.step === undefined ? "any" : String(f.step);
+        el.step = f.integer ? "1" : "any"; // a step would also reject typed values that are not multiples of it
         el.value = String(f.value);
       }
       el.name = f.key;

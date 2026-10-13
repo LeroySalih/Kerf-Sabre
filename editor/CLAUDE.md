@@ -5,3 +5,7 @@ TypeScript PWA for Chrome/Edge desktop. paper.js for geometry, opentype.js for t
 - `npm install`, `npm run dev` (Vite dev server), `npm run build` (typecheck + bundle), `npm test` (vitest), `npm run typecheck`.
 - Machine profiles are imported from `../shared/machine-profiles` at build time (`src/machine.ts`).
 - `src/coords.ts` holds Bed<->Screen conversion; do not convert elsewhere. `public/sw.js` is the offline app-shell cache.
+
+## Modules
+- `geometry.ts` (segments/matrices/shapes), `doc.ts` (objects + undo/redo), `export.ts` (DXF/SVG), `dxf-import.ts` (LINE, ARC, CIRCLE, LWPOLYLINE, POLYLINE, SPLINE), `main.ts` (UI).
+- Import only converts and normalises (units -> mm, bbox bottom-left -> 0,0). Dedupe/merge/join clean-up is Server work. Unsupported entities (TEXT, HATCH, ELLIPSE...) are counted and reported, not imported.

@@ -117,3 +117,60 @@ describe("scaleAboutAnchor", () => {
     expect(fb.maxY - fb.minY).toBeCloseTo(10, 1);
   });
 });
+
+import { rotateAboutAnchor, scaleBy } from "../src/anchor";
+import { apply } from "../src/geometry";
+
+describe("scaleBy", () => {
+  const bb = { minX: 10, maxX: 30, minY: 100, maxY: 140 };
+  it("200% about top-right doubles the size and keeps that corner", () => {
+    const m = scaleBy(bb, { col: 2, row: 0 }, 2, 2)!;
+    expect(apply(m, { x: 30, y: 140 })).toEqual({ x: 30, y: 140 });
+    expect(apply(m, { x: 10, y: 100 })).toEqual({ x: -10, y: 60 });
+  });
+  it("scales axes independently", () => {
+    const m = scaleBy(bb, { col: 0, row: 2 }, 0.5, 3)!;
+    expect(apply(m, { x: 30, y: 140 })).toEqual({ x: 20, y: 220 });
+  });
+  it("rejects zero, negative and non-finite factors", () => {
+    for (const f of [0, -1, NaN, Infinity]) expect(scaleBy(bb, { col: 1, row: 1 }, f, 1)).toBeNull();
+  });
+});
+
+describe("rotateAboutAnchor", () => {
+  const bb = { minX: 10, maxX: 30, minY: 100, maxY: 140 }; // centre (20,120)
+  const near = (p: { x: number; y: number }, x: number, y: number) => {
+    expect(p.x).toBeCloseTo(x, 9);
+    expect(p.y).toBeCloseTo(y, 9);
+  };
+  it("+90 is counter-clockwise: a point right of the anchor moves above it", () => {
+    const m = rotateAboutAnchor(bb, { col: 1, row: 1 }, 90)!;
+    near(apply(m, { x: 30, y: 120 }), 20, 130);
+  });
+  it("keeps the anchor point fixed for every anchor", () => {
+    for (const col of [0, 1, 2] as const)
+      for (const row of [0, 1, 2] as const) {
+        const a = { col, row };
+        const p = anchorPoint(bb, a);
+        near(apply(rotateAboutAnchor(bb, a, 37)!, p), p.x, p.y);
+      }
+  });
+  it("90 degrees swaps width and height about the centre", () => {
+    const d = new Doc();
+    const id = d.add(rectangle(20, 40), translation(10, 100)).id;
+    const b0 = selectionBounds(d.state.objects, [id])!;
+    d.transform(id, rotateAboutAnchor(b0, { col: 1, row: 1 }, 90)!);
+    const b1 = selectionBounds(d.state.objects, [id])!;
+    expect(b1.maxX - b1.minX).toBeCloseTo(40, 9);
+    expect(b1.maxY - b1.minY).toBeCloseTo(20, 9);
+    expect((b1.minX + b1.maxX) / 2).toBeCloseTo(20, 9);
+  });
+  it("360 returns to the start, and circles stay true arcs", () => {
+    const m = rotateAboutAnchor(bb, { col: 0, row: 2 }, 360)!;
+    near(apply(m, { x: 30, y: 140 }), 30, 140);
+    expect(transformPath(circle(5), rotateAboutAnchor(bb, { col: 1, row: 1 }, 33)!).segs.every((s) => s.t === "a")).toBe(true);
+  });
+  it("rejects non-finite angles", () => {
+    expect(rotateAboutAnchor(bb, { col: 1, row: 1 }, NaN)).toBeNull();
+  });
+});

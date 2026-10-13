@@ -37,6 +37,13 @@ export function deltaToAnchor(b: Bounds, a: Anchor, target: Partial<Point>): Poi
 
 export type Axis = "w" | "h";
 
+/** Matrix scaling by (sx, sy) about the anchor point. Null for non-positive or non-finite factors. */
+export function scaleBy(b: Bounds, a: Anchor, sx: number, sy: number): Matrix | null {
+  if (!(sx > 0) || !(sy > 0) || !Number.isFinite(sx) || !Number.isFinite(sy)) return null;
+  const p = anchorPoint(b, a);
+  return [sx, 0, 0, sy, p.x - sx * p.x, p.y - sy * p.y];
+}
+
 /**
  * Matrix that resizes the selection to `size` along one axis, keeping the anchor point fixed.
  * With `lock` both axes scale by the same factor (arcs stay arcs). Returns null if the request
@@ -46,8 +53,14 @@ export function scaleAboutAnchor(b: Bounds, a: Anchor, axis: Axis, size: number,
   const cur = axis === "w" ? b.maxX - b.minX : b.maxY - b.minY;
   if (!(size > 0) || !(cur > 1e-9)) return null;
   const f = size / cur;
-  const sx = axis === "w" || lock ? f : 1;
-  const sy = axis === "h" || lock ? f : 1;
+  return scaleBy(b, a, axis === "w" || lock ? f : 1, axis === "h" || lock ? f : 1);
+}
+
+/** Matrix rotating by `deg` about the anchor point. Positive = counter-clockwise (bed space is Y-up). */
+export function rotateAboutAnchor(b: Bounds, a: Anchor, deg: number): Matrix | null {
+  if (!Number.isFinite(deg)) return null;
+  const t = (deg * Math.PI) / 180;
+  const c = Math.cos(t), s = Math.sin(t);
   const p = anchorPoint(b, a);
-  return [sx, 0, 0, sy, p.x - sx * p.x, p.y - sy * p.y];
+  return [c, s, -s, c, p.x - c * p.x + s * p.y, p.y - s * p.x - c * p.y];
 }

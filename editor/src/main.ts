@@ -4,7 +4,7 @@ import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
-import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, scaleAboutAnchor, selectionBounds, type Anchor, type Axis } from "./anchor";
+import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf } from "./geometry";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
@@ -56,8 +56,11 @@ const pxEl = document.getElementById("px") as HTMLInputElement;
 const pyEl = document.getElementById("py") as HTMLInputElement;
 const pwEl = document.getElementById("pw") as HTMLInputElement;
 const phEl = document.getElementById("ph") as HTMLInputElement;
+const psxEl = document.getElementById("psx") as HTMLInputElement;
+const psyEl = document.getElementById("psy") as HTMLInputElement;
+const protEl = document.getElementById("prot") as HTMLInputElement;
 const lockEl = document.getElementById("lock") as HTMLInputElement;
-const fieldEls = [pxEl, pyEl, pwEl, phEl];
+const fieldEls = [pxEl, pyEl, pwEl, phEl, psxEl, psyEl, protEl];
 const round = (n: number) => String(Math.round(n * 1000) / 1000);
 
 /** Show the selection's anchor position and size (bed mm); disabled when nothing is selected. */
@@ -66,7 +69,7 @@ function updatePositionFields(): void {
   for (const el of fieldEls) el.disabled = !b;
   if (!b) { for (const el of fieldEls) el.value = ""; return; }
   const p = anchorPoint(b, anchor);
-  const values = [p.x, p.y, b.maxX - b.minX, b.maxY - b.minY];
+  const values = [p.x, p.y, b.maxX - b.minX, b.maxY - b.minY, 100, 100, 0]; // scale and rotate are relative: always reset
   fieldEls.forEach((el, i) => { if (document.activeElement !== el) el.value = round(values[i]!); });
 }
 
@@ -88,7 +91,27 @@ function applySize(axis: Axis): void {
   edit(() => { for (const id of selected) doc.transform(id, m); });
 }
 
+/** Scale by a percentage of the current size about the anchor (lock ratio applies the edited value to both). */
+function applyScale(axis: "x" | "y"): void {
+  const b = selectionBounds(doc.state.objects, selected);
+  const v = parseFloat((axis === "x" ? psxEl : psyEl).value) / 100;
+  const m = b && scaleBy(b, anchor, axis === "x" || lockEl.checked ? v : 1, axis === "y" || lockEl.checked ? v : 1);
+  if (!m) { updatePositionFields(); return; }
+  edit(() => { for (const id of selected) doc.transform(id, m); });
+}
+
+/** Rotate by the typed angle about the anchor. */
+function applyRotation(): void {
+  const b = selectionBounds(doc.state.objects, selected);
+  const m = b && rotateAboutAnchor(b, anchor, parseFloat(protEl.value));
+  if (!m) { updatePositionFields(); return; }
+  edit(() => { for (const id of selected) doc.transform(id, m); });
+}
+
 pxEl.addEventListener("change", () => applyPosition("x"));
+psxEl.addEventListener("change", () => applyScale("x"));
+psyEl.addEventListener("change", () => applyScale("y"));
+protEl.addEventListener("change", applyRotation);
 pyEl.addEventListener("change", () => applyPosition("y"));
 pwEl.addEventListener("change", () => applySize("w"));
 phEl.addEventListener("change", () => applySize("h"));

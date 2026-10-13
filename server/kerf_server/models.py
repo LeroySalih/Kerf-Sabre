@@ -44,6 +44,8 @@ class Job(Base):
     approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     framed_station: Mapped[str | None] = mapped_column(String(64), nullable=True)
     framed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    framed_bounds: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    running_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class JobEvent(Base):

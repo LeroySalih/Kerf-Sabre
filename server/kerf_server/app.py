@@ -9,10 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
-from .api import auth, catalog, dxf, jobs
+from .api import auth, catalog, cutter_ws, dxf, jobs, stations
 from .config import Settings
 from .db import Database
 from .services_seed import seed
+from .stations import Hub
 
 API = "/api/v1"
 
@@ -27,10 +28,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db.create_all()
         seed(db, settings)
         yield
+        app.state.hub.close()
 
     app = FastAPI(title="BISAK Kerf Server", version=__version__, lifespan=lifespan, docs_url=f"{API}/docs", openapi_url=f"{API}/openapi.json")
     app.state.settings = settings
     app.state.db = db
+    app.state.hub = Hub(settings.data_dir / "logs", settings.log_max_bytes, settings.log_backups)
     errors.install(app)
 
     if settings.cors_origins:
@@ -41,6 +44,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(catalog.router)
     api.include_router(dxf.router)
     api.include_router(jobs.router)
+    api.include_router(stations.router)
+    api.include_router(cutter_ws.router)  # /api/v1/ws/cutter
     app.include_router(api)
 
     @app.get("/health", include_in_schema=False)

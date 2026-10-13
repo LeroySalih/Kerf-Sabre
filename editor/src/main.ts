@@ -3,7 +3,8 @@ import { bedToScreen, fitView, panBy, screenToBed, zoomAt, type Point, type View
 import { Doc, type LayerType } from "./doc";
 import { DEFAULT_MM_PER_UNIT, designMin, mmPerUnit, parseDXF, scalePath } from "./dxf-import";
 import { toDXF, toSVG } from "./export";
-import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
+import { IDENTITY, arcMid, circle, line, multiply, rectangle, translation, transformPath, type Matrix, type Path } from "./geometry";
+import { GIZMO, gizmoAngle, gizmoMatrix, gizmoPoints, hitGizmo, type Handle } from "./gizmo";
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf, type Bounds } from "./geometry";
 import { planTrim } from "./trim";
@@ -28,6 +29,9 @@ type Tool = "select" | "rect" | "circle" | "line" | "trim" | "measure" | "text";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
+let showGimbal = false;
+let gizmoHover: Handle | null = null;
+let gizmoDrag: { handle: Handle; pivot: Point; start: Point; mats: Map<number, Matrix>; started: boolean; label: string } | null = null;
 let snapOn = true;
 let snapMarker: { pt: Point; kind: SnapKind } | null = null;
 let moveBounds: Bounds | null = null; // selection bounds when a drag-move began
@@ -153,6 +157,55 @@ function drawGrid(widthMm: number, heightMm: number): void {
   for (let y = 0; y <= heightMm; y += STEP) line({ x: 0, y }, { x: widthMm, y }, y % 100 === 0);
 }
 
+const GIZMO_COLOURS = { x: "#ea580c", y: "#16a34a", ring: "#7c3aed", centre: "#374151", uniform: "#0284c7" };
+
+/** Gimbal at the selection's anchor point (screen-space, fixed pixel size). */
+function drawGizmo(): void {
+  if (!showGimbal || tool !== "select" || !selected.size) return;
+  const b = selectionBounds(doc.state.objects, selected);
+  const pivot = gizmoDrag?.pivot ?? (b ? anchorPoint(b, anchor) : null);
+  if (!pivot) return;
+  const c = toScreen(pivot);
+  const g = gizmoPoints({ x: c.x, y: c.y });
+  const active = (h: Handle) => gizmoDrag?.handle === h || (!gizmoDrag && gizmoHover === h);
+  const pt = (q: Point) => new paper.Point(q.x, q.y);
+
+  const ring = new paper.Path.Circle(c, GIZMO.ring);
+  ring.strokeColor = new paper.Color(GIZMO_COLOURS.ring);
+  ring.strokeWidth = active("rotate") ? 4 : 2;
+  ring.opacity = active("rotate") ? 1 : 0.7;
+
+  const axis = (tip: Point, colour: string, h: Handle, head: [Point, Point]) => {
+    const w = active(h) ? 4 : 2.5;
+    const shaft = new paper.Path.Line(c, pt(tip));
+    shaft.strokeColor = new paper.Color(colour);
+    shaft.strokeWidth = w;
+    const tri = new paper.Path([pt(tip), pt(head[0]), pt(head[1])]);
+    tri.closed = true;
+    tri.fillColor = new paper.Color(colour);
+  };
+  axis(g.tipX, GIZMO_COLOURS.x, "move-x", [{ x: g.tipX.x - 12, y: g.tipX.y - 6 }, { x: g.tipX.x - 12, y: g.tipX.y + 6 }]);
+  axis(g.tipY, GIZMO_COLOURS.y, "move-y", [{ x: g.tipY.x - 6, y: g.tipY.y + 12 }, { x: g.tipY.x + 6, y: g.tipY.y + 12 }]);
+
+  const box = (q: Point, half: number, colour: string, h: Handle) => {
+    const r = new paper.Path.Rectangle(new paper.Point(q.x - half, q.y - half), new paper.Size(half * 2, half * 2));
+    r.fillColor = new paper.Color(active(h) ? colour : "#ffffff");
+    r.strokeColor = new paper.Color(colour);
+    r.strokeWidth = 2;
+  };
+  box(g.scaleX, GIZMO.square, GIZMO_COLOURS.x, "scale-x");
+  box(g.scaleY, GIZMO.square, GIZMO_COLOURS.y, "scale-y");
+  box(g.scaleUniform, GIZMO.square, GIZMO_COLOURS.uniform, "scale");
+  box(g.centre, GIZMO.centre, GIZMO_COLOURS.centre, "move");
+
+  if (gizmoDrag?.label) {
+    const t = new paper.PointText({ point: new paper.Point(c.x + 14, c.y + 28), content: gizmoDrag.label, fontSize: 13, fontWeight: "bold", fillColor: new paper.Color("#111827") });
+    const bg = new paper.Path.Rectangle(t.bounds.expand(4));
+    bg.fillColor = new paper.Color(1, 1, 1, 0.92);
+    t.insertAbove(bg);
+  }
+}
+
 function drawSnapMarker(pt: Point, kind: SnapKind): void {
   const c = toScreen(pt);
   const box = new paper.Path.Rectangle(new paper.Point(c.x - 6, c.y - 6), new paper.Size(12, 12));
@@ -266,6 +319,7 @@ function draw(): void {
   }
   if (measureLine) drawMeasure(measureLine.a, measureLine.b);
   if (snapMarker) drawSnapMarker(snapMarker.pt, snapMarker.kind);
+  drawGizmo();
   drawRulers();
   paper.view.update();
   updatePositionFields();
@@ -304,6 +358,14 @@ const on = (id: string, fn: () => void) => document.getElementById(id)!.addEvent
 on("score", () => selected.size && edit(() => doc.setLayer([...selected], "score")));
 on("cut", () => selected.size && edit(() => doc.setLayer([...selected], "cut")));
 on("del", () => deleteSelected());
+const gimbalBtn = document.getElementById("gimbal") as HTMLButtonElement;
+function setGimbal(on: boolean): void {
+  showGimbal = on;
+  gizmoHover = null;
+  gimbalBtn.classList.toggle("on", on);
+  draw();
+}
+on("gimbal", () => setGimbal(!showGimbal));
 on("group", () => groupSelected());
 on("ungroup", () => ungroupSelected());
 (document.getElementById("grid") as HTMLInputElement).addEventListener("change", (e) => {
@@ -379,6 +441,7 @@ window.addEventListener("blur", () => { panning = null; setSpace(false); });
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLSelectElement || (e.target instanceof HTMLInputElement && e.target.type !== "radio")) return; // typing in a field
   if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
+  else if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) setGimbal(!showGimbal);
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }
 });
@@ -515,6 +578,47 @@ function snapMove(delta: Point, e: MouseEvent): Point {
   return delta;
 }
 
+const HANDLE_CURSOR: Record<Handle, string> = { move: "move", "move-x": "ew-resize", "move-y": "ns-resize", "scale-x": "ew-resize", "scale-y": "ns-resize", scale: "nesw-resize", rotate: "grab" };
+
+/** The gimbal handle under a mouse event, if the gimbal is showing. */
+function gizmoAt(e: MouseEvent): { handle: Handle; pivot: Point } | null {
+  if (!showGimbal || tool !== "select" || !selected.size) return null;
+  const b = selectionBounds(doc.state.objects, selected);
+  if (!b) return null;
+  const pivot = anchorPoint(b, anchor);
+  const r = canvas.getBoundingClientRect();
+  const handle = hitGizmo(bedToScreen(view, pivot), { x: e.clientX - r.left, y: e.clientY - r.top });
+  return handle ? { handle, pivot } : null;
+}
+
+function startGizmoDrag(hit: { handle: Handle; pivot: Point }, e: MouseEvent): void {
+  moveBounds = selectionBounds(doc.state.objects, selected); // for snapping axis moves
+  gizmoDrag = {
+    handle: hit.handle, pivot: hit.pivot, start: bedPt(e), started: false, label: "",
+    mats: new Map(doc.state.objects.filter((o) => selected.has(o.id)).map((o) => [o.id, [...o.matrix] as Matrix])),
+  };
+  canvas.style.cursor = HANDLE_CURSOR[hit.handle];
+}
+
+function updateGizmoDrag(e: MouseEvent): void {
+  const d = gizmoDrag!;
+  const cur = bedPt(e);
+  let m = gizmoMatrix(d.handle, d.pivot, d.start, cur, { step: e.shiftKey });
+  if (!m) return;
+  snapMarker = null;
+  if (d.handle === "move" || d.handle === "move-x" || d.handle === "move-y") {
+    const s = snapMove({ x: m[4], y: m[5] }, e); // object snaps, then drop whatever the axis forbids
+    m = [1, 0, 0, 1, d.handle === "move-y" ? 0 : s.x, d.handle === "move-x" ? 0 : s.y];
+    d.label = `dx ${m[4].toFixed(2)}  dy ${m[5].toFixed(2)} mm`;
+  } else if (d.handle === "rotate") d.label = `${gizmoAngle(d.pivot, d.start, cur, { step: e.shiftKey }).toFixed(1)}\u00b0`;
+  else if (d.handle === "scale-x") d.label = `${(m[0] * 100).toFixed(0)}%`;
+  else if (d.handle === "scale-y") d.label = `${(m[3] * 100).toFixed(0)}%`;
+  else d.label = `${(m[0] * 100).toFixed(0)}%`;
+  if (!d.started) { doc.checkpoint(); d.started = true; }
+  for (const [id, start] of d.mats) doc.get(id)!.matrix = multiply(m, start);
+  draw();
+}
+
 const isDrawTool = () => tool === "rect" || tool === "circle" || tool === "line" || tool === "measure";
 
 // ---- pointer ----
@@ -560,6 +664,8 @@ canvas.addEventListener("mousedown", (e) => {
   }
   const rr = canvas.getBoundingClientRect();
   if (e.clientX - rr.left < RULER || e.clientY - rr.top < RULER) return; // clicks on the rulers do nothing
+  const gh = gizmoAt(e);
+  if (gh) { e.preventDefault(); startGizmoDrag(gh, e); return; }
   if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
   const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
   dragStart = dragLast = p;
@@ -580,6 +686,7 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("mousemove", (e) => {
+  if (gizmoDrag) { updateGizmoDrag(e); return; }
   if (!panning) return;
   view = panBy(view, e.clientX - panning.x, e.clientY - panning.y);
   panning = { x: e.clientX, y: e.clientY };
@@ -587,7 +694,11 @@ window.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (panning) return;
+  if (panning || gizmoDrag) return;
+  if (showGimbal && tool === "select" && !dragStart) {
+    const h = gizmoAt(e)?.handle ?? null;
+    if (h !== gizmoHover) { gizmoHover = h; canvas.style.cursor = h ? HANDLE_CURSOR[h] : ""; draw(); }
+  }
   const raw = bedPt(e);
   cursorEl.textContent = `X ${raw.x.toFixed(1)}  Y ${raw.y.toFixed(1)} mm`;
   const p = isDrawTool() ? snapPt(raw, e) : raw;
@@ -620,6 +731,7 @@ canvas.addEventListener("mousemove", (e) => {
 
 window.addEventListener("mouseup", (e) => {
   if (panning) { panning = null; setSpace(spaceDown); return; }
+  if (gizmoDrag) { gizmoDrag = null; moveBounds = null; snapMarker = null; gizmoHover = null; canvas.style.cursor = ""; draw(); return; }
   if (dragStart && tool !== "select") {
     const sh = shapeFor(tool, dragStart, snapPt(bedPt(e), e));
     if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y) ?? IDENTITY).id]); });

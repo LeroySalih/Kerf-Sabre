@@ -6,6 +6,7 @@ import { toDXF, toSVG } from "./export";
 import { IDENTITY, arcMid, circle, line, rectangle, translation, transformPath, type Path } from "./geometry";
 import { DEFAULT_ANCHOR, anchorPoint, deltaToAnchor, rotateAboutAnchor, scaleAboutAnchor, scaleBy, selectionBounds, type Anchor, type Axis } from "./anchor";
 import { boundsOf } from "./geometry";
+import { planTrim } from "./trim";
 import { boxMode, boxSelect, rectOf } from "./select";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 
@@ -18,10 +19,11 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "rect" | "circle" | "line";
+type Tool = "select" | "rect" | "circle" | "line" | "trim";
 let tool: Tool = "select";
 let showGrid = true;
 let anchor: Anchor = DEFAULT_ANCHOR;
+let trimPreview: Path | null = null;
 let marquee: { a: Point; b: Point; base: Set<number> } | null = null;
 let preview: { tool: Tool; a: Point; b: Point } | null = null;
 
@@ -164,6 +166,12 @@ function draw(): void {
     box.strokeColor = new paper.Color("#2563eb");
     box.dashArray = [2, 3];
   }
+  if (trimPreview) {
+    const g = toPaperPath(trimPreview);
+    g.strokeColor = new paper.Color("#f97316");
+    g.strokeWidth = 4;
+    g.opacity = 0.9;
+  }
   if (preview) {
     const sh = shapeFor(preview.tool, preview.a, preview.b);
     if (sh) {
@@ -207,6 +215,8 @@ select.addEventListener("change", () => {
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((btn) =>
   btn.addEventListener("click", () => {
     tool = btn.dataset.tool as Tool;
+    trimPreview = null;
+    canvas.style.cursor = tool === "trim" ? "crosshair" : "";
     document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b === btn));
   }),
 );
@@ -284,6 +294,20 @@ let dragStart: Point | null = null;
 let dragLast: Point | null = null;
 let moved = false;
 
+const trimTolMm = () => 8 / view.scale; // an 8 px pick radius
+
+/** Replace the clicked object with whatever is left after trimming. Placement is baked into the new paths. */
+function doTrim(p: Point): void {
+  const plan = planTrim(doc.state.objects, p, trimTolMm());
+  if (!plan) return;
+  const old = doc.get(plan.objectId)!;
+  edit(() => {
+    doc.remove([old.id]);
+    selected.delete(old.id);
+    for (const path of plan.keep) { const o = doc.add(path, IDENTITY, old.layer); o.group = old.group; }
+  });
+}
+
 /** Outlines beat interiors; among interiors the smallest shape wins, so a shape inside another stays selectable. */
 function pickObject(pt: paper.Point): number | undefined {
   const hits = paper.project.hitTestAll(pt, { stroke: true, fill: true, tolerance: 6 }).filter((h) => h.item.data?.id !== undefined);
@@ -298,6 +322,7 @@ canvas.addEventListener("mousedown", (e) => {
   const p = bedPt(e);
   dragStart = dragLast = p;
   moved = false;
+  if (tool === "trim") { doTrim(p); trimPreview = null; draw(); return; }
   if (tool === "select") {
     const r = canvas.getBoundingClientRect();
     const id = pickObject(new paper.Point(e.clientX - r.left, e.clientY - r.top));
@@ -314,6 +339,11 @@ canvas.addEventListener("mousedown", (e) => {
 canvas.addEventListener("mousemove", (e) => {
   const p = bedPt(e);
   cursorEl.textContent = `X ${p.x.toFixed(1)}  Y ${p.y.toFixed(1)} mm`;
+  if (tool === "trim") {
+    const next = planTrim(doc.state.objects, p, trimTolMm())?.removed ?? null;
+    if ((next === null) !== (trimPreview === null) || next) { trimPreview = next; draw(); }
+    return;
+  }
   if (!dragStart || !dragLast) return;
   if (marquee) {
     marquee.b = p;

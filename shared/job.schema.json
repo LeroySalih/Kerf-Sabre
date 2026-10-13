@@ -310,6 +310,27 @@
             }
           },
           "description": "Bridges left uncut on a closed Cut outline. atLengthMm is the distance of the tab centre along the outline in bed space (after the matrix), measured from the object's start point."
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Per-shape override of the material's settings for this object's layer, e.g. one cell of a material test grid.",
+          "properties": {
+            "powerPct": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "speedMmPerS": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "passes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       }
     }

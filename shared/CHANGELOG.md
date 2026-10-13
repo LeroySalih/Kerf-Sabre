@@ -10,7 +10,7 @@ Everything below is additive. The only change to existing data is the `schemaVer
   - Jobs: `PUT /jobs/{id}` (replace a draft), `POST /jobs/{id}/submit`, `/reject`, `/cancel`; approve takes an optional `station`.
   - Station flow: `POST /jobs/{id}/frame`, `POST /jobs/{id}/assign` (now requires `materialConfirmed`), `GET /stations`, `GET /stations/{id}`, `POST /stations/{id}/control`, `GET /stations/{id}/camera`, `GET /stations/{id}/logs`, `POST /stations/{id}/diagnostics/upload`.
   - Cutter WebSocket: new `CutterAck` and `CutterJobResult` messages; `run_job` and `control` carry `totalLines`, `estimatedS`, `bounds`, `jobId`; `hello` may carry `grblBanner`.
-- `job.schema.json`: optional `source`, `warnings`, `statusReason`; `tabs.atLengthMm` is now defined (bed-space length from the object's start).
+- `job.schema.json`: optional `source`, `warnings`, `statusReason`; optional per-object `settings` (power/speed/passes override, used by material test grids); `tabs.atLengthMm` is now defined (bed-space length from the object's start).
 - Data schemas otherwise unchanged. Editor presets (`editor/src/presets.ts`) moved to `0.2.0` with this release.
 
 ## 0.1.0 - initial draft

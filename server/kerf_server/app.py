@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
-from .api import auth
+from .api import auth, catalog, dxf
 from .config import Settings
 from .db import Database
 from .services_seed import seed
@@ -38,6 +38,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     api = APIRouter(prefix=API)
     api.include_router(auth.router)
+    api.include_router(catalog.router)
+    api.include_router(dxf.router)
     app.include_router(api)
 
     @app.get("/health", include_in_schema=False)

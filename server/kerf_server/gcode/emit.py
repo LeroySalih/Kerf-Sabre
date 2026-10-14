@@ -67,6 +67,26 @@ def with_tabs(p: BedPath) -> list[tuple[Seg, bool]]:
     return out
 
 
+def with_dashes(start: Point, segs: list[tuple[Seg, bool]], dash: float) -> list[tuple[Seg, bool]]:
+    """Make the line dotted: along the path, laser on for `dash` mm, off for `dash` mm, starting on. Segments already off (tabs) stay off."""
+    out: list[tuple[Seg, bool]] = []
+    cur, pos = start, 0.0
+    for s, on in segs:
+        end = pos + seg_length(cur, s)
+        rest, rest_start, at = s, cur, pos
+        k = int(at / dash) + 1
+        while k * dash < end - _EPS:
+            m = k * dash
+            if m > at + _EPS:
+                a, b = _split_seg(rest_start, rest, m - at)
+                out.append((a, on and int((at + m) / 2 / dash) % 2 == 0))
+                rest_start, rest, at = a.to, b, m
+            k += 1
+        out.append((rest, on and int((at + end) / 2 / dash) % 2 == 0))
+        cur, pos = s.to, end
+    return out
+
+
 class Emitter:
     def __init__(self, s30: float, air_command: str | None, preset: ResolvedPreset):
         self.s30 = s30
@@ -142,11 +162,15 @@ class Emitter:
     def path(self, p: BedPath, op: Operation) -> None:
         speed = p.speed_mm_s if p.speed_mm_s is not None else op.speed_mm_s
         power = p.power_pct if p.power_pct is not None else op.power_pct
-        eff = Operation(power, speed, p.passes or op.passes, op.air)
+        dash = p.dash_mm if p.dash_mm is not None else op.dash_mm
+        eff = Operation(power, speed, p.passes or op.passes, op.air, dash)
         self.air_assist(eff.air)
         for _ in range(eff.passes):
             self.travel(p.start)
-            for seg, on in with_tabs(p):
+            segs = with_tabs(p)
+            if eff.dash_mm > 0:
+                segs = with_dashes(p.start, segs, eff.dash_mm)
+            for seg, on in segs:
                 if seg.kind == "l":
                     self._line(seg.to, eff, on, speed)
                 else:

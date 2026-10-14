@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.13 - dotted lines (additive)
+- New optional `dashMm` (mm, `0` or at least `0.1`; default `0` = solid line): the length of each dash and of each gap along a path, so a Score or Cut line can be dotted. Laser on for `dashMm`, off for `dashMm`, starting on at the path's start and restarting on every pass. It is set per shape in the job's `objects[].settings`, or as the material default in a preset's `cut` / `score` operation and `laserOverrides` patches. A per-shape value beats the material's. Tabs on a Cut outline stay uncut; the dashes only switch the laser off in more places.
+- Server: the G-code emitter splits the path at each dash boundary and moves the gaps with `S0` (same as tabs). The Editor has no control for it yet.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.13`.
+
 ## 0.2.12 - real machine profiles (additive)
 - `machine-profiles/`: the four placeholder profiles are replaced by the values measured in the spike (`docs/spike-results.md`, `spike/results/*/settings.txt`): stations 1 and 2 have a 400 x 415 mm bed, stations 3 and 4 a 355 x 390 mm bed (`$130`/`$131`), `$30` 1000, laser mode on, homing on, acceleration 1000 (stations 1, 2) or 500 (stations 3, 4) (`$120`/`$121`), max rate 8000 mm/min (the lower of `$110` 25000 and `$111` 8000), air assist M8 verified, USB UVC camera. Files renamed `station-N.json`; `placeholder` is now `false`. **Still assumed:** `originCorner` front-left (the spike did not check where the machine origin is), and `model` (null until the Falcon models are confirmed). Stations 3 and 4 also have a 38 mm Z axis; the profile has no field for it yet.
 - Server: a database made with the placeholders gets the new profile on start-up unless a teacher already edited it (its `placeholder` is false) or it has a camera calibration to keep.

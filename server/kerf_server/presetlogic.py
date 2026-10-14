@@ -11,6 +11,7 @@ class Operation:
     speed_mm_s: float
     passes: int
     air: bool
+    dash_mm: float = 0.0  # 0 = solid line
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,7 @@ class ResolvedPreset:
 
 def _op(base: dict[str, Any], patch: dict[str, Any] | None) -> Operation:
     d = {**base, **(patch or {})}
-    return Operation(float(d["powerPct"]), float(d["speedMmPerS"]), int(d["passes"]), bool(d["airAssist"]))
+    return Operation(float(d["powerPct"]), float(d["speedMmPerS"]), int(d["passes"]), bool(d["airAssist"]), float(d.get("dashMm") or 0.0))
 
 
 def resolve(preset: dict[str, Any], machine_id: str | None) -> ResolvedPreset:

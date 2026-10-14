@@ -40,7 +40,7 @@ def _translate(p: BedPath, dx: float, dy: float) -> BedPath:
 
     segs = [Seg(s.kind, mv(s.to), c=mv(s.c) if s.c else None, ccw=s.ccw) for s in p.segs]
     return BedPath(p.object_id, p.layer, p.closed, mv(p.start), segs, tabs=list(p.tabs), power_pct=p.power_pct,
-                   speed_mm_s=p.speed_mm_s, passes=p.passes, depth=p.depth)
+                   speed_mm_s=p.speed_mm_s, passes=p.passes, dash_mm=p.dash_mm, depth=p.depth)
 
 
 def _bbox(paths: list[BedPath]) -> tuple[float, float, float, float]:

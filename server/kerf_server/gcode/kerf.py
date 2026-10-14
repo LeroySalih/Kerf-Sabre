@@ -192,7 +192,7 @@ def _ring_to_path(src: BedPath, ring: list[tuple[float, float]], keep_orientatio
     k = min(range(len(pts)), key=lambda i: dist(pts[i], origin_hint))  # start nearest where the drawn path started
     pts = pts[k:] + pts[:k]
     pts.append(pts[0])
-    return BedPath(src.object_id, src.layer, True, pts[0], fit_arcs(pts), tabs=list(src.tabs), power_pct=src.power_pct, speed_mm_s=src.speed_mm_s, passes=src.passes, depth=src.depth)
+    return BedPath(src.object_id, src.layer, True, pts[0], fit_arcs(pts), tabs=list(src.tabs), power_pct=src.power_pct, speed_mm_s=src.speed_mm_s, passes=src.passes, dash_mm=src.dash_mm, depth=src.depth)
 
 
 def compensate(paths: list[BedPath], polys: dict[str, Polygon], kerf_mm: float) -> tuple[list[BedPath], list[str]]:

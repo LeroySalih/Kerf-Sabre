@@ -7,7 +7,7 @@
   "required": ["schemaVersion", "id", "version", "material", "thicknessMm", "sheet", "kerfMm", "cut", "score"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": {"const": "0.2.12"},
+    "schemaVersion": {"const": "0.2.13"},
     "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
     "version": {"type": "integer", "minimum": 1, "description": "Incremented on every edit; jobs record it"},
     "material": {"type": "string", "minLength": 1},
@@ -51,7 +51,8 @@
         "powerPct": {"type": "number", "minimum": 0, "maximum": 100},
         "speedMmPerS": {"type": "number", "exclusiveMinimum": 0, "description": "Output F = mm/s x 60"},
         "passes": {"type": "integer", "minimum": 1},
-        "airAssist": {"type": "boolean"}
+        "airAssist": {"type": "boolean"},
+        "dashMm": {"anyOf": [{"const": 0}, {"type": "number", "minimum": 0.1}], "description": "Dotted line: the length in mm of each dash and each gap. 0 (default) is a solid line."}
       }
     },
     "operationPatch": {
@@ -62,7 +63,8 @@
         "powerPct": {"type": "number", "minimum": 0, "maximum": 100},
         "speedMmPerS": {"type": "number", "exclusiveMinimum": 0},
         "passes": {"type": "integer", "minimum": 1},
-        "airAssist": {"type": "boolean"}
+        "airAssist": {"type": "boolean"},
+        "dashMm": {"anyOf": [{"const": 0}, {"type": "number", "minimum": 0.1}], "description": "Dotted line: the length in mm of each dash and each gap. 0 (default) is a solid line."}
       }
     }
   }

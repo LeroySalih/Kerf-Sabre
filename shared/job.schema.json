@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.12"
+      "const": "0.2.13"
     },
     "id": {
       "type": "string",
@@ -375,6 +375,10 @@
             "passes": {
               "type": "integer",
               "minimum": 1
+            },
+            "dashMm": {
+              "anyOf": [{"const": 0}, {"type": "number", "minimum": 0.1}],
+              "description": "Dotted line: the length in mm of each dash and each gap along this object's path. 0 (default) is a solid line."
             }
           }
         }

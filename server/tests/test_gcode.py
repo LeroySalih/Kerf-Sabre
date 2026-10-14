@@ -23,11 +23,11 @@ def rect_obj(oid, x, y, w, h, layer="cut", **extra):
             "matrix": [1, 0, 0, 1, 0, 0], **extra}
 
 
-def circle_obj(oid, cx, cy, r, layer="cut"):
+def circle_obj(oid, cx, cy, r, layer="cut", **extra):
     return {"id": oid, "layer": layer, "closed": True, "start": [cx + r, cy],
             "segments": [{"type": "arc", "to": [cx - r, cy], "center": [cx, cy], "clockwise": False},
                          {"type": "arc", "to": [cx + r, cy], "center": [cx, cy], "clockwise": False}],
-            "matrix": [1, 0, 0, 1, 0, 0]}
+            "matrix": [1, 0, 0, 1, 0, 0], **extra}
 
 
 def job(objects, origin=None):
@@ -180,3 +180,38 @@ def test_scaled_matrix_flattens_arcs():
     prog = parse(r.text)
     assert prog.errors == [] and not any(m.kind == "arc" for m in prog.motions)
     assert r.bounds == pytest.approx((30, 40, 70, 60), abs=0.02)
+
+
+def _on_off(text):
+    mv = [m for m in parse(text).motions if m.kind == "line"]
+    return sum(m.length for m in mv if m.power > 0), sum(m.length for m in mv if m.power == 0)
+
+
+def test_dashed_line_alternates_and_keeps_length():
+    o = rect_obj("a", 10, 10, 40, 20, settings={"dashMm": 5})  # perimeter 120 mm
+    r = generate(job([o]), preset(), MACHINE)
+    on, off = _on_off(r.text)
+    assert on == pytest.approx(60, abs=0.01) and off == pytest.approx(60, abs=0.01)
+    first = [m for m in parse(r.text).motions if m.kind == "line"][:3]
+    assert [m.power > 0 for m in first] == [True, False, True]  # starts with a dash
+    assert first[0].length == pytest.approx(5, abs=0.01) and first[1].length == pytest.approx(5, abs=0.01)
+
+
+def test_dash_zero_is_solid_and_preset_default_applies():
+    solid = generate(job([rect_obj("a", 10, 10, 40, 20, settings={"dashMm": 0})]), preset(), MACHINE)
+    assert _on_off(solid.text)[1] == 0
+    p = preset()
+    p["cut"]["dashMm"] = 10
+    r = generate(job([rect_obj("a", 10, 10, 40, 20)]), p, MACHINE)
+    assert _on_off(r.text)[1] == pytest.approx(60, abs=0.01)
+    r = generate(job([rect_obj("a", 10, 10, 40, 20, settings={"dashMm": 0})]), p, MACHINE)  # per-shape beats the material
+    assert _on_off(r.text)[1] == 0
+
+
+def test_dashed_circle_keeps_arcs_and_tabs_stay_off():
+    r = generate(job([circle_obj("c", 50, 50, 12.5, settings={"dashMm": 4})]), preset(), MACHINE)
+    prog = parse(r.text)
+    assert prog.errors == [] and any(m.kind == "arc" for m in prog.motions)
+    t = rect_obj("t", 10, 10, 40, 20, tabs=[{"atLengthMm": 20, "widthMm": 10}], settings={"dashMm": 5})
+    on, off = _on_off(generate(job([t]), preset(), MACHINE).text)
+    assert on + off == pytest.approx(120, abs=0.01) and off >= 60 + 1  # tab span adds off length where it overlaps a dash

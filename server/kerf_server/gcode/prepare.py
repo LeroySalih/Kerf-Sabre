@@ -91,4 +91,5 @@ def to_bed(obj: dict[str, Any]) -> BedPath:
         power_pct=st.get("powerPct"),
         speed_mm_s=st.get("speedMmPerS"),
         passes=st.get("passes"),
+        dash_mm=st.get("dashMm"),
     )

@@ -31,6 +31,7 @@ class BedPath:
     power_pct: float | None = None
     speed_mm_s: float | None = None
     passes: int | None = None
+    dash_mm: float | None = None  # dotted line: laser on for this many mm, off for this many; 0 or None = solid
     depth: int = 0  # how many closed Cut outlines contain this path (set by ordering)
 
     @property

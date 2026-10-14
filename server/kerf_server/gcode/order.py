@@ -12,7 +12,7 @@ def reverse(p: BedPath) -> BedPath:
         s = p.segs[i]
         to = pts[i]
         segs.append(Seg("l", to) if s.kind == "l" else Seg("a", to, c=s.c, ccw=not s.ccw))
-    return BedPath(p.object_id, p.layer, p.closed, p.end, segs, tabs=list(p.tabs), power_pct=p.power_pct, speed_mm_s=p.speed_mm_s, passes=p.passes, depth=p.depth)
+    return BedPath(p.object_id, p.layer, p.closed, p.end, segs, tabs=list(p.tabs), power_pct=p.power_pct, speed_mm_s=p.speed_mm_s, passes=p.passes, dash_mm=p.dash_mm, depth=p.depth)
 
 
 def nearest_neighbour(paths: list[BedPath], pos: Point) -> tuple[list[BedPath], Point]:

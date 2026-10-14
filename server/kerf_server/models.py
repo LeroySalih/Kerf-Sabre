@@ -121,6 +121,8 @@ class SchoolClass(Base):
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     #: The teacher who set the class up and looks after it. None: a shared class that every teacher may manage.
     teacher_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    #: Must a teacher approve this class's files before they can be cut? NULL (a class made before this existed) counts as yes.
+    require_approval: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

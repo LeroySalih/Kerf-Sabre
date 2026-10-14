@@ -65,13 +65,34 @@ class IpThrottle:
 
 # ---------------------------------------------------------------- teacher side
 
-def create_class(s: Session, code: str, label: str | None, teacher_id: str | None = None) -> SchoolClass:
+def needs_approval(s: Session, pupil_id: str) -> bool:
+    """Do this pupil's files wait for a teacher? Yes unless their class is set to let them go straight to the queue.
+    A pupil with no class (a token made by an administrator) always needs approval."""
+    row = s.get(Pupil, pupil_id)
+    c = s.get(SchoolClass, row.class_code) if row is not None else None
+    return c is None or c.require_approval is not False
+
+
+def class_info(s: Session, c: SchoolClass, pupil_count: int) -> dict:
+    return {"code": c.code, "label": c.label, "teacherId": c.teacher_id, "pupilCount": pupil_count, "requireApproval": c.require_approval is not False}
+
+
+def update_class(s: Session, code: str, teacher_id: str | None, label: str | None, require_approval: bool | None) -> SchoolClass:
+    c = get_class(s, code, teacher_id)
+    if label is not None:
+        c.label = label.strip()[:128] or None
+    if require_approval is not None:
+        c.require_approval = require_approval
+    return c
+
+
+def create_class(s: Session, code: str, label: str | None, teacher_id: str | None = None, require_approval: bool = True) -> SchoolClass:
     if not CODE_RE.match(code or ""):
         raise ApiError(422, "invalid", "A class code is letters, digits, - and _ (up to 32).")
     code = norm_code(code)
     if s.get(SchoolClass, code) is not None:
         raise ApiError(409, "conflict", f"The class {code} already exists.")
-    c = SchoolClass(code=code, label=(label or "").strip()[:128] or None, teacher_id=teacher_id)
+    c = SchoolClass(code=code, label=(label or "").strip()[:128] or None, teacher_id=teacher_id, require_approval=require_approval)
     s.add(c)
     return c
 

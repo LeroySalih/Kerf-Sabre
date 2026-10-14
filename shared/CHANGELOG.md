@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.7 - approval per class (additive)
+- `openapi.yaml`: `ClassInfo.requireApproval` (default true). `POST /classes` takes it, and the new teacher endpoint `PUT /classes/{code}` changes it (and the label). When a class does not require approval, a pupil's submitted file goes straight into the queue (`approvedBy: auto`); otherwise it waits for a teacher as before. Files already waiting are not changed. Classes made before this gain the column as "requires approval".
+- The server-wide `KERF_REQUIRE_APPROVAL=false` still switches approval off for everyone.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.7`.
+
 ## 0.2.6 - copy activities (additive)
 - `openapi.yaml`: `POST /classes/{code}/activities-copy` copies activities from another of the teacher's classes (or duplicates within the class). Copies start hidden and without due dates; pupils' work and feedback are not copied.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.6`.

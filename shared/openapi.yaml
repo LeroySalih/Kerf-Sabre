@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.6
+  version: 0.2.7
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -96,9 +96,31 @@ paths:
               properties:
                 code: {type: string, description: "Letters, digits, - and _ (stored upper case)"}
                 label: {type: string, description: "A note for teachers, e.g. Y9 set 2. Not a pupil name"}
+                requireApproval: {type: boolean, default: true, description: "true: a teacher approves each file before it can be cut. false: this class's files go straight into the queue"}
       responses:
         "201": {description: Created}
         "409": {description: That code exists}
+  /classes/{code}:
+    put:
+      summary: Teacher (who looks after the class). Change the label and/or whether files need approval. Files already waiting are not affected.
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: {type: string}
+                requireApproval: {type: boolean}
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClassInfo"}
+        "404": {description: No such class}
   /classes/{code}/pupils:
     parameters:
       - {name: code, in: path, required: true, schema: {type: string}}
@@ -951,6 +973,7 @@ components:
         label: {type: [string, "null"]}
         teacherId: {type: [string, "null"], description: "The teacher who looks after the class; null for a shared class any teacher may manage"}
         pupilCount: {type: integer}
+        requireApproval: {type: boolean, description: "Whether a teacher must approve this class's files before they can be cut"}
     ClassPupil:
       type: object
       required: [pupilId, locked]

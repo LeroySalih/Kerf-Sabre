@@ -133,7 +133,7 @@ class TestTeacherSide:
     def test_classes_pupils_and_counts(self, client, tokens):
         setup_class_with(client, tokens, ids=("P001", "P002", "P003"))
         t = auth(tokens["teacher"])
-        assert client.get(f"{API}/classes", headers=t).json() == [{"code": "9B-DT", "label": "Y9 set 2", "teacherId": "T001", "pupilCount": 3}]
+        assert client.get(f"{API}/classes", headers=t).json() == [{"code": "9B-DT", "label": "Y9 set 2", "teacherId": "T001", "pupilCount": 3, "requireApproval": True}]
         listing = client.get(f"{API}/classes/9b-dt/pupils", headers=t).json()
         assert [p["pupilId"] for p in listing] == ["P001", "P002", "P003"] and "pin" not in str(listing)
         assert client.post(f"{API}/classes", json={"code": "9b-dt"}, headers=t).status_code == 409
@@ -188,3 +188,42 @@ class TestTeacherSide:
         with app.state.db.session() as s:
             stored = s.scalar(select(Pupil.pin_hash).where(Pupil.pupil_id == "P001"))
         assert pins["P001"] not in stored and stored.startswith("scrypt$")
+
+
+class TestApprovalPerClass:
+    """A class can be set to skip teacher approval (e.g. Year 10) while another still needs it (e.g. Year 7)."""
+
+    def submit_as(self, client, tokens, code, pid):
+        pins = setup_class_with(client, tokens, ids=(pid,), code=code)
+        h = auth(login(client, code=code, pid=pid, pin=pins[pid]).json()["token"])
+        jid = client.post(f"{API}/jobs", json=job_doc(pupil=pid), headers=h).json()["id"]
+        return client.post(f"{API}/jobs/{jid}/submit", headers=h).json()
+
+    def test_classes_need_approval_by_default(self, client, tokens):
+        client.post(f"{API}/classes", json={"code": "Y7"}, headers=auth(tokens["teacher"]))
+        assert client.get(f"{API}/classes", headers=auth(tokens["teacher"])).json()[0]["requireApproval"] is True
+        assert self.submit_as(client, tokens, "Y7B", "P101")["status"] == "submitted"
+
+    def test_a_class_set_to_skip_approval_goes_straight_to_the_queue(self, client, tokens):
+        t = auth(tokens["teacher"])
+        assert client.post(f"{API}/classes", json={"code": "Y10", "requireApproval": False}, headers=t).json()["requireApproval"] is False
+        client.post(f"{API}/classes/Y10/pupils", json={"pupilIds": ["P201"]}, headers=t)
+        pin = client.post(f"{API}/pupils/P201/reset-pin", headers=t).json()["pin"]
+        h = auth(login(client, code="Y10", pid="P201", pin=pin).json()["token"])
+        jid = client.post(f"{API}/jobs", json=job_doc(pupil="P201"), headers=h).json()["id"]
+        r = client.post(f"{API}/jobs/{jid}/submit", headers=h).json()
+        assert r["status"] == "approved" and r["ticket"] is not None
+
+    def test_a_teacher_can_change_it_later_and_it_only_affects_new_files(self, client, tokens):
+        t = auth(tokens["teacher"])
+        client.post(f"{API}/classes", json={"code": "Y8"}, headers=t)
+        r = client.put(f"{API}/classes/Y8", json={"requireApproval": False, "label": "Year 8"}, headers=t)
+        assert r.status_code == 200 and r.json()["requireApproval"] is False and r.json()["label"] == "Year 8"
+        assert client.put(f"{API}/classes/Y8", json={"requireApproval": "no"}, headers=t).status_code == 422
+        assert client.put(f"{API}/classes/NOPE", json={"requireApproval": True}, headers=t).status_code == 404
+        assert client.put(f"{API}/classes/Y8", json={"requireApproval": True}, headers=auth(tokens["pupil"])).status_code == 403
+
+    def test_a_pupil_with_no_class_always_needs_approval(self, client, tokens):
+        h = auth(tokens["pupil"])
+        jid = client.post(f"{API}/jobs", json=job_doc(), headers=h).json()["id"]
+        assert client.post(f"{API}/jobs/{jid}/submit", headers=h).json()["status"] == "submitted"

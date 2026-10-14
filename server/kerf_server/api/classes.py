@@ -21,13 +21,26 @@ def list_classes(who: Principal = Depends(require("teacher")), s: Session = Depe
     """The teacher's own classes, and any shared (unowned) ones."""
     counts = dict(s.execute(select(Pupil.class_code, func.count()).group_by(Pupil.class_code)).all())
     q = select(SchoolClass).where((SchoolClass.teacher_id == who.id) | SchoolClass.teacher_id.is_(None)).order_by(SchoolClass.code)
-    return [{"code": c.code, "label": c.label, "teacherId": c.teacher_id, "pupilCount": counts.get(c.code, 0)} for c in s.scalars(q)]
+    return [sc.class_info(s, c, counts.get(c.code, 0)) for c in s.scalars(q)]
 
 
 @router.post("/classes", status_code=201)
 def create_class(body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
-    c = sc.create_class(s, str(body.get("code", "")), body.get("label") if isinstance(body.get("label"), str) else None, who.id)
-    return {"code": c.code, "label": c.label, "teacherId": c.teacher_id, "pupilCount": 0}
+    req = body.get("requireApproval", True)
+    if not isinstance(req, bool):
+        raise ApiError(422, "invalid", "requireApproval is true or false.")
+    c = sc.create_class(s, str(body.get("code", "")), body.get("label") if isinstance(body.get("label"), str) else None, who.id, req)
+    return sc.class_info(s, c, 0)
+
+
+@router.put("/classes/{code}")
+def update_class(code: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """Change a class's label and/or whether its files need a teacher's approval. Files already waiting are not affected."""
+    req, label = body.get("requireApproval"), body.get("label")
+    if (req is not None and not isinstance(req, bool)) or (label is not None and not isinstance(label, str)):
+        raise ApiError(422, "invalid", "Send label (text) and/or requireApproval (true or false).")
+    c = sc.update_class(s, code, who.id, label, req)
+    return sc.class_info(s, c, s.scalar(select(func.count()).select_from(Pupil).where(Pupil.class_code == c.code)) or 0)
 
 
 @router.get("/classes/{code}/pupils")

@@ -35,6 +35,8 @@ SQLAlchemy 2. **SQLite** by default (one file, `KERF_DATA_DIR/kerf.db`, WAL mode
 
 ## Run it
 
+**Quickest:** `./server/run-local.sh` from the repository root builds the Editor, sets everything up, makes a demo teacher, station, class (`DEMO`) and two pupils, prints their logins and the address (`http://localhost:8000`), and starts the server. Or step by step:
+
 ```bash
 cd server
 python -m venv .venv && source .venv/bin/activate

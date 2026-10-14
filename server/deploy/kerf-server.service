@@ -1,0 +1,23 @@
+# Without Docker: install into /opt/kerf (python -m venv /opt/kerf/venv && /opt/kerf/venv/bin/pip install /opt/kerf/src/server),
+# build the Editor (npm ci && npm run build in editor/), put Caddy or nginx in front for HTTPS, then:
+#   cp kerf-server.service /etc/systemd/system/ && systemctl enable --now kerf-server
+[Unit]
+Description=BISAK Kerf Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=kerf
+WorkingDirectory=/opt/kerf
+Environment=KERF_DATA_DIR=/var/lib/kerf
+Environment=KERF_SHARED_DIR=/opt/kerf/src/shared
+Environment=KERF_EDITOR_DIST=/opt/kerf/src/editor/dist
+Environment=KERF_HOST=127.0.0.1
+EnvironmentFile=-/etc/kerf/kerf.env
+ExecStart=/opt/kerf/venv/bin/kerf-server
+Restart=always
+RestartSec=3
+StateDirectory=kerf
+
+[Install]
+WantedBy=multi-user.target

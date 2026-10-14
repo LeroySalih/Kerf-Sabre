@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#f97316" />
+    <title>BISAK Kerf Editor</title>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l12 8-5.5 1.5L9 18z"/></symbol><symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></symbol><symbol id="i-rect" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></symbol><symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></symbol><symbol id="i-polygon" viewBox="0 0 24 24"><path d="M12 3l7.5 4.5v9L12 21l-7.5-4.5v-9z"/></symbol><symbol id="i-line" viewBox="0 0 24 24"><path d="M5 19L19 5"/></symbol><symbol id="i-trim" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.3 8.3L20 18M8.3 15.7L20 6"/></symbol><symbol id="i-text" viewBox="0 0 24 24"><path d="M5 20L12 4l7 16M8 14h8"/></symbol><symbol id="i-measure" viewBox="0 0 24 24"><path d="M3 16L16 3l5 5L8 21z"/><path d="M7 12l2 2M10 9l2 2M13 6l2 2"/></symbol><symbol id="i-gimbal" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-2.2 2.2M12 3l2.2 2.2M21 12l-2.2-2.2M21 12l-2.2 2.2"/></symbol></defs></svg>
+    <div id="gate" hidden>
+      <form id="gate-form" class="gate-card">
+        <h1>BISAK Kerf</h1>
+        <p>Sign in to see your files and send designs to the laser.</p>
+        <div id="gate-pin-fields" class="gate-fields">
+          <label>Class code <input id="gate-class" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required placeholder="e.g. 9B-DT" /></label>
+          <label>Pupil ID <input id="gate-pid" type="text" autocomplete="username" spellcheck="false" required /></label>
+          <label>PIN <input id="gate-pin" type="password" inputmode="numeric" autocomplete="current-password" required placeholder="From your teacher" /></label>
+        </div>
+        <div id="gate-token-fields" class="gate-fields" hidden>
+          <label>Token <input id="gate-token" type="password" autocomplete="off" spellcheck="false" placeholder="Teachers and laser stations" /></label>
+        </div>
+        <details><summary>Server address</summary><input id="gate-url" type="text" placeholder="Leave blank unless your teacher says" /></details>
+        <p id="gate-error" role="alert"></p>
+        <button type="submit" class="on">Sign in</button>
+        <button type="button" id="gate-mode" class="link">Teacher or laser station? Sign in with a token</button>
+        <button type="button" id="gate-offline" class="link">Work without signing in (nothing is saved to the server)</button>
+      </form>
+    </div>
+    <div id="station" hidden></div>
+    <div id="app">
+      <header id="topbar">
+        <span class="brand">BISAK Kerf</span>
+        <div class="group" role="group" aria-label="File">
+          <button id="imp" title="Import a DXF file">Import DXF</button>
+          <input id="file" type="file" accept=".dxf" hidden />
+          <button id="exp-dxf">Export DXF</button>
+          <button id="exp-svg">Export SVG</button>
+        </div>
+        <div class="group" role="group" aria-label="Server">
+          <button id="srv-save" title="Save this design to your files on the server">Save</button>
+          <button id="srv-send" title="Save, then send this design to the server to be cleaned, checked and queued for a laser">Send for cutting</button>
+          <button id="srv-files" title="Your files on the server: open one, send it, or cancel it">My files</button>
+          <button id="srv-queue" hidden title="Teachers: approve files and put the queue in order">Queue</button>
+          <button id="srv-activities" hidden title="Activities set by your teacher">Activities</button>
+          <button id="srv-classes" hidden title="Teachers: classes, pupil IDs and PINs">Classes</button>
+          <button id="srv-signin">Sign in</button>
+          <span id="srv-status" role="status"></span>
+          <span id="srv-file" class="hint"></span>
+          <span id="srv-activity" class="hint" hidden></span>
+        </div>
+        <div class="group" role="group" aria-label="History">
+          <button id="undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+          <button id="redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+        </div>
+        <div class="group" role="group" aria-label="Edit">
+          <button id="copy" title="Copy (Ctrl/Cmd+C)">Copy</button>
+          <button id="paste" title="Paste (Ctrl/Cmd+V)">Paste</button>
+          <button id="dup" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
+          <button id="del" title="Delete">Delete</button>
+        </div>
+        <div class="group" role="group" aria-label="View">
+          <label><input id="grid" type="checkbox" checked /> 1 cm grid</label>
+          <label title="Show or hide the dimensions. Hidden dimensions are still saved"><input id="show-dims" type="checkbox" checked /> Dimensions</label>
+          <label title="Snap to endpoints, midpoints, centres, intersections and the grid. Hold Alt/Option to disable."><input id="snap" type="checkbox" checked /> Snap</label>
+        </div>
+        <div class="group menu" id="tools-menu">
+          <button id="tools-btn" aria-haspopup="true" aria-expanded="false">Tools &#9662;</button>
+          <div class="menu-list" id="tools-list" role="menu" hidden>
+            <button role="menuitem" data-menu="linear-repeat" title="Copies in a grid: columns and rows, with gaps">Linear repeat&hellip;</button>
+            <button role="menuitem" data-menu="circular-array" title="Copies around a centre point">Circular array&hellip;</button>
+            <hr />
+            <button role="menuitem" data-menu="test-grid">Material test grid&hellip;</button>
+            <button role="menuitem" data-menu="kerf-test">Kerf test&hellip;</button>
+          </div>
+        </div>
+        <span class="spacer"></span>
+        <span id="warn" role="status"></span>
+        <label>Laser <select id="machine"></select></label>
+      </header>
+
+      <nav id="palette" aria-label="Tools">
+        <button data-tool="select" class="on" title="Select. Drag a box: left to right must enclose a shape, right to left may touch it" aria-label="Select"><svg class="ico"><use href="#i-select"/></svg></button>
+        <button data-tool="pen" title="Pen. Click corner points; click the first point or double-click to close, Enter finishes an open line, Esc cancels" aria-label="Pen"><svg class="ico"><use href="#i-pen"/></svg></button>
+        <button data-tool="spline" title="Spline. Click points and a smooth curve passes through them; click the first point again to close, Enter or double-click to finish, Backspace removes the last point, Esc cancels. Edit it later with the Nodes tool" aria-label="Spline"><svg class="ico"><use href="#i-spline"/></svg></button>
+        <button data-tool="rect" title="Rectangle" aria-label="Rectangle"><svg class="ico"><use href="#i-rect"/></svg></button>
+        <button data-tool="rrect" title="Rounded rectangle. Drag a box; set the corner radius in Options" aria-label="Rounded rectangle"><svg class="ico"><use href="#i-rrect"/></svg></button>
+        <button data-tool="ellipse" title="Ellipse. Drag a box" aria-label="Ellipse"><svg class="ico"><use href="#i-ellipse"/></svg></button>
+        <button data-tool="star" title="Star. Drag from the centre to a tip; set the points and sharpness in Options" aria-label="Star"><svg class="ico"><use href="#i-star"/></svg></button>
+        <button data-tool="circle" title="Circle. Drag from the centre" aria-label="Circle"><svg class="ico"><use href="#i-circle"/></svg></button>
+        <button data-tool="polygon" title="Polygon. Drag from the centre to a corner; set the number of sides in Options" aria-label="Polygon"><svg class="ico"><use href="#i-polygon"/></svg></button>
+        <button data-tool="line" title="Line" aria-label="Line"><svg class="ico"><use href="#i-line"/></svg></button>
+        <button data-tool="text" title="Text. Click on the bed to add text" aria-label="Text"><svg class="ico"><use href="#i-text"/></svg></button>
+        <hr />
+        <button data-tool="nodes" title="Edit nodes. Select a shape, drag its nodes; double-click an edge to add a node; click a node and press Delete to remove it" aria-label="Edit nodes"><svg class="ico"><use href="#i-nodes"/></svg></button>
+        <button id="act-join" title="Join. Chain the selected open paths whose ends meet (tolerance in Options)" aria-label="Join"><svg class="ico"><use href="#i-join"/></svg></button>
+        <button id="act-close" title="Close path. Close the selected open paths" aria-label="Close path"><svg class="ico"><use href="#i-close-path"/></svg></button>
+        <button id="act-explode" title="Explode. Split the selected shapes into separate edges" aria-label="Explode"><svg class="ico"><use href="#i-explode"/></svg></button>
+        <button data-tool="tab" title="Tab. Click on a closed Cut outline to leave a bridge there; click a tab again to remove it" aria-label="Tab"><svg class="ico"><use href="#i-tab"/></svg></button>
+        <button id="act-tabs" title="Auto tabs. Add evenly spaced tabs to the selected Cut outlines (count and width in Options)" aria-label="Auto tabs"><svg class="ico"><use href="#i-tabs-auto"/></svg></button>
+        <button data-tool="offset" title="Offset. Select shapes or lines, then draw a parallel copy a set distance away (set it in Options; a dashed preview shows the result)" aria-label="Offset"><svg class="ico"><use href="#i-offset"/></svg></button>
+        <button data-tool="trim" title="Trim. Click a line or arc to remove the part up to the nearest intersections" aria-label="Trim"><svg class="ico"><use href="#i-trim"/></svg></button>
+        <button data-tool="radius" title="Corner radius. Click a corner to round it; set the radius in Options" aria-label="Corner radius"><svg class="ico"><use href="#i-radius"/></svg></button>
+        <button id="round-all" title="Round all corners of the selection, using the radius in Options" aria-label="Round all corners of the selection, using the radius in Options"><svg class="ico"><use href="#i-round-all"/></svg></button>
+        <button data-tool="measure" title="Measure. Drag between two points" aria-label="Measure"><svg class="ico"><use href="#i-measure"/></svg></button>
+        <button data-tool="dim" title="Dimension. Click two points (they snap to corners and centres), then click where the dimension line should go. Dimensions are only for looking at: they are never cut" aria-label="Dimension"><svg class="ico"><use href="#i-dim"/></svg></button>
+        <button data-tool="dimr" title="Diameter or radius dimension. Click a circle or arc (choose which in Options). Never cut" aria-label="Diameter or radius dimension"><svg class="ico"><use href="#i-dim-radial"/></svg></button>
+        <button id="act-dim-auto" title="Dimension the selection: adds its width and height. Never cut" aria-label="Dimension the selection"><svg class="ico"><use href="#i-dim-auto"/></svg></button>
+        <button id="gimbal" title="Gimbal (G). Arrows move along an axis, squares scale, the ring rotates (Shift = 15 degree steps). The pivot is the anchor chosen in Properties" aria-label="Gimbal"><svg class="ico"><use href="#i-gimbal"/></svg></button>
+        <hr />
+        <button id="b-union" title="Union. Merge the selected shapes into one outline" aria-label="Union"><svg class="ico"><use href="#i-union"/></svg></button>
+        <button id="b-intersect" title="Intersect. Keep only the area the selected shapes share" aria-label="Intersect"><svg class="ico"><use href="#i-intersect"/></svg></button>
+        <button id="b-subtract" title="Subtract. Remove the later-drawn shapes from the earliest-drawn one" aria-label="Subtract"><svg class="ico"><use href="#i-subtract"/></svg></button>
+        <button id="group" title="Group (Ctrl/Cmd+G)" aria-label="Group"><svg class="ico"><use href="#i-group"/></svg></button>
+        <button id="ungroup" title="Ungroup (Ctrl/Cmd+Shift+G)" aria-label="Ungroup"><svg class="ico"><use href="#i-ungroup"/></svg></button>
+        <button id="flip-h" title="Flip left to right, in place" aria-label="Flip left to right, in place"><svg class="ico"><use href="#i-flip-h"/></svg></button>
+        <button id="flip-v" title="Flip top to bottom, in place" aria-label="Flip top to bottom, in place"><svg class="ico"><use href="#i-flip-v"/></svg></button>
+        <button id="act-linear" title="Linear repeat. Copies in a grid" aria-label="Linear repeat"><svg class="ico"><use href="#i-linear-repeat"/></svg></button>
+        <button id="act-circular" title="Circular array. Copies around a centre" aria-label="Circular array"><svg class="ico"><use href="#i-circular-array"/></svg></button>
+        <hr />
+        <select id="align-to" class="wide" title="Align and space relative to the selection or to the bed" aria-label="Align to"><option value="selection">Selection</option><option value="bed">Bed</option></select>
+        <button data-align="left" title="Align left edges" aria-label="Align left edges"><svg class="ico"><use href="#i-align-left"/></svg></button>
+        <button data-align="centre" title="Centre horizontally" aria-label="Centre horizontally"><svg class="ico"><use href="#i-align-centre"/></svg></button>
+        <button data-align="right" title="Align right edges" aria-label="Align right edges"><svg class="ico"><use href="#i-align-right"/></svg></button>
+        <button data-align="top" title="Align top edges" aria-label="Align top edges"><svg class="ico"><use href="#i-align-top"/></svg></button>
+        <button data-align="middle" title="Centre vertically" aria-label="Centre vertically"><svg class="ico"><use href="#i-align-middle"/></svg></button>
+        <button data-align="bottom" title="Align bottom edges" aria-label="Align bottom edges"><svg class="ico"><use href="#i-align-bottom"/></svg></button>
+        <button id="dist-h" title="Space evenly, left to right (3 or more shapes)" aria-label="Space evenly, left to right"><svg class="ico"><use href="#i-space-h"/></svg></button>
+        <button id="dist-v" title="Space evenly, top to bottom (3 or more shapes)" aria-label="Space evenly, top to bottom"><svg class="ico"><use href="#i-space-v"/></svg></button>
+      </nav>
+
+      <main id="stage"><canvas id="canvas" resize></canvas></main>
+
+      <aside id="side" aria-label="Properties">
+        <details open>
+          <summary>Properties</summary>
+          <div class="body">
+            <div class="pos" title="Position and size of the selection (mm). The anchor picks the point they refer to, and the pivot for scale, rotate and the gimbal.">
+              <span class="anchors"><input type="radio" name="anchor" data-col="0" data-row="0" title="Anchor: top-left" /><input type="radio" name="anchor" data-col="1" data-row="0" title="Anchor: top" /><input type="radio" name="anchor" data-col="2" data-row="0" title="Anchor: top-right" /><input type="radio" name="anchor" data-col="0" data-row="1" title="Anchor: left" /><input type="radio" name="anchor" data-col="1" data-row="1" title="Anchor: centre" /><input type="radio" name="anchor" data-col="2" data-row="1" title="Anchor: right" /><input type="radio" name="anchor" data-col="0" data-row="2" title="Anchor: bottom-left" checked /><input type="radio" name="anchor" data-col="1" data-row="2" title="Anchor: bottom" /><input type="radio" name="anchor" data-col="2" data-row="2" title="Anchor: bottom-right" /></span>
+              <span class="fields">
+                <label>X <input id="px" type="number" step="0.1" disabled /></label>
+                <label>Y <input id="py" type="number" step="0.1" disabled /></label>
+                <label>W <input id="pw" type="number" step="0.1" min="0" disabled /></label>
+                <label>H <input id="ph" type="number" step="0.1" min="0" disabled /></label>
+                <label>SX % <input id="psx" type="number" step="1" min="0" disabled /></label>
+                <label>SY % <input id="psy" type="number" step="1" min="0" disabled /></label>
+                <label title="Rotate by this many degrees (counter-clockwise +) about the anchor">Rot &deg; <input id="prot" type="number" step="1" disabled /></label>
+                <span></span>
+                <label class="lock" title="Keep proportions (circles stay circles)"><input id="lock" type="checkbox" checked /> Lock ratio</label>
+              </span>
+            </div>
+            <div id="textprops" hidden>
+              <input id="t-content" type="text" placeholder="Text" title="Text content" />
+              <select id="t-font" title="Font face"></select>
+              <div class="row">
+                <label>Size <input id="t-size" type="number" min="1" step="0.5" style="width:5em" /> mm</label>
+                <button id="t-load" title="Add a .ttf or .otf font file">Load font&hellip;</button>
+              </div>
+              <input id="t-file" type="file" accept=".ttf,.otf" hidden />
+              <button id="t-convert" title="Turn the text into plain paths (no longer editable as text)">Convert to path</button>
+            </div>
+          </div>
+        </details>
+        <details open>
+          <summary>Options</summary>
+          <div class="body">
+            <p class="hint" id="opt-none">Tools with options (Polygon, Rounded rectangle, Star, Corner radius, Tab) show them here.</p>
+            <div id="opt-repair" class="row" title="Ends closer than this are joined by Join and by DXF import">
+              <label>Join tolerance <input id="join-tol" type="number" min="0.001" value="0.05" style="width:5em" /> mm</label>
+            </div>
+            <div id="opt-tabs" class="row" hidden>
+              <label title="How wide each bridge is, in mm">Tab width <input id="tab-width" type="number" min="0.5" value="3" style="width:4.5em" /> mm</label>
+              <label title="Number of evenly spaced tabs for Auto tabs">Count <input id="tab-count" type="number" min="1" max="50" step="1" value="4" style="width:4em" /></label>
+              <button id="tab-clear" title="Remove the tabs from the selected shapes">Remove tabs</button>
+            </div>
+            <div id="opt-polygon" class="row" hidden>
+              <label title="Number of sides for the Polygon tool">Polygon sides <input id="sides" type="number" min="3" max="64" step="1" value="6" style="width:4.5em" /></label>
+            </div>
+            <div id="opt-rrect" class="row" hidden>
+              <label title="Corner radius of the rounded rectangle">Corner radius <input id="rrad" type="number" min="0" value="5" style="width:5em" /> mm</label>
+            </div>
+            <div id="opt-star" class="row" hidden>
+              <label title="Number of tips">Points <input id="star-points" type="number" min="3" max="32" step="1" value="5" style="width:4em" /></label>
+              <label title="Valley radius as a percentage of the tip radius. Lower is sharper.">Sharpness <input id="star-inner" type="number" min="5" max="95" value="40" style="width:4.5em" /> %</label>
+            </div>
+            <div id="opt-offset" class="row" hidden>
+              <label title="How far away the new line is">Distance <input id="off-dist" type="number" min="0.01" step="0.5" value="3" style="width:5em" /> mm</label>
+              <label title="Closed shapes: outside or inside. Open lines: to the left or right of the way they were drawn. The dashed preview shows the result">Side <select id="off-side"><option value="outside">Outside (line: left)</option><option value="inside">Inside (line: right)</option><option value="both">Both sides</option></select></label>
+              <label title="Round corners are arcs; sharp corners are mitred">Corners <select id="off-corner"><option value="round">Round</option><option value="sharp">Sharp</option></select></label>
+              <label><input id="off-keep" type="checkbox" checked /> Keep the original</label>
+              <button id="off-apply" title="Make the offset (Enter)">Offset</button>
+              <span class="hint">Select shapes or lines, then set the distance. The dashed purple preview is what will be made.</span>
+            </div>
+            <div id="opt-dim" class="row" hidden>
+              <label title="Which way a linear dimension measures. Auto picks horizontal, vertical or along the line from your two points">Measure <select id="dim-axis"><option value="auto">Auto</option><option value="aligned">Along the line</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
+              <label title="What the circle tool adds">Circle <select id="dim-kind"><option value="diameter">Diameter</option><option value="radius">Radius</option></select></label>
+              <span class="hint">Dimensions are for looking at. They are never cut or sent to the laser.</span>
+            </div>
+            <div id="opt-radius" class="row" hidden>
+              <label title="Corner radius, or chamfer setback, in mm">Corner size <input id="radius" type="number" min="0.1" value="5" style="width:5em" /> mm</label>
+              <label>Style <select id="radius-mode"><option value="radius">Round (radius)</option><option value="chamfer">Chamfer (straight)</option></select></label>
+            </div>
+          </div>
+        </details>
+        <details open>
+          <summary>Cuts / Layers</summary>
+          <div class="body">
+            <table class="layers" aria-label="Layers">
+              <thead><tr><th>Layer</th><th>Speed</th><th>Power</th><th>Passes</th><th>Air</th><th>Shapes</th></tr></thead>
+              <tbody id="layertable"></tbody>
+            </table>
+            <p class="hint" id="layerhint">Settings come from the material below and are locked.</p>
+          </div>
+        </details>
+      </aside>
+
+      <footer id="layerbar" aria-label="Layer and material">
+        <div class="chips" role="group" aria-label="Layer">
+          <button class="chip cut on" id="layer-cut" data-layer="cut" title="Cut: all the way through. Click to make new shapes Cut, and to change the selected shapes."><i class="sw cut"></i>Cut</button>
+          <button class="chip score" id="layer-score" data-layer="score" title="Score: a surface line only. Click to make new shapes Score, and to change the selected shapes."><i class="sw score"></i>Score</button>
+        </div>
+        <div class="material">
+          <label>Material <select id="material"></select></label>
+          <span class="op locked" id="mat-kerf" title="Kerf: how much material the laser removes"></span>
+          <span class="op locked" id="mat-cut"></span>
+          <span class="op locked" id="mat-score"></span>
+          <span class="flag" id="mat-flag"></span>
+        </div>
+      </footer>
+
+      <footer id="footer"><span id="selinfo">Nothing selected</span><span id="notice" role="status"></span><span id="cursor">X &ndash; Y &ndash;</span></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

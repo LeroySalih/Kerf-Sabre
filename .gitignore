@@ -10,3 +10,7 @@ spike/*.zip
 *.zip
 # Keep operator-collected spike results
 !spike/results/
+# Server runtime data and local environment
+server/data/
+server/.venv/
+*.egg-info/

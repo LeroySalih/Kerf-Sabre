@@ -1,6 +1,7 @@
 // The pages of the admin site. Each page draws itself into a host element and may return a function that stops its refreshing.
 import { openClasses, showPins } from "../classesui";
 import { openClassWork } from "../activitiesui";
+import { openCalibration } from "../calibrateui";
 import { infoDialog, openDialog } from "../dialog";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
@@ -166,19 +167,23 @@ const queue: Page = {
 // ---------------------------------------------------------------- lasers
 
 const lasers: Page = {
-  key: "lasers", title: "Lasers", lead: "The school's laser cutters and whether they are connected.",
+  key: "lasers", title: "Lasers", lead: "The school's laser cutters, whether they are connected, and each camera's calibration (so pupils can line designs up on the camera picture).",
   mount(host, ctx) {
     const s = ctx.session;
     return refreshing(host, async () => {
       const list = await listStations(s);
       if (!list.length) return host.replaceChildren(empty("No lasers are registered for this school yet."));
+      const calibrated = new Map<string, boolean>(list.map((st) => [st.id, !!st.calibrated]));
       const card = (st: StationInfo) => {
         const pct = st.progress && st.progress.totalLines > 0 ? Math.round((100 * st.progress.line) / st.progress.totalLines) : null;
         const send = (c: "stop" | "pause" | "resume") => void attempt(() => controlStation(s, st.id, c), () => {});
         return el("div", { class: "ad-card" }, el("h3", {}, st.id, " ", el("span", { class: `ad-tag ${st.online ? "ok" : "warn"}` }, st.online ? (st.state ?? "online") : "offline")),
           el("div", { class: "hint" }, st.online ? `Cutter ${st.cutterVersion ?? "?"}` : `Last seen ${st.lastSeen ? new Date(st.lastSeen).toLocaleString() : "never"}`),
           ...(st.currentJobId ? [el("p", {}, `Cutting ${st.currentJobId}${pct !== null ? ` · ${pct}%` : ""}`)] : []),
-          ...(st.online ? [el("div", { class: "row" }, btn("Pause", () => send("pause")), btn("Resume", () => send("resume")), btn("Stop", () => { if (confirm(`Stop ${st.id}?`)) send("stop"); }, "danger"))] : []));
+          el("p", {}, el("span", { class: `ad-tag ${calibrated.get(st.id) ? "ok" : "warn"}` }, calibrated.get(st.id) ? "camera calibrated" : "camera not calibrated")),
+          el("div", { class: "row" },
+            ...(st.online ? [btn("Pause", () => send("pause")), btn("Resume", () => send("resume")), btn("Stop", () => { if (confirm(`Stop ${st.id}?`)) send("stop"); }, "danger")] : []),
+            ...(st.cameraAvailable ? [btn(calibrated.get(st.id) ? "Recalibrate camera…" : "Calibrate camera…", () => void openCalibration(s, st.id))] : [])));
       };
       host.replaceChildren(el("div", { class: "ad-stations" }, ...list.map(card)));
     }, 3000);

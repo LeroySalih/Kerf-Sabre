@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.9 - camera alignment (additive)
+- `openapi.yaml`: **camera calibration** per laser: `GET/PUT/DELETE /stations/{id}/camera-calibration` (a laser PC or teacher reads, a teacher writes; 404 `not_calibrated` until done). It stores the camera picture size, the four bed corners as clicked in the picture, and the camera-pixel -> bed-mm homography (row-major 3x3); the server re-projects the points and refuses a matrix that does not map them. **Placement**: `POST /jobs/{id}/placement` takes `station` and `matrix` (a rigid 2x3, move and turn only) which is applied to every object's matrix; the job becomes `absolute`, must still fit the bed, the earlier Frame is cleared, and only the job whose turn it is can be placed (a teacher may `skipQueue`).
+- This is the first, approximate calibration (four clicked corners). The brief's accurate version (lens undistort + burned reference marks) can later replace the stored matrix without changing these endpoints.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.9`.
+
 ## 0.2.8 - schools (additive)
 - `openapi.yaml`: **schools**. Every class, pupil, activity, file, laser, queue and material list belongs to one school, and nobody in a school can see or change another's (another school's class, file, laser or material answers 404). New roles: `admin` (everything in their school, including every teacher's classes, and managing staff) and `platform` (creates schools and their first admin; sees nothing inside a school). `GET/POST /schools` (platform), `GET /school`, `GET/POST /staff` and `DELETE /staff/{id}` (school admin: teachers, other admins and station tokens; a token is shown once). `GET /auth/me` now includes `school`. `ClassInfo` is unchanged.
 - Class codes, pupil IDs and laser (station) IDs stay unique across the whole server (a pupil types the class code at login; a laser ID is also its station ID), so the second school to ask for a taken one is told to choose another. A station token can only connect as a laser registered to its own school. Material presets are per school: each new school starts with the placeholder list and edits its own.

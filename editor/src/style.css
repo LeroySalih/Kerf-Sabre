@@ -211,3 +211,24 @@ td.cell { cursor: pointer; min-width: 38px; }
 td.cell.st-todo { background: #f9fafb; }
 .kdialog.wide label { display: block; margin: 8px 0; }
 .kdialog.wide label input[type=text], .kdialog.wide label select, .kdialog.wide label input[type=datetime-local] { width: 100%; box-sizing: border-box; }
+
+/* Lining a design up on the camera picture (alignui.ts) and calibrating the camera (calibrateui.ts) */
+.al-help { margin: 0 0 8px; font-size: 15px; }
+.al-stage { background: #111827; border-radius: 8px; overflow: hidden; line-height: 0; max-width: 960px; }
+.al-stage .hint { margin: 0; padding: 20px; color: #d1d5db; line-height: 1.4; }
+.al-svg { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
+.al-svg:focus-visible { outline: 3px solid #2563eb; }
+.al-bed { fill: none; stroke: #f97316; stroke-width: 3; stroke-dasharray: 10 6; pointer-events: none; }
+.al-wait { fill: #d1d5db; font-size: 22px; }
+.al-grab { fill: rgba(255, 255, 255, 0.04); stroke: rgba(255, 255, 255, 0.35); stroke-dasharray: 6 5; cursor: move; }
+.al-shape { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
+.al-shape.cut { stroke: #ff4d4d; }
+.al-shape.score { stroke: #4da3ff; }
+.al-stem { stroke: #ffffff; stroke-width: 1.5; }
+.al-knob { fill: #ffffff; stroke: #f97316; stroke-width: 3; cursor: grab; }
+.al-readout { margin: 8px 0 2px; font-size: 14px; }
+.al-pad { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.al-pad button { min-width: 48px; height: 40px; font-size: 16px; }
+.cal-grid { stroke: rgba(249, 115, 22, 0.8); stroke-width: 1.2; }
+.cal-mark circle { fill: rgba(220, 38, 38, 0.25); stroke: #ef4444; stroke-width: 3; cursor: move; }
+.cal-mark text { fill: #ffffff; font-size: 22px; font-weight: 700; paint-order: stroke; stroke: #000; stroke-width: 3; pointer-events: none; }

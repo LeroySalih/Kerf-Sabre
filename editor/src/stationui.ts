@@ -1,10 +1,12 @@
 // Station mode (laser PC, signed in with the station token) and the teacher's Queue screen.
 // Station mode: the queue, the job that is next for this laser, Frame, confirm the material, Start, progress, Stop.
 // Nothing here talks to the laser: the server relays to the Cutter on this PC.
+import { createAlignView, type AlignView } from "./alignui";
+import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
 import { findPreset, presetLabel } from "./presets";
 import {
-  STATUS_TEXT, ServerError, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getJob,
+  STATUS_TEXT, ServerError, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -54,6 +56,10 @@ export function openStation(session: Session, onSignOut: () => void): void {
   let seenCurrent: string | null = null;
   let busy = false;
   let cam: string | null = null;
+  let calib: Calibration | null | undefined; // undefined: not asked yet; null: this laser's camera is not calibrated
+  let bed: { widthMm: number; heightMm: number } | null = null;
+  let polls = 0;
+  let aligning: { jobId: string; view: AlignView } | null = null;
   let data: { queue: QueueEntry[]; station?: StationInfo; failed: boolean } = { queue: [], failed: false };
 
   const say = (t: string, kind: "info" | "error" = "info") => { notice = t; noticeKind = kind; render(); };
@@ -81,6 +87,12 @@ export function openStation(session: Session, onSignOut: () => void): void {
       } catch { /* leave it */ }
     }
     seenCurrent = st?.currentJobId ?? null;
+    if (st?.cameraAvailable && !aligning) { // a teacher may calibrate while this page is open
+      if (!st.calibrated) calib = null;
+      else if (!calib || polls++ % 15 === 0) {
+        try { calib = await getCalibration(session, stationId); if (calib && !bed) bed = (await getMachine(session, stationId)).bed; } catch { /* try again later */ }
+      }
+    }
     if (st?.cameraAvailable) { const u = await cameraUrl(session, stationId); if (u) { if (cam) URL.revokeObjectURL(cam); cam = u; } }
     const next = data.queue.find((e) => e.next && e.status === "approved");
     if (next?.jobId && !jobCache.has(next.jobId)) { try { jobCache.set(next.jobId, await getJob(session, next.jobId)); } catch { /* retry next poll */ } }
@@ -92,6 +104,8 @@ export function openStation(session: Session, onSignOut: () => void): void {
     const next = data.queue.find((e) => e.next && e.status === "approved");
     const running = st?.currentJobId ? data.queue.find((e) => e.jobId === st.currentJobId) : undefined;
     if (next?.jobId !== confirmedFor) { confirmed = false; confirmedFor = next?.jobId ?? ""; }
+    if (aligning && (aligning.jobId !== next?.jobId || st?.currentJobId)) stopAlign(); // the job went away (or a cut started): leave the alignment
+    if (aligning && root.contains(aligning.view.el)) return; // the picture and the outline are being worked on: do not rebuild them under the pupil's hand
 
     const head = h("header", { class: "st-head" },
       h("strong", {}, "BISAK Kerf"), h("span", {}, `Laser: ${stationId}`),
@@ -106,6 +120,35 @@ export function openStation(session: Session, onSignOut: () => void): void {
     if (notice) panel.append(h("p", { class: noticeKind === "error" ? "st-error" : "st-note", role: "alert" }, notice));
     main.append(panel);
     root.replaceChildren(head, main);
+  }
+
+  function stopAlign(): void {
+    aligning?.view.destroy();
+    aligning = null;
+  }
+
+  async function startAlign(jobId: string): Promise<void> {
+    const job = jobCache.get(jobId);
+    if (!job) return;
+    try {
+      calib = await getCalibration(session, stationId);
+      if (calib && !bed) bed = (await getMachine(session, stationId)).bed;
+    } catch (e) { say(msg(e), "error"); return; }
+    if (!calib || !bed) { say("This laser's camera has not been set up yet. Ask a teacher to calibrate it on the Admin site.", "error"); return; }
+    notice = "";
+    const view = createAlignView({
+      session, stationId, objects: job.objects, calibration: calib, bed,
+      onCancel: () => { stopAlign(); render(); },
+      onConfirm: async (matrix) => {
+        await placeJob(session, jobId, stationId, matrix);
+        jobCache.delete(jobId); // it moved: look at the saved version
+        stopAlign();
+        notice = "Position saved. Press Frame: the laser traces the outline (laser off) so you can check it sits on your material."; noticeKind = "info";
+        await refresh();
+      },
+    });
+    aligning = { jobId, view };
+    render();
   }
 
   function cuttingPanel(st: StationInfo, e: QueueEntry | undefined): Node[] {
@@ -145,7 +188,11 @@ export function openStation(session: Session, onSignOut: () => void): void {
       ...(job?.origin.mode === "current-position" ? [h("li", {}, `Placed at the laser head (${job.origin.anchor.replace("-", " ")}). Move the head to that spot on your material before you Frame.`)] : []),
       ...(job?.warnings ?? []).map((w) => h("li", { class: "st-warn" }, w)));
     info.append(facts);
-    out.push(info, h("p", { class: "st-say" }, step.say));
+    if (aligning?.jobId === next.jobId) { out.push(aligning.view.el); return out; }
+    out.push(info);
+    if (st?.cameraAvailable && calib && bed && job) out.push(h("div", { class: "st-actions" }, button("Line up on the camera picture", () => void startAlign(next.jobId!), busy ? "disabled" : "on")));
+    else if (st?.cameraAvailable && calib === null) out.push(h("p", { class: "hint" }, "Camera alignment is not set up for this laser yet. A teacher can do it on the Admin site (Lasers). Until then, move the laser head to your material and press Frame."));
+    out.push(h("p", { class: "st-say" }, step.say));
     const check = h("input", { type: "checkbox" }) as HTMLInputElement;
     check.checked = confirmed;
     check.disabled = !step.framed || busy;
@@ -161,7 +208,7 @@ export function openStation(session: Session, onSignOut: () => void): void {
   }
 
   const stop = poller(refresh);
-  (root as HTMLElement & { _stop?: () => void })._stop = () => { stop(); if (cam) URL.revokeObjectURL(cam); };
+  (root as HTMLElement & { _stop?: () => void })._stop = () => { stop(); stopAlign(); if (cam) URL.revokeObjectURL(cam); };
   render();
 }
 

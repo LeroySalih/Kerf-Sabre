@@ -4,13 +4,17 @@
 
 It connects like the real Cutter will (outbound WebSocket, station token), reports GRBL-style status, answers frame and
 run_job, "cuts" for the job's estimated time (sped up with --speed) while reporting progress, and obeys stop/pause/resume.
-It never touches a serial port. The head position it reports (`--x`, `--y`) is where `current-position` jobs get placed.
+It also sends a test camera picture (`fake_bed.jpg`, once a second): a 640x480 view of a 400x400 mm bed whose corners
+(0,0), (400,0), (400,400), (0,400) are at camera pixels (110,430), (540,425), (500,40), (150,45), so camera calibration and
+design placement can be tried without a camera. It never touches a serial port. The head position it reports (`--x`, `--y`) is where `current-position` jobs get placed.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
+from importlib import resources
 import time
 import urllib.request
 
@@ -63,6 +67,14 @@ async def run(args: argparse.Namespace) -> None:
             state.update(state="Idle", job=None, paused=False)
             print(f"[fake cutter] {job_id} {outcome}")
 
+        picture = base64.b64encode(resources.files("kerf_server.devtools").joinpath("fake_bed.jpg").read_bytes()).decode()
+
+        async def camera() -> None:
+            while True:
+                await send({"type": "camera", "jpegBase64": picture})
+                await asyncio.sleep(1)
+
+        cam = asyncio.create_task(camera())
         hb = asyncio.create_task(heartbeat())
         try:
             async for raw in ws:
@@ -85,6 +97,7 @@ async def run(args: argparse.Namespace) -> None:
                         state["paused"], state["state"] = False, "Run"
         finally:
             hb.cancel()
+            cam.cancel()
 
 
 def main() -> None:

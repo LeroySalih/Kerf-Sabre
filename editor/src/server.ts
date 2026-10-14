@@ -1,6 +1,7 @@
 // Client for the BISAK Kerf Server (shared/openapi.yaml). The token and address live in this browser only.
 import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
+import type { Calibration } from "./alignlogic";
 
 export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
@@ -10,7 +11,7 @@ export interface QueueEntry {
 }
 export interface StationInfo {
   id: string; online: boolean; state?: string | null; mpos?: number[] | null; currentJobId?: string | null; cutterVersion?: string | null;
-  s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; lastSeen?: string | null;
+  s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; calibrated?: boolean; lastSeen?: string | null;
   progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
 }
 export interface JobSummary { activityId?: string | null; pupilId?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
@@ -151,6 +152,18 @@ export const approveJob = (s: Session, id: string, station?: string, f?: Fetch) 
 export const rejectJob = (s: Session, id: string, reason: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/reject`, { reason }, f);
 export const moveInQueue = (s: Session, id: string, body: { to?: "front" | "back" | "up" | "down"; position?: number }, f?: Fetch) => request<QueueEntry[]>(s, "POST", `/queue/${encodeURIComponent(id)}/move`, body, f);
 export const listJobsByStatus = (s: Session, status: string, f?: Fetch) => request<JobSummary[]>(s, "GET", `/jobs?status=${encodeURIComponent(status)}`, undefined, f);
+
+/** Where the camera picture sits on the bed, or null if a teacher has not calibrated this laser's camera yet. */
+export async function getCalibration(s: Session, station: string, f?: Fetch): Promise<Calibration | null> {
+  try { return await request<Calibration>(s, "GET", `/stations/${encodeURIComponent(station)}/camera-calibration`, undefined, f); }
+  catch (e) { if (e instanceof ServerError && e.code === "not_calibrated") return null; throw e; }
+}
+export const putCalibration = (s: Session, station: string, cal: Pick<Calibration, "imageWidth" | "imageHeight" | "points" | "homography">, f?: Fetch) => request<Calibration>(s, "PUT", `/stations/${encodeURIComponent(station)}/camera-calibration`, cal, f);
+export const deleteCalibration = (s: Session, station: string, f?: Fetch) => request<null>(s, "DELETE", `/stations/${encodeURIComponent(station)}/camera-calibration`, undefined, f);
+/** Fix the design's place on the bed after lining it up on the camera picture. `matrix` is a move and turn only. */
+export const placeJob = (s: Session, id: string, station: string, matrix: number[], f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/placement`, { station, matrix }, f);
+export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }
+export const getMachine = (s: Session, id: string, f?: Fetch) => request<MachineInfo>(s, "GET", `/machines/${encodeURIComponent(id)}`, undefined, f);
 
 /** The latest camera picture as an object URL (the caller revokes it), or null when there is none. */
 export async function cameraUrl(s: Session, station: string, f: Fetch = fetch): Promise<string | null> {

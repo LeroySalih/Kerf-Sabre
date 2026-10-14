@@ -1,61 +1,78 @@
 import { describe, expect, it } from "vitest";
-import { alignDeltas, distributeDeltas, unionBounds, type Unit } from "../src/align";
+import { applyMatrix, bedCorners, boundsOf, centreOf, degrees, fitsBed, makeCalibration, placementMatrix, toBed, toCam } from "../src/alignlogic";
+import { applyH, invertH, solveHomography } from "../src/homography";
 
-const u = (id: number, minX: number, minY: number, w: number, h: number): Unit => ({ ids: [id], bounds: { minX, minY, maxX: minX + w, maxY: minY + h } });
+// The pretend camera's picture: a 400 x 400 mm bed seen at these pixels (see devtools/fake_cutter.py).
+const CAM = [{ x: 110, y: 430 }, { x: 540, y: 425 }, { x: 500, y: 40 }, { x: 150, y: 45 }];
 
-describe("alignDeltas", () => {
-  const units = [u(1, 0, 0, 10, 10), u(2, 30, 20, 20, 5), u(3, 15, 50, 4, 40)];
-  const ref = unionBounds(units); // x 0..50, y 0..90
-
-  it("left / right line up on the reference edge", () => {
-    expect(alignDeltas(units, "left", ref).map((d) => d.x)).toEqual([0, -30, -15]);
-    expect(alignDeltas(units, "right", ref).map((d) => d.x)).toEqual([40, 0, 31]);
-    expect(alignDeltas(units, "left", ref).every((d) => d.y === 0)).toBe(true);
+describe("homography", () => {
+  it("maps the four points exactly onto their targets", () => {
+    const h = solveHomography(CAM, bedCorners(400, 400))!;
+    bedCorners(400, 400).forEach((b, i) => {
+      const p = applyH(h, CAM[i]!);
+      expect(p.x).toBeCloseTo(b.x, 6);
+      expect(p.y).toBeCloseTo(b.y, 6);
+    });
   });
-
-  it("top is the larger Y (bed space is Y-up); bottom is the smaller", () => {
-    expect(alignDeltas(units, "top", ref).map((d) => d.y)).toEqual([80, 65, 0]);
-    expect(alignDeltas(units, "bottom", ref).map((d) => d.y)).toEqual([0, -20, -50]);
+  it("inverts, and the inverse round-trips an interior point", () => {
+    const h = solveHomography(CAM, bedCorners(400, 400))!;
+    const inv = invertH(h)!;
+    const bed = applyH(h, { x: 320, y: 240 });
+    const back = applyH(inv, bed);
+    expect(back.x).toBeCloseTo(320, 6);
+    expect(back.y).toBeCloseTo(240, 6);
+    expect(bed.x).toBeGreaterThan(0); expect(bed.x).toBeLessThan(400);
   });
-
-  it("centre and middle align the centres", () => {
-    expect(alignDeltas(units, "centre", ref).map((d) => d.x)).toEqual([20, -15, 8]);
-    expect(alignDeltas(units, "middle", ref).map((d) => d.y)).toEqual([40, 22.5, -25]);
-  });
-
-  it("works against any reference, e.g. a bed", () => {
-    const bed = { minX: 0, minY: 0, maxX: 400, maxY: 300 };
-    const d = alignDeltas([u(1, 5, 5, 10, 10)], "centre", bed);
-    expect(d[0]!.x).toBe(190); // bed centre 200 minus the shape centre 10
-    expect(alignDeltas([u(1, 5, 5, 10, 10)], "top", bed)[0]!.y).toBe(285);
+  it("refuses three points in a line", () => {
+    expect(solveHomography([{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }, { x: 5, y: 0 }], bedCorners(10, 10))).toBeNull();
   });
 });
 
-describe("distributeDeltas", () => {
-  it("makes the gaps equal and keeps the outer two where they are", () => {
-    const units = [u(1, 0, 0, 10, 5), u(2, 12, 0, 10, 5), u(3, 100, 0, 20, 5)]; // x: 0-10, 12-22, 100-120
-    const d = distributeDeltas(units, "h");
-    // span 120, widths 40 -> gap 40: 0-10, 50-60, 100-120
-    expect(d.map((q) => q.x)).toEqual([0, 38, 0]);
-    expect(d.every((q) => q.y === 0)).toBe(true);
+describe("calibration from four clicks", () => {
+  it("accepts the corners in order and keeps the bed points with them", () => {
+    const c = makeCalibration(CAM, 400, 400, 640, 480)!;
+    expect(c.points.map((p) => p.bed)).toEqual([[0, 0], [400, 0], [400, 400], [0, 400]]);
+    expect(toBed(c, CAM[2]!).x).toBeCloseTo(400, 6);
+    const cam = toCam(c)({ x: 400, y: 0 });
+    expect(cam.x).toBeCloseTo(540, 5);
+    expect(cam.y).toBeCloseTo(425, 5);
   });
-
-  it("is independent of the order the shapes were selected in", () => {
-    const units = [u(3, 100, 0, 20, 5), u(1, 0, 0, 10, 5), u(2, 12, 0, 10, 5)];
-    expect(distributeDeltas(units, "h").map((q) => q.x)).toEqual([0, 0, 38]);
+  it("rejects clicks that go round the wrong way or cross over", () => {
+    expect(makeCalibration([...CAM].reverse(), 400, 400, 640, 480)).toBeNull();
+    expect(makeCalibration([CAM[0]!, CAM[2]!, CAM[1]!, CAM[3]!], 400, 400, 640, 480)).toBeNull();
   });
+});
 
-  it("distributes vertically", () => {
-    const units = [u(1, 0, 0, 5, 10), u(2, 0, 11, 5, 10), u(3, 0, 60, 5, 10), u(4, 0, 90, 5, 10)];
-    const d = distributeDeltas(units, "v");
-    const ys = units.map((q, i) => q.bounds.minY + d[i]!.y);
-    const gaps = [ys[1]! - (ys[0]! + 10), ys[2]! - (ys[1]! + 10), ys[3]! - (ys[2]! + 10)];
-    for (const g of gaps) expect(g).toBeCloseTo(gaps[0]!, 9);
-    expect(ys[0]).toBe(0);
-    expect(ys[3]).toBe(90);
+describe("placement", () => {
+  const square = [{ x: 10, y: 10 }, { x: 50, y: 10 }, { x: 50, y: 30 }, { x: 10, y: 30 }];
+  const c = centreOf(square);
+  it("the identity leaves the design where it is", () => {
+    const m = placementMatrix(0, c, 0, 0);
+    square.forEach((p) => { const q = applyMatrix(m, p); expect(q.x).toBeCloseTo(p.x); expect(q.y).toBeCloseTo(p.y); });
   });
-
-  it("needs three or more", () => {
-    expect(distributeDeltas([u(1, 0, 0, 1, 1), u(2, 5, 0, 1, 1)], "h")).toEqual([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+  it("a move shifts everything", () => {
+    const q = applyMatrix(placementMatrix(0, c, 100, -5), { x: 10, y: 10 });
+    expect(q).toEqual({ x: 110, y: 5 });
+  });
+  it("a turn is about the design's centre, counter-clockwise, and keeps the centre fixed", () => {
+    const m = placementMatrix(Math.PI / 2, c, 0, 0);
+    const cc = applyMatrix(m, c);
+    expect(cc.x).toBeCloseTo(c.x); expect(cc.y).toBeCloseTo(c.y);
+    const q = applyMatrix(m, { x: 50, y: 20 }); // the right-hand middle of the square goes to the top
+    expect(q.x).toBeCloseTo(c.x); expect(q.y).toBeCloseTo(c.y + 20);
+    const b = boundsOf(square.map((p) => applyMatrix(m, p)));
+    expect(b.maxX - b.minX).toBeCloseTo(20); expect(b.maxY - b.minY).toBeCloseTo(40);
+  });
+  it("is rigid: what the server accepts (a = d, b = -c, unit length)", () => {
+    const [a, b, cc, d] = placementMatrix(0.7, c, 3, 4);
+    expect(a).toBeCloseTo(d); expect(b).toBeCloseTo(-cc); expect(a * a + b * b).toBeCloseTo(1);
+  });
+  it("knows when the design is off the bed", () => {
+    expect(fitsBed(square, 400, 400)).toBe(true);
+    expect(fitsBed(square.map((p) => applyMatrix(placementMatrix(0, c, 380, 0), p)), 400, 400)).toBe(false);
+  });
+  it("shows angles in -180..180", () => {
+    expect(degrees(Math.PI * 1.5)).toBeCloseTo(-90);
+    expect(degrees(Math.PI)).toBeCloseTo(180);
   });
 });

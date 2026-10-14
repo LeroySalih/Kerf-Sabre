@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.8
+  version: 0.2.9
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -823,6 +823,52 @@ paths:
           content:
             application/json:
               schema: {type: array, items: {$ref: "#/components/schemas/Station"}}
+  /stations/{stationId}/camera-calibration:
+    parameters:
+      - {name: stationId, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Station or teacher. Where the camera picture sits on the bed (camera pixels -> bed mm)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CameraCalibration"}
+        "404": {description: "No such laser, or not_calibrated yet"}
+    put:
+      summary: Teacher. Save a calibration made by clicking the four bed corners in the camera picture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CameraCalibration"}
+      responses:
+        "200": {description: Saved}
+        "422": {description: Malformed, or the matrix does not map the points to their bed positions}
+    delete:
+      summary: Teacher. Forget the calibration
+      responses:
+        "204": {description: Removed}
+  /jobs/{jobId}/placement:
+    post:
+      summary: Station or teacher. Fix the design's position on the bed after it was lined up on the camera picture
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [station, matrix]
+              properties:
+                station: {type: string}
+                matrix: {type: array, minItems: 6, maxItems: 6, items: {type: number}, description: "[a,b,c,d,e,f]: move and turn only (a=d, b=-c, a^2+b^2=1). Applied to every object's matrix."}
+                skipQueue: {type: boolean, description: Teacher only}
+      responses:
+        "200": {description: "{bounds}: where the design now sits on the bed"}
+        "409": {description: "not_approved, wrong_station or not_your_turn"}
+        "422": {description: Not a rigid transform, or the design would no longer fit the bed}
   /stations/{stationId}:
     parameters:
       - {name: stationId, in: path, required: true, schema: {type: string}}
@@ -1027,6 +1073,25 @@ components:
         teacherId: {type: [string, "null"], description: "The teacher who looks after the class; null for a shared class any teacher may manage"}
         pupilCount: {type: integer}
         requireApproval: {type: boolean, description: "Whether a teacher must approve this class's files before they can be cut"}
+    CameraCalibration:
+      type: object
+      required: [imageWidth, imageHeight, points, homography]
+      properties:
+        imageWidth: {type: integer}
+        imageHeight: {type: integer}
+        points:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: object
+            required: [camera, bed]
+            properties:
+              camera: {type: array, items: {type: number}, minItems: 2, maxItems: 2, description: "Pixels in the camera picture (Y down)"}
+              bed: {type: array, items: {type: number}, minItems: 2, maxItems: 2, description: "Bed mm (Y up)"}
+        homography: {type: array, items: {type: number}, minItems: 9, maxItems: 9, description: "Row-major 3x3, camera pixels -> bed mm"}
+        calibratedBy: {type: string, readOnly: true}
+        calibratedAt: {type: string, format: date-time, readOnly: true}
     ClassPupil:
       type: object
       required: [pupilId, locked]

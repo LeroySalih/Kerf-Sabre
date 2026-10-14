@@ -102,6 +102,8 @@ class MachineRow(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)  # a laser's ID is unique across all schools (it is also its station ID)
     school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    #: Camera picture -> bed mapping for this laser (services_presets.put_calibration). None until a teacher calibrates it.
+    camera_calibration: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

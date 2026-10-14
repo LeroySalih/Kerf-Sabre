@@ -65,6 +65,40 @@ def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, ski
     return b
 
 
+def place(s: Session, cfg: Settings, who, j: Job, station_id: str, matrix: Any, skip_queue: bool = False) -> dict[str, Any]:
+    """The pupil lined the design up on the camera picture: move it (a rigid transform, no stretching) and fix it to exact bed
+    positions. The job becomes absolute and must still fit the bed. Only the job whose turn it is can be placed."""
+    machine = sp.get_machine(s, j.school_id, station_id)
+    if machine is None:
+        raise ApiError(404, "not_found", f"There is no laser '{station_id}'.")
+    if j.status != "approved":
+        raise ApiError(409, "not_approved", f"This job is {j.status}; only an approved job can be placed on a laser.")
+    if j.station and j.station != station_id:
+        raise ApiError(409, "wrong_station", f"A teacher chose {j.station} for this job.")
+    if not skip_queue:
+        queue.check_turn(s, cfg, j, station_id)
+    if not (isinstance(matrix, list) and len(matrix) == 6 and all(isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) < 1e6 for v in matrix)):
+        raise ApiError(422, "invalid", "matrix is 6 numbers [a, b, c, d, e, f].")
+    a, b, c, d, e, f = (float(v) for v in matrix)
+    if abs(a - d) > 1e-4 or abs(b + c) > 1e-4 or abs(a * a + b * b - 1) > 1e-4:
+        raise ApiError(422, "invalid", "Placing a design can only move and turn it, not stretch or flip it.")
+    objects = []
+    for o in j.objects:
+        m = [float(v) for v in o["matrix"]]
+        objects.append({**o, "matrix": [a * m[0] + c * m[1], b * m[0] + d * m[1], a * m[2] + c * m[3], b * m[2] + d * m[3], a * m[4] + c * m[5] + e, b * m[4] + d * m[5] + f]})
+    old = (j.objects, j.origin)
+    j.objects, j.origin = objects, {"mode": "absolute"}
+    try:
+        r = sj.make_gcode(s, j, machine, None)  # raises 422 if it no longer fits the bed
+    except ApiError:
+        j.objects, j.origin = old
+        raise
+    j.framed_station = j.framed_at = j.framed_bounds = None  # the old frame no longer matches
+    b_ = bounds_doc(r.bounds)
+    sj.event(s, j.id, who.id, "placed", {"station": station_id, "matrix": [round(v, 6) for v in (a, b, c, d, e, f)], "bounds": b_})
+    return b_
+
+
 def assign_checks(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, material_confirmed: bool, allow_untested: bool, skip_queue: bool = False):
     """Everything that must hold before the Cutter is told to cut. Returns (live, machine, result, gcode row)."""
     if not material_confirmed:

@@ -29,7 +29,7 @@ kerf-server = "kerf_server.main:run"
 include = ["kerf_server*"]
 
 [tool.setuptools.package-data]
-kerf_server = ["seed/*.json"]
+kerf_server = ["seed/*.json", "devtools/*.jpg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

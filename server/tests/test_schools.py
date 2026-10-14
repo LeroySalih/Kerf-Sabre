@@ -214,3 +214,19 @@ def test_a_database_made_before_schools_moves_into_the_default_school(tmp_path):
         t = {"Authorization": "Bearer " + issue_token(app.state.db, "teacher", "T1")}
         assert [x["code"] for x in c.get(f"{API}/classes", headers=t).json()] == ["OLD"]
         assert "ply-old" in {p["id"] for p in c.get(f"{API}/presets", headers=t).json()}
+
+
+class TestCameraIsPerSchool:
+    def test_calibration_and_placement_do_not_cross_schools(self, client, world):
+        from .test_camera import calibration
+
+        a, b = world["alpha"], world["beta"]
+        assert client.put(f"{API}/stations/beta-laser/camera-calibration", json=calibration(), headers=a["admin"]).status_code == 404
+        assert client.get(f"{API}/stations/beta-laser/camera-calibration", headers=a["teacher"]).status_code == 404
+        assert client.put(f"{API}/stations/beta-laser/camera-calibration", json=calibration(), headers=b["teacher"]).status_code == 200
+        assert client.get(f"{API}/stations/beta-laser/camera-calibration", headers=a["admin"]).status_code == 404
+        assert client.delete(f"{API}/stations/beta-laser/camera-calibration", headers=a["admin"]).status_code == 404
+        jid = TestFilesAndQueueAreSeparate().submit(client, b)
+        client.post(f"{API}/jobs/{jid}/approve", headers=b["teacher"])
+        r = client.post(f"{API}/jobs/{jid}/placement", json={"station": "beta-laser", "matrix": [1, 0, 0, 1, 1, 1]}, headers=a["admin"])
+        assert r.status_code == 404

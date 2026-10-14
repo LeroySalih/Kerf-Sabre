@@ -38,13 +38,34 @@ def own_station(request: Request, who: Principal, station_id: str) -> None:
 @router.get("/stations")
 def list_stations(request: Request, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     hub = request.app.state.hub
-    return [hub.get(i).doc() for i in station_ids(s, who.school)]
+    done = sp.calibrated_ids(s, who.school)
+    return [{**hub.get(i).doc(), "calibrated": i in done} for i in station_ids(s, who.school)]
 
 
 @router.get("/stations/{station_id}")
 def get_station(station_id: str, request: Request, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     known(s, who, station_id)
-    return request.app.state.hub.get(station_id).doc()
+    return {**request.app.state.hub.get(station_id).doc(), "calibrated": station_id in sp.calibrated_ids(s, who.school)}
+
+
+@router.get("/stations/{station_id}/camera-calibration")
+def get_camera_calibration(station_id: str, who: Principal = Depends(require("station", "teacher")), s: Session = Depends(get_session)):
+    """Where the camera picture sits on the bed, or 404 not_calibrated. Any laser PC or teacher of the school may read it."""
+    cal = sp.get_calibration(s, who.school, station_id)
+    if cal is None:
+        raise ApiError(404, "not_calibrated", f"The camera on {station_id} has not been calibrated yet. A teacher can do this on the Admin site's Lasers page.")
+    return cal
+
+
+@router.put("/stations/{station_id}/camera-calibration")
+def put_camera_calibration(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    return sp.put_calibration(s, who.school, station_id, body, who.id)
+
+
+@router.delete("/stations/{station_id}/camera-calibration", status_code=204)
+def delete_camera_calibration(station_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    sp.clear_calibration(s, who.school, station_id)
+    return Response(status_code=204)
 
 
 @router.post("/jobs/{job_id}/frame", status_code=202)
@@ -60,6 +81,16 @@ async def frame_job(job_id: str, request: Request, body: dict[str, Any] = Body(.
     await hub.send(station, {"type": "control", "command": "frame", "jobId": job_id, "bounds": b})
     hub.server_log(station, "INFO", "frame sent", job_id)
     return {"bounds": b}
+
+
+@router.post("/jobs/{job_id}/placement")
+def place_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """Fix the design's position on the bed after the pupil lined it up on the camera picture (`matrix`: move and turn only)."""
+    station = body.get("station")
+    if not isinstance(station, str):
+        raise ApiError(422, "invalid", "Say which station the design is placed on.")
+    known(s, who, station)
+    return {"bounds": run.place(s, cfg, who, sj.get_visible(s, job_id, who), station, body.get("matrix"), body.get("skipQueue") is True)}
 
 
 @router.post("/jobs/{job_id}/assign")

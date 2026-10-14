@@ -28,6 +28,7 @@ import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs"
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 import { initServerUi } from "./serverui";
+import { cleanPoints, splinePath } from "./spline";
 import { boxDimensions, dimGeometry, dimLabel, linearAxis, pickDimension, radialFromPath, type DimAxis, type Dimension, type LinearDim } from "./dimensions";
 
 mountIcons();
@@ -40,7 +41,7 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text" | "dim" | "dimr";
+type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text" | "dim" | "dimr" | "spline";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
@@ -48,6 +49,7 @@ let nodeSel: { id: number; index: number } | null = null; // the node picked in 
 let nodeDrag: { id: number; index: number; base: Path; started: boolean } | null = null;
 let activeLayer: LayerType = "cut"; // layer for newly drawn shapes; the chips in the bottom bar change it
 let penPoints: Point[] = []; // vertices placed so far by the Pen tool (bed mm)
+let splinePts: Point[] = []; // points placed so far by the Spline tool (bed mm)
 let penCursor: Point | null = null; // snapped cursor, for the rubber band
 let showGimbal = false;
 let gizmoHover: Handle | null = null;
@@ -452,6 +454,20 @@ function draw(): void {
       dot.fillColor = new paper.Color(i === 0 ? "#059669" : "#6b7280");
     });
   }
+  if (splinePts.length) {
+    const pts = penCursor ? [...splinePts, penCursor] : splinePts;
+    const curve = splinePath(pts, false);
+    if (curve) {
+      const g = toPaperPath(curve);
+      g.strokeColor = new paper.Color("#6b7280");
+      g.strokeWidth = 1.5;
+      g.dashArray = [4, 4];
+    }
+    splinePts.forEach((q, i) => {
+      const dot = new paper.Path.Circle(toScreen(q), i === 0 ? 5 : 3);
+      dot.fillColor = new paper.Color(i === 0 ? "#059669" : "#2563eb");
+    });
+  }
   if (trimPreview) {
     const g = toPaperPath(trimPreview);
     g.strokeColor = new paper.Color("#f97316");
@@ -511,12 +527,13 @@ function setTool(next: Tool): void {
   nodeDrag = null;
   refreshOptions();
   penPoints = [];
+  splinePts = [];
   penCursor = null;
   dimDraft = null;
   trimPreview = null;
   snapMarker = null;
   if (tool !== "measure") measureLine = null;
-  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" || tool === "tab" || tool === "dim" || tool === "dimr" ? "crosshair" : "";
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" || tool === "tab" || tool === "dim" || tool === "dimr" || tool === "spline" ? "crosshair" : "";
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
   draw();
 }
@@ -822,7 +839,10 @@ window.addEventListener("blur", () => { panning = null; setSpace(false); });
 
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLSelectElement || (e.target instanceof HTMLInputElement && e.target.type !== "radio")) return; // typing in a field
-  if (tool === "pen" && penPoints.length && e.key === "Enter") { e.preventDefault(); penFinish(false); }
+  if (tool === "spline" && splinePts.length && e.key === "Enter") { e.preventDefault(); splineFinish(false); }
+  else if (tool === "spline" && splinePts.length && e.key === "Escape") splineCancel();
+  else if (tool === "spline" && splinePts.length && (e.key === "Backspace" || e.key === "Delete")) { e.preventDefault(); splinePts.pop(); draw(); }
+  else if (tool === "pen" && penPoints.length && e.key === "Enter") { e.preventDefault(); penFinish(false); }
   else if (tool === "pen" && penPoints.length && e.key === "Escape") penCancel();
   else if (tool === "dim" && dimDraft && e.key === "Escape") { dimDraft = null; draw(); }
   else if (tool === "pen" && penPoints.length && (e.key === "Backspace" || e.key === "Delete")) { penPoints.pop(); draw(); }
@@ -946,6 +966,35 @@ function penClick(p: Point): void {
   const last = penPoints[penPoints.length - 1];
   if (last && Math.hypot(last.x - p.x, last.y - p.y) < 1e-6) return; // the second click of a double-click
   penPoints.push(p);
+  draw();
+}
+
+/** Finish the Spline tool: a smooth curve through the clicked points (closed or open). */
+function splineFinish(closed: boolean): void {
+  const points = cleanPoints(splinePts, closed);
+  const path = splinePath(points, closed);
+  splinePts = [];
+  penCursor = null;
+  if (!path) { notify(closed ? "A closed spline needs at least 3 points." : "A spline needs at least 2 points."); draw(); return; }
+  const isLine = path.segs.length === 1 && path.segs[0]!.t === "l";
+  edit(() => {
+    const o = doc.add(path, IDENTITY, activeLayer);
+    if (!isLine) o.spline = { points, closed };
+    selected = new Set([o.id]);
+  });
+}
+const splineCancel = () => { if (splinePts.length) { splinePts = []; penCursor = null; draw(); } };
+
+/** A click with the Spline tool: add a point, or close the curve when the first point is clicked again. */
+function splineClick(p: Point): void {
+  const first = splinePts[0];
+  if (first && splinePts.length >= 3) {
+    const a = bedToScreen(view, first), b = bedToScreen(view, p);
+    if (Math.hypot(a.x - b.x, a.y - b.y) <= 10) { splineFinish(true); return; }
+  }
+  const last = splinePts[splinePts.length - 1];
+  if (last && Math.hypot(last.x - p.x, last.y - p.y) < 1e-6) return; // the second click of a double-click
+  splinePts.push(p);
   draw();
 }
 
@@ -1096,6 +1145,7 @@ canvas.addEventListener("mousedown", (e) => {
   if (tool === "radius") { if (e.button === 0) doCorner(bedPt(e)); return; }
   if (tool === "tab") { if (e.button === 0) doTab(bedPt(e)); return; }
   if (tool === "pen") { if (e.button === 0) penClick(snapPt(bedPt(e), e)); return; }
+  if (tool === "spline") { if (e.button === 0) splineClick(snapPt(bedPt(e), e)); return; }
   if (tool === "dim") { if (e.button === 0) dimClick(snapPt(bedPt(e), e)); return; }
   if (tool === "dimr") { if (e.button === 0) dimRadialClick(e); return; }
   if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
@@ -1131,9 +1181,14 @@ window.addEventListener("mousemove", (e) => {
   if (nodeDrag) {
     const o = doc.get(nodeDrag.id);
     if (!o) return;
-    if (!nodeDrag.started) { doc.checkpoint(); doc.convertText([o.id]); nodeDrag.started = true; }
+    if (!nodeDrag.started) { doc.checkpoint(); if (!o.spline) doc.convertText([o.id]); nodeDrag.started = true; }
     const cur = snapPt(bedPt(e), e);
-    o.path = moveNode(nodeDrag.base, nodeDrag.index, cur);
+    if (o.spline) { // a spline's nodes are the points its curve passes through: re-fit the curve
+      const pts = nodePoints(nodeDrag.base);
+      pts[nodeDrag.index] = cur;
+      const fitted = splinePath(pts, o.spline.closed);
+      if (fitted) { o.path = fitted; o.spline = { points: pts, closed: o.spline.closed }; }
+    } else o.path = moveNode(nodeDrag.base, nodeDrag.index, cur);
     o.matrix = [...IDENTITY] as Matrix;
     draw();
     return;
@@ -1153,7 +1208,7 @@ canvas.addEventListener("mousemove", (e) => {
   }
   const raw = bedPt(e);
   cursorEl.textContent = `X ${raw.x.toFixed(1)}  Y ${raw.y.toFixed(1)} mm`;
-  if (tool === "pen") { penCursor = snapPt(raw, e); draw(); return; }
+  if (tool === "pen" || tool === "spline") { penCursor = snapPt(raw, e); draw(); return; }
   if (tool === "dim") { dimCursor = snapPt(raw, e); draw(); return; }
   const p = isDrawTool() ? snapPt(raw, e) : raw;
   if (isDrawTool() && !dragStart) draw(); // show the snap marker while hovering
@@ -1199,7 +1254,10 @@ window.addEventListener("mouseup", (e) => {
   draw();
 });
 
-canvas.addEventListener("dblclick", () => { if (tool === "pen" && penPoints.length) penFinish(penPoints.length >= 3); });
+canvas.addEventListener("dblclick", () => {
+  if (tool === "pen" && penPoints.length) penFinish(penPoints.length >= 3);
+  else if (tool === "spline" && splinePts.length) splineFinish(false);
+});
 
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
@@ -1415,6 +1473,15 @@ function deleteSelectedNode(): boolean {
   const o = doc.get(nodeSel.id);
   if (!o) return false;
   const base = transformPath(o.path, o.matrix);
+  if (o.spline) {
+    const pts = nodePoints(base).filter((_, i) => i !== nodeSel!.index);
+    const fitted = splinePath(pts, o.spline.closed);
+    if (!fitted) { notify("A spline needs at least 2 points (3 if it is closed)."); return true; }
+    const closed = o.spline.closed;
+    edit(() => { o.path = fitted; o.spline = fitted.segs.length === 1 && fitted.segs[0]!.t === "l" ? undefined : { points: pts, closed }; o.matrix = [...IDENTITY] as Matrix; });
+    nodeSel = null;
+    return true;
+  }
   const next = deleteNode(base, nodeSel.index);
   if (!next) { notify("A shape needs at least two nodes (three if it is closed)."); return true; }
   edit(() => { doc.convertText([o.id]); o.path = next; o.matrix = [...IDENTITY] as Matrix; });
@@ -1438,7 +1505,14 @@ canvas.addEventListener("dblclick", (e) => {
     cur = sg.to;
   });
   if (!best) return;
-  edit(() => { doc.convertText([o.id]); o.path = insertNode(base, (best as { si: number }).si, p); o.matrix = [...IDENTITY] as Matrix; });
+  const inserted = insertNode(base, (best as { si: number }).si, p);
+  if (o.spline) { // add a point the curve must pass through, where you clicked on it
+    const pts = nodePoints(inserted);
+    const fitted = splinePath(pts, o.spline.closed);
+    if (fitted) edit(() => { o.path = fitted; o.spline = { points: pts, closed: o.spline!.closed }; o.matrix = [...IDENTITY] as Matrix; });
+    return;
+  }
+  edit(() => { doc.convertText([o.id]); o.path = inserted; o.matrix = [...IDENTITY] as Matrix; });
 });
 
 // ---- tabs (bridges) ----

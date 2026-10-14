@@ -26,6 +26,7 @@ export const ICONS: Record<string, string> = {
   dim: '<path d="M4 8v8M20 8v8"/><path d="M4 12h16"/><path d="M4 12l3-1.8v3.6zM20 12l-3-1.8v3.6z" fill="currentColor"/>',
   "dim-radial": '<circle cx="12" cy="12" r="8"/><path d="M5.2 16.2L18.8 7.8"/><path d="M5.2 16.2l3-.6-1.4-2zM18.8 7.8l-3 .6 1.4 2z" fill="currentColor"/>',
   "dim-auto": '<rect x="6" y="5" width="12" height="9"/><path d="M6 19h12M6 17.2v3.6M18 17.2v3.6"/>',
+  spline: '<path d="M3.5 17C7 17 6.5 6.5 11 7.5s3 9.5 9.5-1"/><circle cx="3.5" cy="17" r="1.6" fill="currentColor"/><circle cx="11" cy="7.5" r="1.6" fill="currentColor"/><circle cx="20.5" cy="6.5" r="1.6" fill="currentColor"/>',
   gimbal: '<circle cx="12" cy="12" r="1.8"/><path d="M12 10.2V3.8M9.9 5.9L12 3.8l2.1 2.1M13.8 12h6.4M18.1 9.9l2.1 2.1-2.1 2.1"/><path d="M7.2 16.8a6.5 6.5 0 0 0 9.6 0"/>',
   // ---- boolean ----
   union: '<path d="M4 4h10v6h6v10H10v-6H4z" fill="currentColor" fill-opacity=".18"/>',

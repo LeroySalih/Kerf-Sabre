@@ -2,6 +2,7 @@
 import { multiply, translation, type Matrix, type Path } from "./geometry";
 import { DEFAULT_MATERIAL_ID } from "./presets";
 import type { Dimension } from "./dimensions";
+import type { SplineSpec } from "./spline";
 import type { TabSpec } from "./tabs";
 import type { TextSpec } from "./text";
 
@@ -16,6 +17,8 @@ export interface DocObject {
   group?: number;
   /** Set on every contour of a live text object; see DocState.texts. Cleared by Convert to Path. */
   textId?: number;
+  /** Set on a shape drawn with the Spline tool: the points its curve passes through (design space). Editing a node re-fits the curve. Any other edit makes it a plain path. */
+  spline?: SplineSpec;
   /** Per-shape override of the material's power/speed, e.g. one cell of a material test grid. */
   settings?: ShapeSettings;
   /** Tabs (bridges) left uncut on a closed Cut outline. Applied when exporting and when generating G-code. */
@@ -176,6 +179,7 @@ export class Doc {
 
   /** Convert text to plain paths: the contours stay, the editable text goes. */
   convertText(ids: Iterable<number>): void {
+    for (const o of this.state.objects) if (o.spline && new Set(this.expand(ids)).has(o.id)) delete o.spline; // a baked path is no longer a live spline
     const textIds = new Set(this.state.objects.filter((o) => new Set(this.expand(ids)).has(o.id) && o.textId !== undefined).map((o) => o.textId!));
     for (const o of this.state.objects) if (o.textId !== undefined && textIds.has(o.textId)) delete o.textId;
     for (const t of textIds) delete this.state.texts[t];

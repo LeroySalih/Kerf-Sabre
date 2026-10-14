@@ -36,7 +36,7 @@ IF SOMETHING GOES WRONG
       env.txt       the PC, Python, serial driver and USB devices
   - Windows says the file is blocked, or nothing opens: the school may block
     programs in this folder. Tell IT to allow this folder.
-  - "No serial ports found": the CH340 USB driver may be missing. Tell Mr Salih.
+  - "No serial ports found": the laser may be unplugged or its USB driver missing. Tell Mr Salih.
   - Press Ctrl+C at any time to stop. The laser is told to stop immediately.
 
 SEND THE RESULTS BACK

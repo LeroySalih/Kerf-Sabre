@@ -274,6 +274,7 @@ class Runner:
         self.log_file = None
         self.link: Link | None = None
         self.port: str | None = None
+        self.candidates: list[str] = []
         self.ports: list[dict] = []
         self.banner: str | None = None
         self.settings: dict[int, str] = {}
@@ -371,51 +372,71 @@ class Runner:
             self.say(f"  {p['device']}: {p['description']} (VID {p['vid']}, PID {p['pid']})")
         if self.args.port:
             self.port = self.args.port
-            return self.port
-        candidates = [p for p in self.ports if is_ch340(p)]
-        if len(candidates) == 1:
-            self.port = candidates[0]["device"]
+            self.candidates = [self.port]
             return self.port
         if not self.ports:
-            raise RuntimeError("No serial ports found. Is the laser plugged in and the CH340 driver installed?")
-        self.say("Could not pick the laser port automatically.")
-        choice = self.prompt("Type the port name of the laser (e.g. COM3): ").strip()
-        if choice not in [p["device"] for p in self.ports]:
-            raise RuntimeError(f"Port {choice!r} is not in the list above")
-        self.port = choice
-        return choice
+            raise RuntimeError("No serial ports found. Is the laser plugged in and the USB driver installed?")
+        # Hunt: every port is a candidate, most likely first (CH340, then other USB devices, then the rest).
+        ranked = sorted(self.ports, key=lambda p: (0 if is_ch340(p) else 1 if p.get("vid") is not None else 2))
+        self.candidates = [p["device"] for p in ranked]
+        self.say(f"Will try these ports in turn until one answers like GRBL: {', '.join(self.candidates)}")
+        self.port = self.candidates[0]
+        return self.port
 
     def open_link(self) -> str:
-        self.event("opening_port", port=self.port, baud=self.args.baud)
+        ports = self.candidates or [self.port]
+        errors: list[str] = []
+        for port in ports:
+            self.port = port
+            self.say(f"Trying {port} ...")
+            try:
+                banner = self.try_port(port)
+            except RuntimeError as exc:
+                errors.append(str(exc))
+                self.say(f"  {port}: no GRBL ({exc})")
+                self.event("port_rejected", port=port, reason=str(exc))
+                self.close_link()
+                continue
+            self.banner = banner
+            self.event("banner", banner=banner, port=port)
+            return banner
+        raise RuntimeError(" | ".join(errors) or "no ports to try")
+
+    def close_link(self) -> None:
+        if self.link:
+            try:
+                self.link.ser.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self.link = None
+
+    def try_port(self, port: str) -> str:
+        self.event("opening_port", port=port, baud=self.args.baud)
         try:
-            ser = self.open_serial(self.port, self.args.baud)
+            ser = self.open_serial(port, self.args.baud)
         except Exception as exc:  # noqa: BLE001
             hint = ("Access denied: another program (LightBurn, LaserGRBL, a serial monitor, another spike) has the port open. Close it."
-                    if "denied" in str(exc).lower() or "busy" in str(exc).lower() else "Check the cable, the CH340 driver and the port name.")
+                    if "denied" in str(exc).lower() or "busy" in str(exc).lower() else "Check the cable, the driver and the port name.")
             if self.session:
-                self.session.error(f"could not open {self.port}: {type(exc).__name__}: {exc}. {hint}", exc)
-            raise RuntimeError(f"Could not open {self.port}: {exc}. {hint}") from exc
+                self.session.error(f"could not open {port}: {type(exc).__name__}: {exc}. {hint}", exc)
+            raise RuntimeError(f"Could not open {port}: {exc}. {hint}") from exc
         self.link = Link(ser, self.log_file, self.clock, self.sleep, self.session)
         banner = self.link.wait_for_banner(2.0)
         if not banner:
-            self.event("no_banner_sending_soft_reset")
+            self.event("no_banner_sending_soft_reset", port=port)
             self.link.realtime(b"\x18")  # soft reset provokes the banner
             banner = self.link.wait_for_banner(5.0)
         if not banner:
-            raise RuntimeError("No 'Grbl 1.1x' banner received within timeout")
-        self.banner = banner
-        self.event("banner", banner=banner)
+            raise RuntimeError(f"No 'Grbl 1.1x' banner received on {port} within timeout")
         return banner
 
     # ---- tests ----------------------------------------------------------------
     def test_1(self):
         port = self.select_port()
         ch340 = [p["device"] for p in self.ports if is_ch340(p)]
-        if not ch340 and not self.args.port:
-            pass  # user chose manually; still record the lack of a CH340 below
         details = {"selected": port, "ports": self.ports, "ch340_ports": ch340}
-        if port not in ch340:
-            return FAIL, {**details, "note": "selected port is not a CH340-type port"}
+        if port not in ch340:  # informational: the banner test decides whether it really is the laser
+            details["note"] = "selected port is not a CH340-type port"
         return PASS, details
 
     def test_2(self):
@@ -754,7 +775,7 @@ class Runner:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Kerf Cutter spike: laser connectivity test")
     p.add_argument("--mode", choices=("auto", "console"), help="auto test or raw console")
-    p.add_argument("--port", help="serial port, e.g. COM3 (default: auto-detect CH340)")
+    p.add_argument("--port", help="serial port, e.g. COM3 (default: hunt through all ports)")
     p.add_argument("--baud", type=int, default=115200)
     p.add_argument("--station", help="station name, e.g. station1")
     p.add_argument("--server-url", dest="server_url", help="Kerf Server URL for the HTTPS test")

@@ -367,3 +367,17 @@ def test_an_unexpected_crash_in_main_is_logged_with_its_traceback_and_still_zipp
     log = (folder / "session.log").read_text()
     assert "driver exploded" in log and "Traceback" in log
     assert list(tmp_path.glob("s9_*.zip"))
+
+
+def test_hunts_through_ports_until_grbl_answers(tmp_path):
+    amt = {"device": "COM3", "description": "Intel(R) Active Management Technology - SOL (COM3)", "vid": None, "pid": None, "hwid": "PCI\\VEN_8086"}
+    esp = {"device": "COM5", "description": "USB Serial Device (COM5)", "vid": 0x303A, "pid": 0x4001, "hwid": "USB VID:PID=303A:4001"}
+    mock, silent, opened = MockGrbl(), MockGrbl(), []
+    silent.readline = lambda *a, **k: b""; silent.write = lambda data: len(data)  # a port that never answers
+    runner, _ = make_runner(tmp_path, mock=mock, ports=[amt, esp])
+    runner.open_serial = lambda port, baud: (opened.append(port), mock if port == "COM3" else silent)[1]
+    runner.select_port()
+    assert runner.candidates == ["COM5", "COM3"]  # USB device ranked before the AMT port
+    runner.open_link()
+    assert runner.port == "COM3" and opened == ["COM5", "COM3"]  # silent COM5 rejected, COM3 answered
+    runner.close()

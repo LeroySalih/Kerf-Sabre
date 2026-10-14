@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "0.2.12",
+  "id": "station-2",
+  "name": "Station 2",
+  "model": null,
+  "placeholder": false,
+  "bed": {
+    "widthMm": 400,
+    "heightMm": 415,
+    "originCorner": "front-left"
+  },
+  "grbl": {
+    "s30Max": 1000,
+    "laserMode": true,
+    "homingEnabled": true,
+    "maxRateXY": 8000,
+    "accelerationXY": 1000,
+    "baud": 115200
+  },
+  "airAssist": {
+    "supported": true,
+    "command": "M8"
+  },
+  "camera": {
+    "type": "usb-uvc"
+  }
+}

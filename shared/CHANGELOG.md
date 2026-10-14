@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.12 - real machine profiles (additive)
+- `machine-profiles/`: the four placeholder profiles are replaced by the values measured in the spike (`docs/spike-results.md`, `spike/results/*/settings.txt`): stations 1 and 2 have a 400 x 415 mm bed, stations 3 and 4 a 355 x 390 mm bed (`$130`/`$131`), `$30` 1000, laser mode on, homing on, acceleration 1000 (stations 1, 2) or 500 (stations 3, 4) (`$120`/`$121`), max rate 8000 mm/min (the lower of `$110` 25000 and `$111` 8000), air assist M8 verified, USB UVC camera. Files renamed `station-N.json`; `placeholder` is now `false`. **Still assumed:** `originCorner` front-left (the spike did not check where the machine origin is), and `model` (null until the Falcon models are confirmed). Stations 3 and 4 also have a 38 mm Z axis; the profile has no field for it yet.
+- Server: a database made with the placeholders gets the new profile on start-up unless a teacher already edited it (its `placeholder` is false) or it has a camera calibration to keep.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.12`.
+
 ## 0.2.11 - Cutter download (additive)
 - `openapi.yaml`: `POST /cutter/package` (school admin; body `{station}`) makes a new station token for one of the school's lasers (returned once) and a download link valid for an hour, answering `{station, token, kind, downloadPath, fileName, expiresAt}`. The link (`GET /downloads/cutter/{link}/{name}`) needs no Authorization header (a browser link cannot send one) and the zip it serves holds no token. `kind` is `pretend` until the real Cutter exists: the package is then the pretend Cutter (`fake_cutter.py`), which connects like a laser but cuts nothing.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.11`.

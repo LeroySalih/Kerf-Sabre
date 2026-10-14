@@ -11,7 +11,7 @@ API = "/api/v1"
 
 
 def preset(**over):
-    base = {"schemaVersion": "0.2.11", "id": "felt-2mm", "version": 1, "material": "Felt", "thicknessMm": 2, "sheet": {"widthMm": 300, "heightMm": 300},
+    base = {"schemaVersion": "0.2.12", "id": "felt-2mm", "version": 1, "material": "Felt", "thicknessMm": 2, "sheet": {"widthMm": 300, "heightMm": 300},
             "kerfMm": 0.1, "cut": {"powerPct": 50, "speedMmPerS": 8, "passes": 1, "airAssist": True}, "score": {"powerPct": 10, "speedMmPerS": 30, "passes": 1, "airAssist": False}}
     base.update(over)
     return base
@@ -51,10 +51,12 @@ class TestPresets:
 
 
 class TestMachines:
-    def test_the_four_placeholder_machines_are_there(self, client, tokens):
+    def test_the_four_stations_have_the_beds_the_spike_measured(self, client, tokens):
         ms = client.get(f"{API}/machines", headers=auth(tokens["pupil"])).json()
         assert [m["id"] for m in ms] == [f"station-{i}" for i in range(1, 5)]
-        assert all(m["placeholder"] for m in ms)
+        beds = {m["id"]: (m["bed"]["widthMm"], m["bed"]["heightMm"]) for m in ms}
+        assert beds == {"station-1": (400, 415), "station-2": (400, 415), "station-3": (355, 390), "station-4": (355, 390)}  # $130/$131 from docs/spike-results.md
+        assert all(not m["placeholder"] and m["grbl"]["s30Max"] == 1000 and m["grbl"]["laserMode"] and m["camera"]["type"] == "usb-uvc" for m in ms)
 
     def test_teacher_replaces_a_profile_from_spike_results(self, client, tokens):
         h = auth(tokens["teacher"])

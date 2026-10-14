@@ -268,3 +268,26 @@ class TestCutterDownload:
         link = body["downloadPath"].split("/")[-2]
         app.state.download_links[link] = 0  # an hour later
         assert client.get(body["downloadPath"]).status_code == 404
+
+
+def test_a_placeholder_machine_in_an_older_database_gets_the_real_profile(tmp_path):
+    """Databases made when the profiles were placeholders pick up the measured beds; a profile a teacher edited, and its calibration, stay."""
+    from kerf_server.app import create_app
+    from kerf_server.config import Settings
+    from kerf_server.models import MachineRow
+    from fastapi.testclient import TestClient
+
+    settings = Settings.from_env(data_dir=tmp_path / "d")
+    app = create_app(settings)
+    with TestClient(app):
+        db = app.state.db
+        with db.session() as s:
+            s.get(MachineRow, "station-1").data = {**s.get(MachineRow, "station-1").data, "placeholder": True, "bed": {"widthMm": 400, "heightMm": 400, "originCorner": "front-left"}}
+            edited = s.get(MachineRow, "station-2")
+            edited.data = {**edited.data, "bed": {"widthMm": 410, "heightMm": 420, "originCorner": "front-left"}}  # a teacher's edit (placeholder is false)
+            edited.camera_calibration = {"kept": True}
+    app2 = create_app(settings)
+    with TestClient(app2):
+        with app2.state.db.session() as s:
+            assert s.get(MachineRow, "station-1").data["bed"]["heightMm"] == 415
+            assert s.get(MachineRow, "station-2").data["bed"]["heightMm"] == 420 and s.get(MachineRow, "station-2").camera_calibration == {"kept": True}

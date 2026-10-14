@@ -35,5 +35,8 @@ def seed(db: Database, settings: Settings) -> None:
         if machine_dir.exists():
             for f in sorted(machine_dir.glob("*.json")):
                 m = json.loads(f.read_text())
-                if s.get(MachineRow, m["id"]) is None:
+                row = s.get(MachineRow, m["id"])
+                if row is None:
                     s.add(MachineRow(id=m["id"], school_id=DEFAULT_SCHOOL, data=m))
+                elif row.data.get("placeholder") and not m.get("placeholder"):
+                    row.data = m  # real values from the spike replace the placeholder; a profile a teacher already edited is left alone, and so is its camera calibration

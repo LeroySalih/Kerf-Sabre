@@ -39,10 +39,13 @@ def test_invalid_examples(path):
 
 
 @pytest.mark.parametrize("path", sorted((ROOT / "machine-profiles").glob("*.json")), ids=lambda p: p.stem)
-def test_placeholder_profiles(path):
+def test_machine_profiles(path):
     data = load(path)
     Draft202012Validator(load(ROOT / SCHEMAS["machine"])).validate(data)
-    assert data["placeholder"] is True
+    # measured in the spike ($130/$131 in docs/spike-results.md): stations 1 and 2 are 400 x 415, stations 3 and 4 are 355 x 390
+    bed = (data["bed"]["widthMm"], data["bed"]["heightMm"])
+    assert bed == ((400, 415) if data["id"] in ("station-1", "station-2") else (355, 390))
+    assert data["placeholder"] is False and data["grbl"]["s30Max"] == 1000 and data["grbl"]["laserMode"] is True
 
 
 def test_openapi_parses_and_refs_resolve():

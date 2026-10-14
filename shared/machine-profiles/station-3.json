@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "0.2.12",
+  "id": "station-3",
+  "name": "Station 3",
+  "model": null,
+  "placeholder": false,
+  "bed": {
+    "widthMm": 355,
+    "heightMm": 390,
+    "originCorner": "front-left"
+  },
+  "grbl": {
+    "s30Max": 1000,
+    "laserMode": true,
+    "homingEnabled": true,
+    "maxRateXY": 8000,
+    "accelerationXY": 500,
+    "baud": 115200
+  },
+  "airAssist": {
+    "supported": true,
+    "command": "M8"
+  },
+  "camera": {
+    "type": "usb-uvc"
+  }
+}

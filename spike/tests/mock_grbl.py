@@ -79,5 +79,8 @@ class MockGrbl:
             slow = "F60" in line
             self.state, self.busy = "Jog", 100 if slow else 2
             self.rx.append("ok")
+        elif "G1" in line and "X" in line:
+            self.state, self.busy = "Run", 100 if "F60" in line else 2
+            self.rx.append("ok")
         else:
             self.rx.append("ok")

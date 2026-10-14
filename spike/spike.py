@@ -231,6 +231,11 @@ def default_http_get(url: str, timeout: float = 10.0) -> int:
         return exc.code  # server answered: the connection itself worked
 
 
+def _pos_of(status: dict | None) -> str | None:
+    m = re.search(r"[MW]Pos:[^|>]*", status["raw"]) if status else None
+    return m.group() if m else None
+
+
 def is_ch340(port: dict) -> bool:
     text = f"{port.get('description', '')} {port.get('hwid', '')}".upper()
     return port.get("vid") == 0x1A86 or "CH340" in text or "1A86" in text
@@ -538,12 +543,13 @@ class Runner:
     def test_8(self):
         link = self.link
         link.command("M5")
-        _, final = link.command("$J=G21G91X30F60", timeout=5.0)
-        observed: dict = {"jog_reply": final}
+        # A normal G1 move (like a cut at S0), not $J: some GRBL ports ignore feed hold during a jog.
+        _, final = link.command("G21 G91 G1 X30 F60", timeout=5.0)
+        observed: dict = {"move_reply": final}
         running = None
         for _ in range(10):
             running = link.status()
-            if running and running["state"].startswith("Jog"):
+            if running and running["state"].startswith(("Jog", "Run")):
                 break
             self.sleep(0.1)
         observed["before_hold"] = running["raw"] if running else None
@@ -551,6 +557,10 @@ class Runner:
         self.sleep(0.2)
         hold = link.status()
         observed["after_hold"] = hold["raw"] if hold else None
+        self.sleep(0.5)
+        hold2 = link.status()  # position must not creep while held
+        observed["after_hold_0.5s"] = hold2["raw"] if hold2 else None
+        observed["held_still"] = _pos_of(hold) is not None and _pos_of(hold) == _pos_of(hold2)
         link.realtime(b"~")
         self.sleep(0.2)
         resumed = link.status()
@@ -558,6 +568,8 @@ class Runner:
         link.realtime(b"\x18")
         banner = link.wait_for_banner(5.0)
         observed["banner_after_reset"] = banner
+        if banner:
+            link.command("G90")  # the move above left relative mode on
         after = link.status()
         observed["after_reset"] = after["raw"] if after else None
         if after and after["state"].startswith("Alarm"):
@@ -566,6 +578,7 @@ class Runner:
             observed["note"] = "Position may be lost after reset; re-home before further use."
         ok = bool(
             hold and hold["state"].startswith("Hold")
+            and observed["held_still"]
             and resumed and (resumed["state"].startswith(("Jog", "Run", "Idle")))
             and banner
         )

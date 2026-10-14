@@ -37,6 +37,7 @@ IP="$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{prin
 echo
 echo "=================================================="
 echo " Kerf Sabre server:  http://localhost:$PORT"
+echo " Admin site:         http://localhost:$PORT/admin/   (teachers and school admins: classes, pupils, activities, queue, lasers)"
 [ -n "$IP" ] && echo " From other devices: http://$IP:$PORT"
 echo " Logins (saved in $CREDS):"
 sed 's/^/   /' "$CREDS"

@@ -40,17 +40,18 @@ def get_embed_zip(arg: str | None, cache: Path) -> Path:
     return target
 
 
-def download_wheels(dest: Path) -> list[Path]:
+def download_wheels(dest: Path, no_camera: bool = False) -> list[Path]:
+    wheels = [w for w in WHEELS if w.startswith("pyserial")] if no_camera else WHEELS
     dest.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary=:all:",
          "--platform", "win_amd64", "--python-version", "3.11", "--implementation", "cp",
-         "--abi", "cp311", "--abi", "abi3", "--abi", "none", "-d", str(dest), *WHEELS],
+         "--abi", "cp311", "--abi", "abi3", "--abi", "none", "-d", str(dest), *wheels],
         check=True)
-    return sorted(dest.glob("*.whl"))
+    return sorted(w for w in dest.glob("*.whl") if not no_camera or w.name.lower().startswith("pyserial"))
 
 
-def build(out: Path, embed_zip: Path, skip_wheels: bool = False) -> Path:
+def build(out: Path, embed_zip: Path, skip_wheels: bool = False, no_camera: bool = False) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     stage = out / "kerf-spike"
     if stage.exists():
@@ -63,7 +64,7 @@ def build(out: Path, embed_zip: Path, skip_wheels: bool = False) -> Path:
     site = py / "Lib" / "site-packages"
     site.mkdir(parents=True)
     if not skip_wheels:
-        for wheel in download_wheels(out / "wheels"):
+        for wheel in download_wheels(out / "wheels", no_camera):
             with zipfile.ZipFile(wheel) as z:
                 z.extractall(site)
     for old in py.glob("python*._pth"):
@@ -85,6 +86,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--embed-zip", help="path to python-3.11.9-embed-amd64.zip (else downloaded)")
     p.add_argument("--out", default=str(HERE / "build"))
+    p.add_argument("--no-camera", action="store_true", help="leave out OpenCV (about 45 MB smaller); the camera test is then skipped")
     p.add_argument("--skip-wheels", action="store_true", help="testing only: omit pyserial/opencv")
     a = p.parse_args()
     out = Path(a.out)
@@ -94,7 +96,7 @@ def main() -> int:
         print(f"Could not get the embeddable Python zip: {exc}\n"
               f"Download {EMBED_URL} manually and pass --embed-zip PATH.", file=sys.stderr)
         return 2
-    print(f"Built {build(out, embed, a.skip_wheels)}")
+    print(f"Built {build(out, embed, a.skip_wheels, a.no_camera)}")
     return 0
 
 

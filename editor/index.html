@@ -98,6 +98,7 @@
         <button id="act-explode" title="Explode. Split the selected shapes into separate edges" aria-label="Explode"><svg class="ico"><use href="#i-explode"/></svg></button>
         <button data-tool="tab" title="Tab. Click on a closed Cut outline to leave a bridge there; click a tab again to remove it" aria-label="Tab"><svg class="ico"><use href="#i-tab"/></svg></button>
         <button id="act-tabs" title="Auto tabs. Add evenly spaced tabs to the selected Cut outlines (count and width in Options)" aria-label="Auto tabs"><svg class="ico"><use href="#i-tabs-auto"/></svg></button>
+        <button data-tool="offset" title="Offset. Select shapes or lines, then draw a parallel copy a set distance away (set it in Options; a dashed preview shows the result)" aria-label="Offset"><svg class="ico"><use href="#i-offset"/></svg></button>
         <button data-tool="trim" title="Trim. Click a line or arc to remove the part up to the nearest intersections" aria-label="Trim"><svg class="ico"><use href="#i-trim"/></svg></button>
         <button data-tool="radius" title="Corner radius. Click a corner to round it; set the radius in Options" aria-label="Corner radius"><svg class="ico"><use href="#i-radius"/></svg></button>
         <button id="round-all" title="Round all corners of the selection, using the radius in Options" aria-label="Round all corners of the selection, using the radius in Options"><svg class="ico"><use href="#i-round-all"/></svg></button>
@@ -181,6 +182,14 @@
             <div id="opt-star" class="row" hidden>
               <label title="Number of tips">Points <input id="star-points" type="number" min="3" max="32" step="1" value="5" style="width:4em" /></label>
               <label title="Valley radius as a percentage of the tip radius. Lower is sharper.">Sharpness <input id="star-inner" type="number" min="5" max="95" value="40" style="width:4.5em" /> %</label>
+            </div>
+            <div id="opt-offset" class="row" hidden>
+              <label title="How far away the new line is">Distance <input id="off-dist" type="number" min="0.01" step="0.5" value="3" style="width:5em" /> mm</label>
+              <label title="Closed shapes: outside or inside. Open lines: to the left or right of the way they were drawn. The dashed preview shows the result">Side <select id="off-side"><option value="outside">Outside (line: left)</option><option value="inside">Inside (line: right)</option><option value="both">Both sides</option></select></label>
+              <label title="Round corners are arcs; sharp corners are mitred">Corners <select id="off-corner"><option value="round">Round</option><option value="sharp">Sharp</option></select></label>
+              <label><input id="off-keep" type="checkbox" checked /> Keep the original</label>
+              <button id="off-apply" title="Make the offset (Enter)">Offset</button>
+              <span class="hint">Select shapes or lines, then set the distance. The dashed purple preview is what will be made.</span>
             </div>
             <div id="opt-dim" class="row" hidden>
               <label title="Which way a linear dimension measures. Auto picks horizontal, vertical or along the line from your two points">Measure <select id="dim-axis"><option value="auto">Auto</option><option value="aligned">Along the line</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>

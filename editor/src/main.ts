@@ -29,6 +29,7 @@ import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, no
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 import { initServerUi } from "./serverui";
 import { cleanPoints, splinePath } from "./spline";
+import { offsetPath, type OffsetCorner, type OffsetSide } from "./offset";
 import { boxDimensions, dimGeometry, dimLabel, linearAxis, pickDimension, radialFromPath, type DimAxis, type Dimension, type LinearDim } from "./dimensions";
 
 mountIcons();
@@ -41,8 +42,10 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text" | "dim" | "dimr" | "spline";
+type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text" | "dim" | "dimr" | "spline" | "offset";
 let tool: Tool = "select";
+/** The Select and Offset tools both pick and move shapes; Offset also shows a preview of the result. */
+const selectish = (): boolean => tool === "select" || tool === "offset";
 let showGrid = true;
 let spaceDown = false;
 let nodeSel: { id: number; index: number } | null = null; // the node picked in the Nodes tool
@@ -263,6 +266,56 @@ function drawSnapMarker(pt: Point, kind: SnapKind): void {
   box.strokeWidth = 2;
   new paper.PointText({ point: c.add(new paper.Point(10, -8)), content: kind, fontSize: 11, fontWeight: "bold", fillColor: new paper.Color("#047857") });
 }
+
+// ---- offset: parallel copies of the selected shapes and lines ----
+const offDist = document.getElementById("off-dist") as HTMLInputElement;
+const offSide = document.getElementById("off-side") as HTMLSelectElement;
+const offCorner = document.getElementById("off-corner") as HTMLSelectElement;
+const offKeep = document.getElementById("off-keep") as HTMLInputElement;
+let offsetMemo: { key: string; paths: { src: DocObject; out: Path[] }[] } | null = null;
+
+/** The offsets of the selection as they would be made now. Remembered until the selection, the shapes or the settings change. */
+function offsetResults(): { src: DocObject; out: Path[] }[] {
+  const distance = parseFloat(offDist.value);
+  if (!(distance > 0) || distance > 1000) return [];
+  const objs = doc.state.objects.filter((o) => selected.has(o.id));
+  const opts = { distance, side: offSide.value as OffsetSide, corner: offCorner.value as OffsetCorner };
+  const key = JSON.stringify([opts, objs.map((o) => [o.id, o.path, o.matrix])]);
+  if (offsetMemo?.key === key) return offsetMemo.paths;
+  const paths = objs.map((o) => ({ src: o, out: offsetPath(transformPath(o.path, o.matrix), opts) }));
+  offsetMemo = { key, paths };
+  return paths;
+}
+
+function drawOffsetPreview(): void {
+  if (tool !== "offset" || !selected.size) return;
+  for (const { out } of offsetResults()) for (const p of out) {
+    const g = toPaperPath(p);
+    g.strokeColor = new paper.Color("#7c3aed");
+    g.strokeWidth = 1.5;
+    g.dashArray = [5, 3];
+  }
+}
+
+function applyOffset(): void {
+  if (!selected.size) { notify("Select the shapes or lines to offset first."); return; }
+  const distance = parseFloat(offDist.value);
+  if (!(distance > 0) || distance > 1000) { notify("Enter a distance greater than 0."); return; }
+  const results = offsetResults().filter((r) => r.out.length);
+  if (!results.length) { notify("Nothing to draw: the offset is larger than the shape, or the shape can't be offset."); return; }
+  const keep = offKeep.checked;
+  edit(() => {
+    const made: number[] = [];
+    if (!keep) { doc.convertText(results.map((r) => r.src.id)); doc.remove(results.map((r) => r.src.id)); }
+    for (const { src, out } of results) for (const p of out) made.push(doc.add(p, IDENTITY, src.layer).id);
+    selected = new Set(made);
+  });
+  offsetMemo = null;
+  notify(`Made ${results.reduce((n, r) => n + r.out.length, 0)} offset ${results.reduce((n, r) => n + r.out.length, 0) === 1 ? "shape" : "shapes"}.`);
+}
+for (const el of [offDist, offSide, offCorner]) el.addEventListener("input", () => draw());
+document.getElementById("off-apply")!.addEventListener("click", applyOffset);
+offDist.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); applyOffset(); } });
 
 // ---- dimensions: annotations only (never cut, exported or sent to the Cutter) ----
 const DIM_COLOUR = "#0f766e";
@@ -493,6 +546,7 @@ function draw(): void {
     box.fillColor.alpha = 0.08;
     if (mode === "crossing") box.dashArray = [5, 4];
   }
+  drawOffsetPreview();
   if (showDims) for (const d of doc.state.dimensions) drawDimension(d, selectedDims.has(d.id), false);
   const ghost = dimGhost();
   if (ghost) drawDimension(ghost, false, true);
@@ -561,6 +615,7 @@ function refreshOptions(): void {
     "opt-star": tool === "star",
     "opt-tabs": tool === "tab" || hasTabs,
     "opt-dim": tool === "dim" || tool === "dimr",
+    "opt-offset": tool === "offset",
   };
   for (const [id, on] of Object.entries(show)) (document.getElementById(id) as HTMLElement).hidden = !on;
   (document.getElementById("opt-none") as HTMLElement).hidden = Object.values(show).some(Boolean);
@@ -1154,7 +1209,7 @@ canvas.addEventListener("mousedown", (e) => {
   moved = false;
   if (tool === "measure") { measureLine = { a: p, b: p }; draw(); return; }
   if (tool === "trim") { doTrim(p); trimPreview = null; draw(); return; }
-  if (tool === "select") {
+  if (selectish()) {
     const r = canvas.getBoundingClientRect();
     const dimHit = showDims ? pickDimension(doc.state.dimensions, p, 8 / view.scale) : undefined;
     if (dimHit) { // a dimension: select it (Delete removes it)
@@ -1225,14 +1280,14 @@ canvas.addEventListener("mousemove", (e) => {
   if (marquee) {
     marquee.b = p;
     selected = new Set([...marquee.base, ...doc.expand(boxSelect(doc.state.objects, marquee.a, p))]);
-  } else if (tool === "select" && selected.size) {
+  } else if (selectish() && selected.size) {
     if (!moved) { doc.checkpoint(); moved = true; moveBounds = selectionBounds(doc.state.objects, selected); moveApplied = { x: 0, y: 0 }; }
     const want = snapMove({ x: p.x - dragStart.x, y: p.y - dragStart.y }, e);
     const step = { x: want.x - moveApplied.x, y: want.y - moveApplied.y };
     for (const id of selected) doc.transform(id, translation(step.x, step.y));
     moveApplied = want;
     dragLast = p;
-  } else if (tool !== "select") {
+  } else if (!selectish()) {
     preview = { tool, a: dragStart, b: p };
   }
   draw();
@@ -1242,7 +1297,7 @@ window.addEventListener("mouseup", (e) => {
   if (panning) { panning = null; setSpace(spaceDown); return; }
   if (nodeDrag) { nodeDrag = null; snapMarker = null; draw(); return; }
   if (gizmoDrag) { gizmoDrag = null; moveBounds = null; snapMarker = null; gizmoHover = null; canvas.style.cursor = ""; draw(); return; }
-  if (dragStart && tool !== "select") {
+  if (dragStart && !selectish()) {
     const sh = shapeFor(tool, dragStart, snapPt(bedPt(e), e));
     if (sh) edit(() => { selected = new Set([doc.add(sh.path, translation(sh.at.x, sh.at.y), activeLayer).id]); });
   }

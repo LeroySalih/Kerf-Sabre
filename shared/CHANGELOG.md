@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.11 - Cutter download (additive)
+- `openapi.yaml`: `POST /cutter/package` (school admin; body `{station}`) makes a new station token for one of the school's lasers (returned once) and a download link valid for an hour, answering `{station, token, kind, downloadPath, fileName, expiresAt}`. The link (`GET /downloads/cutter/{link}/{name}`) needs no Authorization header (a browser link cannot send one) and the zip it serves holds no token. `kind` is `pretend` until the real Cutter exists: the package is then the pretend Cutter (`fake_cutter.py`), which connects like a laser but cuts nothing.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.11`.
+
 ## 0.2.10 - calibrate from squares the laser cuts (additive)
 - `openapi.yaml`: `POST /stations/{id}/calibration-marks` (teacher) makes a job of 1 or 4 known squares (`centerX`, `centerY`, `sizeMm`, `spacingMm`, `layer` score or cut, `presetId`), pinned to that laser and already approved, and returns `{jobId, squares}` with each square's corners in bed mm in the order to click them. The teacher cuts it (Frame and Start with `skipQueue`, `allowUntested`) and clicks the corners in the camera picture, so the camera can be calibrated when the bed is bigger than the picture. `camera-calibration` now accepts 4 to 64 points (4 are fitted exactly; more by least squares). `GET /stations` carries `calibrated`.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.10`.

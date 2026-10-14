@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.10
+  version: 0.2.11
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -849,6 +849,22 @@ paths:
       summary: Teacher. Forget the calibration
       responses:
         "204": {description: Removed}
+  /cutter/package:
+    post:
+      summary: School admin. A fresh station token for one laser plus a one-hour download link for the Cutter software
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [station]
+              properties:
+                station: {type: string, description: One of the school's lasers}
+      responses:
+        "201":
+          description: "{station, token (shown once), kind: pretend|real, downloadPath, fileName, expiresAt}"
+        "404": {description: Not one of the school's lasers}
   /stations/{stationId}/calibration-marks:
     post:
       summary: Teacher. Make an approved job of known squares to cut, for calibrating the camera (works when the bed is larger than the camera sees)

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
-from .api import activities, auth, catalog, classes, cutter_ws, dxf, jobs, schools, stations
+from .api import activities, auth, catalog, classes, cutter, cutter_ws, dxf, jobs, schools, stations
 from .config import Settings
 from .db import Database
 from .services_seed import seed
@@ -35,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.db = db
     app.state.throttle = IpThrottle()
+    app.state.download_links = {}  # Cutter download links: random link -> expiry (in memory: a restart just means making a new one)
     app.state.hub = Hub(settings.data_dir / "logs", settings.log_max_bytes, settings.log_backups)
     errors.install(app)
 
@@ -50,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(dxf.router)
     api.include_router(jobs.router)
     api.include_router(stations.router)
+    api.include_router(cutter.router)
     api.include_router(cutter_ws.router)  # /api/v1/ws/cutter
     app.include_router(api)
 

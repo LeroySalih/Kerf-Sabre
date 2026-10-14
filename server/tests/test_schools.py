@@ -231,3 +231,40 @@ class TestCameraIsPerSchool:
         client.post(f"{API}/jobs/{jid}/approve", headers=b["teacher"])
         r = client.post(f"{API}/jobs/{jid}/placement", json={"station": "beta-laser", "matrix": [1, 0, 0, 1, 1, 1]}, headers=a["admin"])
         assert r.status_code == 404
+
+
+class TestCutterDownload:
+    def package(self, client, who, station="alpha-laser"):
+        return client.post(f"{API}/cutter/package", json={"station": station}, headers=who)
+
+    def test_an_admin_gets_a_link_and_a_working_token_for_their_own_laser(self, client, world):
+        import io
+        import zipfile
+
+        a = world["alpha"]
+        r = self.package(client, a["admin"])
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["token"].startswith("ks_") and body["kind"] == "pretend" and body["downloadPath"].endswith("/kerf-cutter-pretend.zip")
+        z = client.get(body["downloadPath"])  # no Authorization header: the link is the permission
+        assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
+        names = zipfile.ZipFile(io.BytesIO(z.content)).namelist()
+        assert {"kerf-cutter/fake_cutter.py", "kerf-cutter/README.txt", "kerf-cutter/run_cutter.bat", "kerf-cutter/run_cutter.sh", "kerf-cutter/fake_bed.jpg"} <= set(names)
+        assert body["token"].encode() not in z.content  # the download holds no secret
+        with client.websocket_connect(f"{API}/ws/cutter?token={body['token']}") as ws:  # the token connects as that laser
+            ws.send_json({"type": "hello", "station": "alpha-laser", "cutterVersion": "t", "grblSettings": {}})
+
+    def test_only_admins_and_only_their_own_lasers(self, client, world):
+        a = world["alpha"]
+        assert self.package(client, a["teacher"]).status_code == 403
+        assert self.package(client, a["admin"], station="beta-laser").status_code == 404
+        assert self.package(client, world["root"]).status_code == 403
+        assert client.post(f"{API}/cutter/package", json={}, headers=a["admin"]).status_code == 422
+
+    def test_links_expire_and_cannot_be_guessed(self, client, world, app):
+        body = self.package(client, world["alpha"]["admin"]).json()
+        assert client.get(f"{API}/downloads/cutter/nope/kerf-cutter-pretend.zip").status_code == 404
+        assert client.get(body["downloadPath"].replace("pretend.zip", "other.zip")).status_code == 404
+        link = body["downloadPath"].split("/")[-2]
+        app.state.download_links[link] = 0  # an hour later
+        assert client.get(body["downloadPath"]).status_code == 404

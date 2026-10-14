@@ -285,7 +285,7 @@ class TestOutput:
             m.add_line((30, 0), (40, 5))
         out = cleanup_dxf(make_dxf(build, MM))
         schema = json.loads((Path(__file__).resolve().parents[2] / "shared" / "job.schema.json").read_text())
-        job = {"schemaVersion": "0.2.10", "id": "j1", "pupilId": "P001", "createdAt": "2026-01-01T00:00:00Z", "status": "draft",
+        job = {"schemaVersion": "0.2.11", "id": "j1", "pupilId": "P001", "createdAt": "2026-01-01T00:00:00Z", "status": "draft",
                "preset": {"id": "ply-3mm", "version": 2}, "origin": {"mode": "absolute"}, "objects": out.objects}
         errors = list(Draft202012Validator(schema).iter_errors(job))
         assert not errors, errors[:2]

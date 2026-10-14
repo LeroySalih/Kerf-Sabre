@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ServerError, normaliseBase, request, sendJob, signIn } from "../src/server";
+import { ServerError, cutterCommand, normaliseBase, request, sendJob, signIn } from "../src/server";
 
 const reply = (status: number, body: unknown): typeof fetch => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
@@ -70,5 +70,17 @@ describe("class login", () => {
   it("splits pasted pupil IDs and writes the PIN sheet", () => {
     expect(parseIds("P1, P2;P3\nP2\n  P4  \n\n")).toEqual(["P1", "P2", "P3", "P4"]);
     expect(pinsCsv([{ pupilId: "P1", pin: "12345" }, { pupilId: "P2", pin: "00042" }])).toBe("pupilId,pin\nP1,12345\nP2,00042\n");
+  });
+});
+
+describe("cutterCommand", () => {
+  it("builds the run command with the address, token and laser", () => {
+    expect(cutterCommand("http://192.168.1.20:8000/", "ks_abc-DEF_123", "station-1")).toBe("python fake_cutter.py --url http://192.168.1.20:8000 --token ks_abc-DEF_123 --station station-1");
+    expect(cutterCommand("https://kerf.school/api/v1", "ks_x", "bsk-laser-2", "python3")).toBe("python3 fake_cutter.py --url https://kerf.school --token ks_x --station bsk-laser-2");
+  });
+  it("quotes anything with odd characters so it cannot break out of the command", () => {
+    const c = cutterCommand("http://h:8000", "ks_a b;rm -rf $HOME", "s\"1", "python3");
+    expect(c).toContain('--token "ks_a b;rm -rf \\$HOME"');
+    expect(c).toContain('--station "s\\"1"');
   });
 });

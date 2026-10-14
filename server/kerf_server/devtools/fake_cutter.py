@@ -1,6 +1,7 @@
 """A pretend Cutter for trying the whole flow (Editor, queue, Station mode) without a laser.
 
     python -m kerf_server.devtools.fake_cutter --url http://localhost:8000 --token ks_... --station station-1
+    python fake_cutter.py --url http://localhost:8000 --token ks_... --station station-1     (the downloaded copy; needs `pip install websockets`)
 
 It connects like the real Cutter will (outbound WebSocket, station token), reports GRBL-style status, answers frame and
 run_job, "cuts" for the job's estimated time (sped up with --speed) while reporting progress, and obeys stop/pause/resume.
@@ -14,7 +15,7 @@ import argparse
 import asyncio
 import base64
 import json
-from importlib import resources
+from pathlib import Path
 import time
 import urllib.request
 
@@ -70,7 +71,7 @@ async def run(args: argparse.Namespace) -> None:
             print(f"[fake cutter] {job_id} {outcome}")
 
         def load(name: str) -> str:
-            return base64.b64encode(resources.files("kerf_server.devtools").joinpath(name).read_bytes()).decode()
+            return base64.b64encode((Path(__file__).resolve().parent / name).read_bytes()).decode()
 
         pictures = {"plain": load("fake_bed.jpg"), "marked": load("fake_bed_marked.jpg") if args.marks_after_cut else ""}
         cut_done = {"yes": False}

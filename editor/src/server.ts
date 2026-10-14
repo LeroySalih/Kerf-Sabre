@@ -165,6 +165,15 @@ export const placeJob = (s: Session, id: string, station: string, matrix: number
 export interface MarksRequest { centerX: number; centerY: number; sizeMm: number; spacingMm: number; count: 1 | 4; layer: "score" | "cut"; presetId: string }
 /** A job of known squares to cut (approved and pinned to this laser), for calibrating its camera. Teacher only. */
 export const createCalibrationMarks = (s: Session, station: string, body: MarksRequest, f?: Fetch) => request<{ jobId: string; squares: { square: number; corners: [number, number][] }[] }>(s, "POST", `/stations/${encodeURIComponent(station)}/calibration-marks`, body, f);
+export interface CutterPackage { station: string; token: string; kind: "pretend" | "real"; downloadPath: string; fileName: string; expiresAt: string }
+/** A fresh token for one laser's Cutter and a short-lived download link for the Cutter software. School admins only. */
+export const makeCutterPackage = (s: Session, station: string, f?: Fetch) => request<CutterPackage>(s, "POST", "/cutter/package", { station }, f);
+
+/** The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server. */
+export function cutterCommand(url: string, token: string, station: string, python: "python" | "python3" = "python"): string {
+  const q = (v: string) => (/^[A-Za-z0-9_.:/@-]+$/.test(v) ? v : `"${v.replace(/(["\\$`])/g, "\\$1")}"`);
+  return `${python} fake_cutter.py --url ${q(normaliseBase(url))} --token ${q(token)} --station ${q(station)}`;
+}
 export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }
 export const getMachine = (s: Session, id: string, f?: Fetch) => request<MachineInfo>(s, "GET", `/machines/${encodeURIComponent(id)}`, undefined, f);
 

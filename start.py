@@ -276,12 +276,13 @@ def main() -> int:
         bar = "=" * 66
         print(f"\n{bar}\n Kerf Sabre is running\n")
         print(f"   Open:        {open_url}   <- the Editor" + ("  (live reload)" if args.dev else ""))
+        print(f"   Admin site:  http://localhost:{editor_port or server_port}/admin/   <- teachers: classes, pupils, activities, queue, lasers")
         print(f"   Server API:  http://localhost:{server_port}   (docs: /api/v1/docs)")
         if ip:
             print(f"   Other PCs:   http://{ip}:{editor_port or server_port}")
         print(f"   Connector:   " + (f"pretend laser '{args.station}' (cuts nothing; connects out to the Server)" if cutter else "none"))
         print(f"\n   Sign in as a pupil:  class DEMO, ID and PIN: " + ", ".join(f"{p['id']} / {p['pin']}" for p in logins["pupils"]))
-        print(f"   Teacher token:       {logins['teacher']}   (click 'Teacher or laser station?')")
+        print(f"   Teacher token:       {logins['teacher']}   (the Admin site, or the Editor via 'Teacher or laser station?')")
         print(f"   Station mode token:  {logins['stationToken']}")
         print(f"   Logins are saved in {data_dir / 'local-logins.json'}")
         print(f"\n   Press Ctrl+C to stop everything.\n{bar}\n", flush=True)

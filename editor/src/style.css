@@ -138,6 +138,8 @@ table.layers th { color: var(--muted); font-weight: 600; }
 .gate-card input { width: 100%; box-sizing: border-box; }
 #gate-error { color: var(--warn); min-height: 1.2em; }
 .gate-card .link { background: none; border: none; color: inherit; text-decoration: underline; font-size: 12px; cursor: pointer; opacity: 0.7; }
+a.btnlink { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; color: inherit; text-decoration: none; }
+a.btnlink:hover { background: #eef0f3; }
 .kdialog.wide { max-width: 720px; min-width: 520px; }
 .filerow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .filerow span { flex: 1 1 100%; font-size: 13px; }
@@ -195,7 +197,7 @@ table.pins th, table.pins td { text-align: left; padding: 3px 18px 3px 0; }
 .chip.st-complete, td.cell.st-complete { background: #dcfce7; color: #166534; }
 .tabs { display: flex; gap: 6px; margin: 6px 0 12px; border-bottom: 2px solid var(--line); }
 .tabs button { height: 44px; padding: 0 24px; font-size: 17px; font-weight: 600; border-bottom: none; border-radius: 8px 8px 0 0; margin-bottom: -2px; background: var(--panel-2); }
-.tabs button.on, .tabs button.on:hover:not(:disabled) { border-bottom: none; }
+.tabs button.on, .tabs button.on:hover:not(:disabled) { border-bottom: none; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .instructions { white-space: pre-wrap; background: var(--bg); border-radius: 6px; padding: 10px 12px; }
 .feedback .fb { border-left: 4px solid #9ca3af; padding: 4px 10px; margin: 6px 0; background: var(--bg); }
 .feedback .fb.revise { border-color: #eab308; }

@@ -2,7 +2,7 @@
 import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; classCode?: string; expiresAt?: string }
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
 export interface QueueEntry {
   ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; presetId?: string;
@@ -63,9 +63,18 @@ export async function request<T>(s: { baseUrl: string; token: string }, method: 
 
 export async function signIn(baseUrl: string, token: string, f: Fetch = fetch): Promise<Session> {
   const base = normaliseBase(baseUrl);
-  const me = await request<{ role: string; id: string }>({ baseUrl: base, token }, "GET", "/auth/me", undefined, f);
-  return { baseUrl: base, token, role: me.role, id: me.id };
+  const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl: base, token }, "GET", "/auth/me", undefined, f);
+  return { baseUrl: base, token, role: me.role, id: me.id, school: me.school };
 }
+
+export interface School { id: string; name: string; createdAt?: string }
+export interface StaffMember { role: "admin" | "teacher" | "station"; id: string; label?: string | null; createdAt?: string }
+export const listSchools = (s: Session, f?: Fetch) => request<School[]>(s, "GET", "/schools", undefined, f);
+export const createSchool = (s: Session, id: string, name: string, adminId?: string, f?: Fetch) => request<School & { admin?: { id: string; token: string } }>(s, "POST", "/schools", { id, name, ...(adminId ? { adminId } : {}) }, f);
+export const mySchool = (s: Session, f?: Fetch) => request<School>(s, "GET", "/school", undefined, f);
+export const listStaff = (s: Session, f?: Fetch) => request<StaffMember[]>(s, "GET", "/staff", undefined, f);
+export const addStaff = (s: Session, role: StaffMember["role"], id: string, label?: string, f?: Fetch) => request<{ role: string; id: string; token: string }>(s, "POST", "/staff", { role, id, ...(label ? { label } : {}) }, f);
+export const revokeStaff = (s: Session, id: string, f?: Fetch) => request<null>(s, "DELETE", `/staff/${encodeURIComponent(id)}`, undefined, f);
 
 /** Class login: class code + pupil ID + PIN give a short-lived token. Wrong details come back as the server's own words. */
 export async function loginWithPin(baseUrl: string, classCode: string, pupilId: string, pin: string, f: Fetch = fetch): Promise<Session> {
@@ -86,11 +95,12 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
   try { await f(`${s.baseUrl}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${s.token}` } }); } catch { /* offline: it will expire */ }
 }
 
-export interface ClassInfo { code: string; label: string | null; pupilCount: number }
+export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean }
 export interface ClassPupil { pupilId: string; lastLogin: string | null; locked: boolean }
 export interface AddedPupils { created: { pupilId: string; pin: string }[]; existing: string[]; conflicts: string[] }
 export const listClasses = (s: Session, f?: Fetch) => request<ClassInfo[]>(s, "GET", "/classes", undefined, f);
-export const createClass = (s: Session, code: string, label: string, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { code, label }, f);
+export const createClass = (s: Session, code: string, label: string, requireApproval = true, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { code, label, requireApproval }, f);
+export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
 export const classPupils = (s: Session, code: string, f?: Fetch) => request<ClassPupil[]>(s, "GET", `/classes/${encodeURIComponent(code)}/pupils`, undefined, f);
 export const addPupils = (s: Session, code: string, pupilIds: string[], f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, { pupilIds }, f);
 export const resetPin = (s: Session, pupilId: string, f?: Fetch) => request<{ pupilId: string; pin: string }>(s, "POST", `/pupils/${encodeURIComponent(pupilId)}/reset-pin`, undefined, f);

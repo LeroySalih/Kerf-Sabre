@@ -14,7 +14,7 @@ function download(name: string, text: string): void {
 }
 
 /** The PINs that were just made: shown once, with copy and download. */
-function showPins(title: string, rows: { pupilId: string; pin: string }[], extra: string[] = []): Promise<void> {
+export function showPins(title: string, rows: { pupilId: string; pin: string }[], extra: string[] = []): Promise<void> {
   return new Promise((resolve) => {
     const dlg = el("dialog", { class: "kdialog" });
     const table = el("table", { class: "pins" }, el("tr", {}, el("th", {}, "Pupil ID"), el("th", {}, "PIN")), ...rows.map((r) => el("tr", {}, el("td", {}, r.pupilId), el("td", {}, r.pin))));
@@ -44,7 +44,7 @@ function askIds(code: string): Promise<string[] | null> {
   });
 }
 
-export function openClasses(session: Session, hooks: TeacherCallbacks): void {
+export function openClasses(session: Session, hooks: TeacherCallbacks, initialCode?: string): void {
   const dlg = el("dialog", { class: "kdialog teacher" });
   const body = el("div");
   dlg.append(el("h2", {}, "Classes and PINs"), body, el("div", { class: "krow" }, btn("Close", () => dlg.close())));
@@ -52,7 +52,7 @@ export function openClasses(session: Session, hooks: TeacherCallbacks): void {
   dlg.addEventListener("close", () => dlg.remove());
   dlg.showModal();
 
-  let open: { code: string; pupils: ClassPupil[] } | null = null;
+  let open: { code: string; pupils: ClassPupil[] } | null = initialCode ? { code: initialCode, pupils: [] } : null;
   let classes: ClassInfo[] = [];
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
 

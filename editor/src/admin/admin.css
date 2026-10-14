@@ -1,0 +1,41 @@
+/* The teacher / school-admin site. Shares the Editor's colours and dialog styles (../style.css). */
+body.admin { overflow: auto; height: auto; min-height: 100%; }
+#admin { min-height: 100vh; display: flex; flex-direction: column; }
+.ad-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.ad-head .brand { font-weight: 700; font-size: 16px; }
+.ad-head .who { color: var(--muted); }
+.ad-head .spacer { flex: 1; }
+.ad-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 20px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.ad-nav button { height: 32px; }
+.ad-main { flex: 1; padding: 18px 20px 40px; max-width: 1100px; width: 100%; margin: 0 auto; }
+.ad-main h1 { margin: 0 0 4px; font-size: 20px; }
+.ad-main h2 { margin: 22px 0 8px; font-size: 15px; }
+.ad-main .lead { margin: 0 0 14px; color: var(--muted); }
+.ad-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.ad-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 10px 0 18px; }
+.ad-cards .ad-card { cursor: pointer; }
+.ad-cards .ad-card:hover { border-color: var(--accent); }
+.ad-cards .num { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.ad-cards .num.alert { color: var(--accent); }
+table.ad-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+table.ad-table th, table.ad-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.ad-table th { background: var(--panel-2); color: var(--muted); font-weight: 600; font-size: 12px; }
+table.ad-table tr:last-child td { border-bottom: none; }
+table.ad-table td.actions > div { display: flex; gap: 6px; flex-wrap: wrap; }
+.ad-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.ad-bar .spacer { flex: 1; }
+.ad-empty { padding: 18px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; }
+.ad-err { color: var(--warn); font-weight: 600; }
+.ad-stations { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ad-stations h3 { margin: 0 0 6px; font-size: 15px; }
+.ad-stations .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.ad-class { margin: 0 0 18px; }
+.ad-class h2 { display: flex; gap: 10px; align-items: baseline; }
+.ad-signin { max-width: 380px; margin: 12vh auto 0; display: flex; flex-direction: column; gap: 12px; }
+.ad-signin h1 { margin: 0; font-size: 22px; }
+.ad-signin label { display: flex; flex-direction: column; gap: 4px; }
+.ad-signin input { width: 100%; }
+.ad-token { font-family: ui-monospace, monospace; font-size: 14px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; word-break: break-all; user-select: all; }
+.ad-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #e5e7eb; color: #374151; }
+.ad-tag.ok { background: #dcfce7; color: #166534; }
+.ad-tag.warn { background: #ffedd5; color: #9a3412; }

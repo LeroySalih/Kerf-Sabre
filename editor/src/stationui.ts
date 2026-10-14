@@ -187,29 +187,26 @@ function queueList(queue: QueueEntry[], stationId: string): Node {
 
 // ---------------------------------------------------------------- Teacher: approvals and queue
 
-export function openTeacher(session: Session): void {
-  const dlg = h("dialog", { class: "kdialog teacher" });
-  const body = h("div");
-  dlg.append(h("h2", {}, "Queue and approvals"), body, h("div", { class: "krow" }, button("Close", () => dlg.close())));
-  document.body.append(dlg);
-  let stopPoll = () => {};
-  dlg.addEventListener("close", () => { stopPoll(); dlg.remove(); });
-  dlg.showModal();
-
+/** The teacher's approvals and queue as a panel on a page (the admin site). Refreshes itself; returns a function that stops it. */
+export function mountQueue(container: HTMLElement, session: Session): () => void {
   let waiting: JobSummary[] = [];
   let queue: QueueEntry[] = [];
   let stations: StationInfo[] = [];
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
+  let busy = false;
 
   async function load(): Promise<void> {
-    [waiting, queue, stations] = await Promise.all([listJobsByStatus(session, "submitted"), listQueue(session), listStations(session)]);
-    draw();
+    if (busy) return;
+    busy = true;
+    try {
+      [waiting, queue, stations] = await Promise.all([listJobsByStatus(session, "submitted"), listQueue(session), listStations(session)]);
+      draw();
+    } finally { busy = false; }
   }
 
   function draw(): void {
-    const stationRow = h("p", { class: "hint" }, stations.map((s) => `${s.id}: ${s.online ? s.state ?? "online" : "offline"}`).join("   ·   "));
     const approvals = h("div", {}, h("h3", {}, `Waiting for approval (${waiting.length})`));
-    if (!waiting.length) approvals.append(h("p", { class: "hint" }, "Nothing to approve."));
+    if (!waiting.length) approvals.append(h("p", { class: "hint" }, "Nothing to approve. (Classes set to skip approval send files straight to the queue.)"));
     for (const j of waiting) {
       const sel = h("select", { title: "Optionally cut on one laser only" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
       approvals.append(h("div", { class: "filerow" },
@@ -233,9 +230,8 @@ export function openTeacher(session: Session): void {
       }
       q.append(row);
     }
-    body.replaceChildren(stationRow, approvals, q);
+    container.replaceChildren(approvals, q);
   }
 
-  stopPoll = poller(load, 3000);
+  return poller(load, 3000);
 }
-

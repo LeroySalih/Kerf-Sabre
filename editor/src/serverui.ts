@@ -2,8 +2,7 @@
 // All talking is in server.ts; the job document is built and read back in job.ts.
 import { infoDialog, openDialog } from "./dialog";
 import { openMyActivities } from "./activitiesui";
-import { openClasses } from "./classesui";
-import { closeStation, openStation, openTeacher } from "./stationui";
+import { closeStation, openStation } from "./stationui";
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
@@ -53,12 +52,12 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     $("gate").hidden = signedIn || offline;
     $("srv-status").textContent = signedIn ? `Signed in: ${session!.id}` : "Working offline";
     $("srv-signin").textContent = signedIn ? "Sign out" : "Sign in";
-    ($("srv-queue") as HTMLButtonElement).hidden = session?.role !== "teacher";
+    ($("srv-files") as HTMLButtonElement).hidden = !!session && session.role !== "pupil"; // staff manage files on the admin site
     ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil";
     const act = $("srv-activity") as HTMLElement;
     act.hidden = !(session?.role === "pupil" && activity);
     act.replaceChildren(...(activity ? [document.createTextNode(`Activity: ${activity.title} `), Object.assign(document.createElement("button"), { textContent: "×", title: "Stop saving files for this activity", onclick: () => { activity = null; render(); } })] : []));
-    ($("srv-classes") as HTMLButtonElement).hidden = session?.role !== "teacher";
+    ($("srv-admin") as HTMLAnchorElement).hidden = session?.role !== "teacher" && session?.role !== "admin";
     $("srv-file").textContent = signedIn && jobId ? `Editing ${jobId}` : "";
   };
 
@@ -76,8 +75,9 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     try { setPresets(await listPresets(session)); ctx.presetsChanged(); } catch (e) { ctx.notify(`Couldn't load materials: ${handle(e)}`); }
   }
 
-  /** A laser-station token goes straight to Station mode; everyone else gets the design Editor. */
+  /** A laser-station token goes straight to Station mode; the platform owner goes to the admin site; everyone else gets the design Editor. */
   function enterRole(): void {
+    if (session?.role === "platform") { location.assign("/admin/"); return; }
     if (session?.role === "station") { $("gate").hidden = true; openStation(session, signOut); }
     else closeStation();
   }
@@ -263,16 +263,6 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
   $("srv-save").addEventListener("click", () => (session ? void save() : (offline = false, render())));
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
-  $("srv-classes").addEventListener("click", () => {
-    if (session?.role !== "teacher") return;
-    openClasses(session, { openFile: (j) => {
-      if (!confirmDiscard("Open this file")) return;
-      ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
-      jobId = null; activity = null; origin = j.origin ?? DEFAULT_ORIGIN;
-      markSaved(); render();
-      ctx.notify(`Opened a copy of ${j.id} (${j.pupilId ?? "pupil"}) to look at. It is not saved unless you save it.`);
-    } });
-  });
   $("srv-activities").addEventListener("click", () => {
     if (session?.role !== "pupil") return;
     const s = session;
@@ -303,7 +293,6 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     });
   });
   setMode(false);
-  $("srv-queue").addEventListener("click", () => { if (session?.role === "teacher") openTeacher(session); });
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
   window.addEventListener("beforeunload", (ev) => { if (session && dirty()) ev.preventDefault(); });
   render();

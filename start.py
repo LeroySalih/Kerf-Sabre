@@ -110,6 +110,20 @@ def ensure_editor_build(force: bool) -> None:
     run(["npm", "run", "build"], EDITOR)
 
 
+def ensure_cutter_build(force: bool, skip: bool) -> None:
+    """The portable Windows Cutter that the Admin site offers for download. Best effort: it needs the internet once (Windows wheels from PyPI and the
+    embeddable Python from python.org). If it cannot be built the Admin site offers the pretend Cutter instead, and everything else still works."""
+    zip_path = ROOT / "cutter" / "build" / "kerf-cutter.zip"
+    sources = [p for p in (ROOT / "cutter" / "kerf_cutter").rglob("*") if p.is_file() and "__pycache__" not in p.parts] + list((ROOT / "cutter" / "package").glob("*"))
+    stale = not zip_path.exists() or max((p.stat().st_mtime for p in sources), default=0.0) > zip_path.stat().st_mtime
+    if skip or not (force or stale):
+        return
+    say("Building the Cutter download for the laser PCs (needs the internet the first time; --no-cutter-build skips this)...")
+    r = subprocess.run([str(VENV_PY), str(ROOT / "cutter" / "build_cutter.py")], cwd=ROOT / "cutter")
+    if r.returncode != 0:
+        say("Could not build the Cutter download. The Admin site will offer the pretend Cutter instead. Run `python3 cutter/build_cutter.py` when you are online.")
+
+
 def admin(data_dir: Path, *args: str) -> str:
     env = {"KERF_DATA_DIR": str(data_dir)}
     r = subprocess.run([str(VENV_PY), "-m", "kerf_server.admin", *args], cwd=SERVER, env={**os.environ, **env}, capture_output=True, text=True)
@@ -214,6 +228,7 @@ def main() -> int:
     ap.add_argument("--lan", action="store_true", help="let other computers on the network reach the Server (default: this PC only)")
     ap.add_argument("--data-dir", default=str(SERVER / "data"), help="where the database, logs and logins are kept")
     ap.add_argument("--rebuild", action="store_true", help="rebuild the Editor and reinstall the Server")
+    ap.add_argument("--no-cutter-build", action="store_true", help="do not build the Windows Cutter download (the Admin site then offers the pretend Cutter)")
     args = ap.parse_args()
 
     if sys.version_info < (3, 11):
@@ -222,6 +237,7 @@ def main() -> int:
 
     ensure_server_env(args.rebuild)
     ensure_editor_build(args.rebuild)
+    ensure_cutter_build(args.rebuild, args.no_cutter_build)
 
     earmarked: set[int] = set()
     server_port = pick_port(args.port, earmarked)

@@ -207,15 +207,19 @@ const cutter: Page = {
           const p = await makeCutterPackage(s, sel.value);
           const link = `${(url.value.trim() || location.origin).replace(/\/+$/, "")}${p.downloadPath}`;
           const row = (label: string, cmd: string) => el("div", { class: "ad-cmd" }, el("div", { class: "hint" }, label), el("div", { class: "ad-token" }, cmd), btn("Copy", () => void navigator.clipboard?.writeText(cmd)));
+          const real = p.kind === "real";
           out.replaceChildren(
             el("div", { class: "ad-card" },
-              el("p", { class: "ad-warn" }, p.kind === "pretend" ? "This is the PRETEND Cutter: it connects like a laser and sends a test camera picture, but cuts nothing and never touches a laser. The real Cutter is not finished yet." : "Cutter software"),
+              el("p", { class: real ? "ad-ok" : "ad-warn" }, real ? "The Cutter for Windows laser PCs. Nothing to install: it is a folder with its own Python." : "This is the PRETEND Cutter: it connects like a laser and sends a test camera picture, but cuts nothing and never touches a laser. The real Cutter has not been built on this server yet (run python3 cutter/build_cutter.py, then press the button again)."),
               el("h2", {}, `1. Download (for ${p.station})`),
               el("p", {}, el("a", { class: "btnlink", href: link, download: p.fileName }, `Download ${p.fileName}`), el("span", { class: "hint" }, `  This link works for an hour (until ${new Date(p.expiresAt).toLocaleTimeString()}). The file holds no token.`)),
               el("h2", {}, "2. On the laser PC"),
-              ...bullets(["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>"]),
+              ...bullets(real
+                ? ["Unzip it anywhere (the Desktop is fine) and close LightBurn, LaserGRBL and any Creality software: only one program can use the laser's USB port.", "Open a Command Prompt in the unzipped <kerf-cutter> folder."]
+                : ["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>"]),
               el("h2", {}, "3. Run this command"),
-              row("Windows", cutterCommand(url.value, p.token, p.station, "python")), row("Mac or Linux", cutterCommand(url.value, p.token, p.station, "python3")),
+              ...(real ? [row("Windows (first time; it is remembered after that, so later you just double-click run_cutter.bat)", cutterCommand(url.value, p.token, p.station, "real"))]
+                       : [row("Windows", cutterCommand(url.value, p.token, p.station, "pretend", "windows")), row("Mac or Linux", cutterCommand(url.value, p.token, p.station, "pretend", "unix"))]),
               el("p", { class: "hint" }, `The token is shown only now (it is not stored in the clear) and lets whoever has it connect as ${p.station}: keep it private. If it gets out, revoke ${p.station} on the Staff page and make a new one. Each time you press the button above a new token is made; the old ones keep working until revoked.`),
               el("p", { class: "hint" }, "Then open the Editor on that PC, sign in with the same token, and the Station page appears. The laser shows as Connected on the Lasers page.")));
         } catch (e) { await infoDialog("That didn't work", [msg(e)]); }

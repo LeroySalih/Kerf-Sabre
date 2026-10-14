@@ -12,6 +12,10 @@ if [ ! -d "$ROOT/editor/dist" ]; then
   echo "Building the Editor (first time only)..."
   (cd "$ROOT/editor" && npm install --no-audit --no-fund && npm run build)
 fi
+if [ ! -f "$ROOT/cutter/build/kerf-cutter.zip" ] && [ -z "${KERF_NO_CUTTER_BUILD:-}" ]; then   # the Windows Cutter that the Admin site offers (best effort; needs the internet once)
+  echo "Building the Cutter download for the laser PCs (first time only; set KERF_NO_CUTTER_BUILD=1 to skip)..."
+  "$PY" "$ROOT/cutter/build_cutter.py" || echo "Could not build it (offline?). The Admin site will offer the pretend Cutter instead."
+fi
 cd "$ROOT/server"
 [ -d .venv ] || "$PY" -m venv .venv
 # shellcheck disable=SC1091

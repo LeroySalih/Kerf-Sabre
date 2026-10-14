@@ -169,10 +169,15 @@ export interface CutterPackage { station: string; token: string; kind: "pretend"
 /** A fresh token for one laser's Cutter and a short-lived download link for the Cutter software. School admins only. */
 export const makeCutterPackage = (s: Session, station: string, f?: Fetch) => request<CutterPackage>(s, "POST", "/cutter/package", { station }, f);
 
-/** The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server. */
-export function cutterCommand(url: string, token: string, station: string, python: "python" | "python3" = "python"): string {
+/**
+ * The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server.
+ * The real Cutter is a Windows folder started by run_cutter.bat; the pretend one is a Python script that runs anywhere.
+ */
+export function cutterCommand(url: string, token: string, station: string, kind: "pretend" | "real" = "real", shell: "windows" | "unix" = "windows"): string {
   const q = (v: string) => (/^[A-Za-z0-9_.:/@-]+$/.test(v) ? v : `"${v.replace(/(["\\$`])/g, "\\$1")}"`);
-  return `${python} fake_cutter.py --url ${q(normaliseBase(url))} --token ${q(token)} --station ${q(station)}`;
+  const args = `--url ${q(normaliseBase(url))} --token ${q(token)} --station ${q(station)}`;
+  if (kind === "real") return `run_cutter.bat ${args}`;
+  return `${shell === "windows" ? "python" : "python3"} fake_cutter.py ${args}`;
 }
 export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }
 export const getMachine = (s: Session, id: string, f?: Fetch) => request<MachineInfo>(s, "GET", `/machines/${encodeURIComponent(id)}`, undefined, f);

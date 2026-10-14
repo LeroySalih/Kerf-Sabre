@@ -1,0 +1,21 @@
+[project]
+name = "kerf-cutter"
+version = "0.1.0"
+description = "BISAK Kerf Cutter: the station agent for a laser PC"
+requires-python = ">=3.11"
+# Runtime dependencies are bundled into the portable zip by build_cutter.py; these are for developing and testing.
+dependencies = ["pyserial>=3.5", "websockets>=12"]
+
+[project.optional-dependencies]
+camera = ["numpy", "opencv-python-headless"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+kerf-cutter = "kerf_cutter.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kerf_cutter*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

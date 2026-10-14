@@ -245,7 +245,7 @@ class TestCutterDownload:
         r = self.package(client, a["admin"])
         assert r.status_code == 201, r.text
         body = r.json()
-        assert body["token"].startswith("ks_") and body["kind"] == "pretend" and body["downloadPath"].endswith("/kerf-cutter-pretend.zip")
+        assert body["token"].startswith("ks_") and body["kind"] == "pretend" and body["downloadPath"].endswith("/kerf-cutter-pretend.zip") and body["fileName"] == "kerf-cutter-pretend.zip"
         z = client.get(body["downloadPath"])  # no Authorization header: the link is the permission
         assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
         names = zipfile.ZipFile(io.BytesIO(z.content)).namelist()
@@ -291,3 +291,24 @@ def test_a_placeholder_machine_in_an_older_database_gets_the_real_profile(tmp_pa
         with app2.state.db.session() as s:
             assert s.get(MachineRow, "station-1").data["bed"]["heightMm"] == 415
             assert s.get(MachineRow, "station-2").data["bed"]["heightMm"] == 420 and s.get(MachineRow, "station-2").camera_calibration == {"kept": True}
+
+    def test_when_the_real_cutter_has_been_built_that_is_what_is_offered(self, tmp_path):
+        import io
+        import zipfile
+
+        from fastapi.testclient import TestClient
+
+        from kerf_server.app import create_app
+        from kerf_server.config import Settings
+
+        built = tmp_path / "kerf-cutter.zip"
+        with zipfile.ZipFile(built, "w") as z:
+            z.writestr("kerf-cutter/run_cutter.bat", "@echo off")
+        app = create_app(Settings.from_env(data_dir=tmp_path / "d", cutter_zip=built))
+        with TestClient(app) as c:
+            admin = {"Authorization": "Bearer " + issue_token(app.state.db, "admin", "A1")}
+            r = c.post(f"{API}/cutter/package", json={"station": "station-1"}, headers=admin).json()
+            assert r["kind"] == "real" and r["fileName"] == "kerf-cutter.zip"
+            z = c.get(r["downloadPath"])
+            assert z.status_code == 200 and "kerf-cutter/run_cutter.bat" in zipfile.ZipFile(io.BytesIO(z.content)).namelist()
+            assert c.get(r["downloadPath"].replace("kerf-cutter.zip", "kerf-cutter-pretend.zip")).status_code == 404

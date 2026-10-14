@@ -1,5 +1,6 @@
-"""The downloadable Cutter package. Today that is the PRETEND Cutter (it cuts nothing); the real Cutter (cutter/PLAN.md) will take its place
-here, and nothing else in the download flow changes. The zip never contains a token: the token is only in the command the Admin site shows."""
+"""The downloadable Cutter package. If the portable Cutter zip has been built (cutter/build_cutter.py -> cutter/build/kerf-cutter.zip, or KERF_CUTTER_ZIP)
+that is what is served ("real"); otherwise it is the PRETEND Cutter (it cuts nothing). The zip never contains a token: the token is only in the command
+the Admin site shows."""
 from __future__ import annotations
 
 import io
@@ -7,8 +8,8 @@ import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-NAME = "kerf-cutter-pretend.zip"
-KIND = "pretend"
+PRETEND_NAME = "kerf-cutter-pretend.zip"
+REAL_NAME = "kerf-cutter.zip"
 
 README = """BISAK Kerf Cutter: PRETEND version
 ==================================
@@ -47,3 +48,22 @@ def build_zip() -> bytes:
         info.external_attr = 0o755 << 16  # executable on Mac/Linux
         z.writestr(info, SH)
     return buf.getvalue()
+
+
+def real_zip(settings) -> Path | None:
+    """The built portable Cutter, if there is one."""
+    p = settings.cutter_zip or Path(settings.shared_dir).parent / "cutter" / "build" / REAL_NAME
+    return p if p.is_file() else None
+
+
+def choose(settings) -> tuple[str, str, bytes]:
+    """(kind, file name, bytes) of what to offer for download."""
+    real = real_zip(settings)
+    if real is not None:
+        return "real", REAL_NAME, real.read_bytes()
+    return "pretend", PRETEND_NAME, build_zip()
+
+
+def kind_of(settings) -> tuple[str, str]:
+    """(kind, file name) without reading the file."""
+    return ("real", REAL_NAME) if real_zip(settings) is not None else ("pretend", PRETEND_NAME)

@@ -97,6 +97,9 @@ Capture thread at 5 to 10 fps, JPEG at a capped size and quality, sent as `camer
 Outbound WebSocket with the station token (from `cutter.json`, never logged), `hello` on connect (with `$$` and devices), `status` at about 2 Hz while a job runs and slower when idle, `progress` at about 1 Hz, reconnect with capped exponential backoff and jitter, ping/pong, stale-connection replacement is handled by the Server. G-code fetched over HTTPS with the token and checked against `gcodeSha256`. Server certificate verified (school proxy behaviour is open question 1).
 
 ## 11. Milestones (each ends with tests and a commit to `main`)
+
+**Status:** M0 to M4, M6 and M8 are built and tested (see `cutter/CLAUDE.md`); M5 is partly done (capture works, camera names need the station probe); M7 and M9 are not done.
+
 | # | Content | Done when |
 |---|---|---|
 | M0 | Scaffold `cutter/`, `pyproject`, `config.py`, `logs.py` (rotation, ship queue, levels), `fake_grbl` simulator | pytest green; logging tests cover rotation, redaction, restart cursor |

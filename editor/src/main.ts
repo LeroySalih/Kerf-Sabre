@@ -1387,19 +1387,15 @@ async function kerfTestDialog(): Promise<void> {
 }
 
 async function boxNetDialog(): Promise<void> {
-  const preset = findPreset(doc.state.materialId) ?? presetStore[0]!;
-  const yesNo = [{ value: "no", label: "No" }, { value: "yes", label: "Yes" }];
   const v = await openDialog("Box net", [
     { key: "widthMm", label: "Width (mm)", type: "number", value: 100, min: 10 },
     { key: "depthMm", label: "Depth (mm)", type: "number", value: 80, min: 10 },
     { key: "heightMm", label: "Height (mm)", type: "number", value: 40, min: 10 },
-    { key: "thicknessMm", label: "Material thickness (mm)", type: "number", value: preset.thicknessMm, min: 0.1 },
-    { key: "flanges", label: "Flanges", type: "select", value: "no", options: yesNo, hint: "Tabs on the side walls that fold in against the front and back walls" },
+    { key: "flanges", label: "Glue flanges", type: "select", value: "no", options: [{ value: "no", label: "No" }, { value: "yes", label: "Yes" }], hint: "Tabs on the side walls that fold in and are glued against the front and back walls" },
     { key: "flangeMm", label: "Flange width (mm)", type: "number", value: 10, min: 3 },
-    { key: "slots", label: "Slots", type: "select", value: "no", options: yesNo, hint: "Needs flanges: a tongue on each flange passes through a slit in the front and back walls" },
   ], { intro: "The flat pattern for an open-topped box (base and four walls). Cut lines are the outline; score lines are the folds. Dimensions are the outside size.", ok: "Add net" });
   if (!v) return;
-  const p: BoxNetParams = { ...(v as unknown as BoxNetParams), flanges: v.flanges === "yes", slots: v.slots === "yes" };
+  const p: BoxNetParams = { ...(v as unknown as BoxNetParams), flanges: v.flanges === "yes" };
   const error = validateBoxNet(p);
   if (error) { notify(error); return; }
   insertGenerated(boxNet(p), "Box net");

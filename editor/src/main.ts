@@ -14,6 +14,7 @@ import { alignDeltas, distributeDeltas, unionBounds, type AlignKind, type Unit }
 import { booleanOp, type BoolOp } from "./boolean";
 import { parseClip, serializeClip } from "./clipboard";
 import { openDialog } from "./dialog";
+import { boxNet, validateBoxNet, type BoxNetParams } from "./boxnet";
 import { kerfTest, testGrid, validateKerfTest, validateTestGrid, type TestGridParams, type TestItem } from "./testgrid";
 import { canSubmit, outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
@@ -1385,6 +1386,21 @@ async function kerfTestDialog(): Promise<void> {
   insertGenerated(kerfTest(p), "Kerf test coupon");
 }
 
+async function boxNetDialog(): Promise<void> {
+  const v = await openDialog("Box net", [
+    { key: "widthMm", label: "Width (mm)", type: "number", value: 100, min: 10 },
+    { key: "depthMm", label: "Depth (mm)", type: "number", value: 80, min: 10 },
+    { key: "heightMm", label: "Height (mm)", type: "number", value: 40, min: 10 },
+    { key: "flanges", label: "Glue flanges", type: "select", value: "no", options: [{ value: "no", label: "No" }, { value: "yes", label: "Yes" }], hint: "Tabs on the side walls that fold in and are glued against the front and back walls" },
+    { key: "flangeMm", label: "Flange width (mm)", type: "number", value: 10, min: 3 },
+  ], { intro: "The flat pattern for an open-topped box (base and four walls). Cut lines are the outline; score lines are the folds. Dimensions are the outside size.", ok: "Add net" });
+  if (!v) return;
+  const p: BoxNetParams = { ...(v as unknown as BoxNetParams), flanges: v.flanges === "yes" };
+  const error = validateBoxNet(p);
+  if (error) { notify(error); return; }
+  insertGenerated(boxNet(p), "Box net");
+}
+
 /** Make copies of the selection, one per matrix (applied on top of each shape's own placement), then select everything. */
 function repeatSelected(matrices: Matrix[], what: string): void {
   const data = doc.copyOut(selected);
@@ -1643,7 +1659,7 @@ function roundAllSelected(): void {
 }
 on("round-all", roundAllSelected);
 
-const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog() };
+const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog(), "box-net": () => void boxNetDialog() };
 on("act-linear", () => menuActions["linear-repeat"]!());
 on("act-circular", () => menuActions["circular-array"]!());
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>

@@ -63,15 +63,21 @@ async def run(args: argparse.Namespace) -> None:
                 await send({"type": "progress", "jobId": job_id, "line": int(lines * min(done_s / total_s, 1)), "totalLines": lines,
                             "estimatedS": total_s, "actualS": round(done_s, 1)})
             outcome = "cancelled" if state["stop"] else "done"
+            if outcome == "done":
+                cut_done["yes"] = True
             await send({"type": "result", "jobId": job_id, "outcome": outcome, "actualS": round(time.time() - t0, 1)})
             state.update(state="Idle", job=None, paused=False)
             print(f"[fake cutter] {job_id} {outcome}")
 
-        picture = base64.b64encode(resources.files("kerf_server.devtools").joinpath("fake_bed.jpg").read_bytes()).decode()
+        def load(name: str) -> str:
+            return base64.b64encode(resources.files("kerf_server.devtools").joinpath(name).read_bytes()).decode()
+
+        pictures = {"plain": load("fake_bed.jpg"), "marked": load("fake_bed_marked.jpg") if args.marks_after_cut else ""}
+        cut_done = {"yes": False}
 
         async def camera() -> None:
             while True:
-                await send({"type": "camera", "jpegBase64": picture})
+                await send({"type": "camera", "jpegBase64": pictures["marked"] if cut_done["yes"] and pictures["marked"] else pictures["plain"]})
                 await asyncio.sleep(1)
 
         cam = asyncio.create_task(camera())
@@ -110,6 +116,7 @@ def main() -> None:
     ap.add_argument("--x", type=float, default=100.0, help="head position X to report (mm)")
     ap.add_argument("--y", type=float, default=100.0, help="head position Y to report (mm)")
     ap.add_argument("--frame-s", type=float, default=2.0, help="how long framing takes")
+    ap.add_argument("--marks-after-cut", action="store_true", help="after the first cut, send a camera picture that shows four 40 mm squares scored at bed (140,140), (260,140), (140,260), (260,260) (for trying or documenting camera calibration)")
     asyncio.run(run(ap.parse_args()))
 
 

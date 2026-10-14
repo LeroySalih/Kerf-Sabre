@@ -1,10 +1,10 @@
 // Client for the BISAK Kerf Server (shared/openapi.yaml). The token and address live in this browser only.
 import type { Preset } from "./presets";
-import type { JobDoc, JobObject, Origin } from "./job";
+import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 
 export interface Session { baseUrl: string; token: string; role: string; id: string }
 export interface Receipt { id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
-export interface JobSummary { objects: JobObject[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface JobSummary { objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {

@@ -50,6 +50,7 @@
         </div>
         <div class="group" role="group" aria-label="View">
           <label><input id="grid" type="checkbox" checked /> 1 cm grid</label>
+          <label title="Show or hide the dimensions. Hidden dimensions are still saved"><input id="show-dims" type="checkbox" checked /> Dimensions</label>
           <label title="Snap to endpoints, midpoints, centres, intersections and the grid. Hold Alt/Option to disable."><input id="snap" type="checkbox" checked /> Snap</label>
         </div>
         <div class="group menu" id="tools-menu">
@@ -89,6 +90,9 @@
         <button data-tool="radius" title="Corner radius. Click a corner to round it; set the radius in Options" aria-label="Corner radius"><svg class="ico"><use href="#i-radius"/></svg></button>
         <button id="round-all" title="Round all corners of the selection, using the radius in Options" aria-label="Round all corners of the selection, using the radius in Options"><svg class="ico"><use href="#i-round-all"/></svg></button>
         <button data-tool="measure" title="Measure. Drag between two points" aria-label="Measure"><svg class="ico"><use href="#i-measure"/></svg></button>
+        <button data-tool="dim" title="Dimension. Click two points (they snap to corners and centres), then click where the dimension line should go. Dimensions are only for looking at: they are never cut" aria-label="Dimension"><svg class="ico"><use href="#i-dim"/></svg></button>
+        <button data-tool="dimr" title="Diameter or radius dimension. Click a circle or arc (choose which in Options). Never cut" aria-label="Diameter or radius dimension"><svg class="ico"><use href="#i-dim-radial"/></svg></button>
+        <button id="act-dim-auto" title="Dimension the selection: adds its width and height. Never cut" aria-label="Dimension the selection"><svg class="ico"><use href="#i-dim-auto"/></svg></button>
         <button id="gimbal" title="Gimbal (G). Arrows move along an axis, squares scale, the ring rotates (Shift = 15 degree steps). The pivot is the anchor chosen in Properties" aria-label="Gimbal"><svg class="ico"><use href="#i-gimbal"/></svg></button>
         <hr />
         <button id="b-union" title="Union. Merge the selected shapes into one outline" aria-label="Union"><svg class="ico"><use href="#i-union"/></svg></button>
@@ -165,6 +169,11 @@
             <div id="opt-star" class="row" hidden>
               <label title="Number of tips">Points <input id="star-points" type="number" min="3" max="32" step="1" value="5" style="width:4em" /></label>
               <label title="Valley radius as a percentage of the tip radius. Lower is sharper.">Sharpness <input id="star-inner" type="number" min="5" max="95" value="40" style="width:4.5em" /> %</label>
+            </div>
+            <div id="opt-dim" class="row" hidden>
+              <label title="Which way a linear dimension measures. Auto picks horizontal, vertical or along the line from your two points">Measure <select id="dim-axis"><option value="auto">Auto</option><option value="aligned">Along the line</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
+              <label title="What the circle tool adds">Circle <select id="dim-kind"><option value="diameter">Diameter</option><option value="radius">Radius</option></select></label>
+              <span class="hint">Dimensions are for looking at. They are never cut or sent to the laser.</span>
             </div>
             <div id="opt-radius" class="row" hidden>
               <label title="Corner radius, or chamfer setback, in mm">Corner size <input id="radius" type="number" min="0.1" value="5" style="width:5em" /> mm</label>

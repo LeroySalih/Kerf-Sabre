@@ -16,7 +16,7 @@ def rect_obj(oid, x, y, w, h, layer="cut", closed=True):
 
 
 def job_doc(pupil="P001", status="draft", objects=None, **over):
-    d = {"schemaVersion": "0.2.0", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
+    d = {"schemaVersion": "0.2.1", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
          "preset": {"id": "ply-3mm", "version": 1}, "station": None, "origin": {"mode": "absolute"},
          "objects": objects or [rect_obj("a", 20, 20, 50, 30)]}
     d.update(over)
@@ -190,3 +190,30 @@ class TestFromDxf:
     def test_bad_file(self, client, tokens):
         r = client.post(f"{API}/jobs/from-dxf", data={"presetId": "ply-3mm"}, files={"file": ("a.dxf", b"not a dxf")}, headers=auth(tokens["pupil"]))
         assert r.status_code == 422
+
+
+class TestDimensions:
+    DIMS = [
+        {"id": "d1", "kind": "linear", "axis": "horizontal", "a": [20, 20], "b": [70, 20], "offsetMm": -8},
+        {"id": "d2", "kind": "radial", "center": [30, 30], "radiusMm": 5, "angleRad": 0.5, "diameter": True},
+    ]
+
+    def test_saved_returned_and_replaced(self, client, tokens):
+        h = auth(tokens["pupil"])
+        jid = post(client, tokens, dimensions=self.DIMS).json()["id"]
+        assert client.get(f"{API}/jobs/{jid}", headers=h).json()["dimensions"] == self.DIMS
+        client.put(f"{API}/jobs/{jid}", json=job_doc(dimensions=self.DIMS[:1]), headers=h)
+        assert client.get(f"{API}/jobs/{jid}", headers=h).json()["dimensions"] == self.DIMS[:1]
+
+    def test_bad_dimension_is_rejected(self, client, tokens):
+        bad = [{"id": "d", "kind": "linear", "axis": "diagonal", "a": [0, 0], "b": [1, 1], "offsetMm": 1}]
+        assert post(client, tokens, dimensions=bad).status_code == 422
+
+    def test_never_part_of_the_gcode(self, client, tokens):
+        h = auth(tokens["station"])
+        a = post(client, tokens, status="submitted").json()["id"]
+        b = post(client, tokens, status="submitted", dimensions=self.DIMS).json()["id"]
+        ga = client.get(f"{API}/jobs/{a}/gcode", headers=h).text.splitlines()
+        gb = client.get(f"{API}/jobs/{b}/gcode", headers=h).text.splitlines()
+        assert ga[1:] == gb[1:]  # same program (only the job id comment differs)
+        assert client.get(f"{API}/jobs/{b}", headers=h).json()["estimate"] == client.get(f"{API}/jobs/{a}", headers=h).json()["estimate"]

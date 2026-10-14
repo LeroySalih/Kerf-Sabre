@@ -38,6 +38,8 @@ class Job(Base):
     origin: Mapped[dict[str, Any]] = mapped_column(JSON)
     objects: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     estimate: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: Dimension annotations from the Editor. Stored and returned, never used for G-code.
+    dimensions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     report: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # DXF clean-up report
     units: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

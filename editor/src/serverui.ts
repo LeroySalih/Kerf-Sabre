@@ -1,8 +1,9 @@
 // Pupil sign-in and their files on the server: Save, Send for cutting, My files (open / send / cancel).
 // All talking is in server.ts; the job document is built and read back in job.ts.
 import { infoDialog, openDialog } from "./dialog";
+import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
-import { ANCHORS, buildJob, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
+import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { setPresets } from "./presets";
 import {
   STATUS_TEXT, ServerError, cancelJob, describeDuration, listJobs, listPresets, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
@@ -11,13 +12,14 @@ import {
 
 export interface ServerUiContext {
   objects: () => DocObject[];
+  dimensions: () => Dimension[];
   materialId: () => string;
   /** Why the design can't be sent right now (out of bounds, empty...), or null. */
   blocker: () => string | null;
   notify: (msg: string) => void;
   presetsChanged: () => void;
   /** Replace the page with these shapes (and material), as one undoable step. */
-  load: (shapes: LoadedShape[], materialId: string | null) => void;
+  load: (shapes: LoadedShape[], materialId: string | null, dimensions: Dimension[]) => void;
   /** Empty the page (used on sign-out so the next pupil never sees it). */
   clear: () => void;
 }
@@ -36,7 +38,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   const defaultBase = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
 
   /** A fingerprint of the page, to tell whether there is anything unsaved. */
-  const key = () => JSON.stringify([ctx.materialId(), ctx.objects().map((o) => [o.path, o.matrix, o.layer, o.tabs, o.settings])]);
+  const key = () => JSON.stringify([ctx.materialId(), ctx.objects().map((o) => [o.path, o.matrix, o.layer, o.tabs, o.settings]), ctx.dimensions()]);
   const dirty = () => ctx.objects().length > 0 && key() !== savedKey;
   const markSaved = () => { savedKey = key(); };
   const confirmDiscard = (what: string) => !dirty() || confirm(`You have changes that are not saved. ${what} anyway?`);
@@ -76,7 +78,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
 
   /** Make sure there is a draft on the server holding the current design. Returns its id. */
   async function saveCurrent(): Promise<string> {
-    const job = buildJob({ objects: ctx.objects(), pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
+    const job = buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
     if (jobId) {
       try { await saveDraft(session!, jobId, job); markSaved(); return jobId; } catch (e) {
         if (!(e instanceof ServerError && (e.status === 409 || e.status === 404))) throw e; // the draft was sent or cancelled meanwhile: start a new one
@@ -128,7 +130,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
 
   function open(j: JobSummary, close: () => void): void {
     if (!confirmDiscard("Open this file")) return;
-    ctx.load(fromJobObjects(j.objects), j.preset.id);
+    ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
     origin = j.origin ?? DEFAULT_ORIGIN;
     jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
     markSaved();

@@ -28,6 +28,7 @@ import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs"
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
 import { initServerUi } from "./serverui";
+import { boxDimensions, dimGeometry, dimLabel, linearAxis, pickDimension, radialFromPath, type DimAxis, type Dimension, type LinearDim } from "./dimensions";
 
 mountIcons();
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -39,7 +40,7 @@ let machine: MachineProfile = profiles[0]!;
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
-type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text";
+type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text" | "dim" | "dimr";
 let tool: Tool = "select";
 let showGrid = true;
 let spaceDown = false;
@@ -261,6 +262,94 @@ function drawSnapMarker(pt: Point, kind: SnapKind): void {
   new paper.PointText({ point: c.add(new paper.Point(10, -8)), content: kind, fontSize: 11, fontWeight: "bold", fillColor: new paper.Color("#047857") });
 }
 
+// ---- dimensions: annotations only (never cut, exported or sent to the Cutter) ----
+const DIM_COLOUR = "#0f766e";
+let showDims = true;
+let dimDraft: { a: Point; b?: Point } | null = null; // the Dimension tool: first point, then second point, then the offset
+let dimCursor: Point | null = null;
+let selectedDims = new Set<string>();
+const dimAxisSel = document.getElementById("dim-axis") as HTMLSelectElement;
+const dimKindSel = document.getElementById("dim-kind") as HTMLSelectElement;
+
+function chooseAxis(a: Point, b: Point): DimAxis {
+  const v = dimAxisSel.value;
+  if (v !== "auto") return v as DimAxis;
+  const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+  return dx >= 2 * dy ? "horizontal" : dy >= 2 * dx ? "vertical" : "aligned";
+}
+
+/** The offset that puts the dimension line through `p`. */
+function offsetThrough(axis: DimAxis, a: Point, b: Point, p: Point): number {
+  const u = linearAxis({ id: "", kind: "linear", axis, a, b, offsetMm: 0 });
+  const n = { x: -u.y, y: u.x };
+  return p.x * n.x + p.y * n.y - Math.max(a.x * n.x + a.y * n.y, b.x * n.x + b.y * n.y);
+}
+
+/** What the Dimension tool would add right now, drawn faintly. */
+function dimGhost(): LinearDim | null {
+  if (tool !== "dim" || !dimDraft || !dimCursor) return null;
+  const axis = chooseAxis(dimDraft.a, dimDraft.b ?? dimCursor);
+  if (!dimDraft.b) return { id: "ghost", kind: "linear", axis, a: dimDraft.a, b: dimCursor, offsetMm: 0 };
+  return { id: "ghost", kind: "linear", axis, a: dimDraft.a, b: dimDraft.b, offsetMm: offsetThrough(axis, dimDraft.a, dimDraft.b, dimCursor) };
+}
+
+function drawDimension(d: Dimension, isSelected: boolean, ghost: boolean): void {
+  const g = dimGeometry(d);
+  const colour = new paper.Color(isSelected ? "#e11d48" : DIM_COLOUR);
+  const width = isSelected ? 2 : 1;
+  for (const [p, q] of g.lines) {
+    const l = new paper.Path.Line(toScreen(p), toScreen(q));
+    l.strokeColor = colour;
+    l.strokeWidth = width;
+    if (ghost) l.dashArray = [4, 3];
+  }
+  for (const { tip, dir } of g.arrows) {
+    const t = toScreen(tip);
+    const u = new paper.Point(dir.x, -dir.y); // screen Y is down
+    const base = t.subtract(u.multiply(9));
+    const side = new paper.Point(-u.y, u.x).multiply(3.2);
+    const head = new paper.Path([t, base.add(side), base.subtract(side)]);
+    head.closed = true;
+    head.fillColor = colour;
+  }
+  const at = toScreen(g.labelAt).add(new paper.Point(0, d.kind === "linear" ? -9 : 4));
+  const label = new paper.PointText({ point: at, content: dimLabel(d), fontSize: 12, fontWeight: "bold", justification: "center", fillColor: colour });
+  const bg = new paper.Path.Rectangle(label.bounds.expand(3));
+  bg.fillColor = new paper.Color(1, 1, 1, 0.85);
+  label.insertAbove(bg);
+}
+
+function dimClick(p: Point): void {
+  if (!dimDraft) { dimDraft = { a: p }; dimCursor = p; draw(); return; }
+  if (!dimDraft.b) {
+    if (Math.hypot(p.x - dimDraft.a.x, p.y - dimDraft.a.y) < 0.01) return; // same point twice
+    dimDraft.b = p;
+    draw();
+    return;
+  }
+  const { a, b } = dimDraft;
+  const axis = chooseAxis(a, b);
+  edit(() => { doc.addDimensions([{ id: doc.newDimId(), kind: "linear", axis, a, b, offsetMm: offsetThrough(axis, a, b, p) }]); });
+  dimDraft = null;
+}
+
+function dimRadialClick(e: MouseEvent): void {
+  const r = canvas.getBoundingClientRect();
+  const id = pickObject(new paper.Point(e.clientX - r.left, e.clientY - r.top));
+  const o = id === undefined ? undefined : doc.get(id);
+  const dim = o ? radialFromPath(transformPath(o.path, o.matrix), bedPt(e), 12 / view.scale, dimKindSel.value === "diameter", "") : null;
+  if (!dim) { notify("Click on a circle or an arc."); return; }
+  edit(() => { doc.addDimensions([{ ...dim, id: doc.newDimId() }]); });
+}
+
+function dimensionSelection(): void {
+  const objs = doc.state.objects.filter((o) => selected.has(o.id));
+  if (!objs.length) return;
+  const bs = objs.map((o) => boundsOf(transformPath(o.path, o.matrix)));
+  const box = { minX: Math.min(...bs.map((b) => b.minX)), minY: Math.min(...bs.map((b) => b.minY)), maxX: Math.max(...bs.map((b) => b.maxX)), maxY: Math.max(...bs.map((b) => b.maxY)) };
+  edit(() => { doc.addDimensions(boxDimensions(box, () => doc.newDimId())); });
+}
+
 function drawMeasure(a: Point, b: Point): void {
   const line = new paper.Path.Line(toScreen(a), toScreen(b));
   line.strokeColor = new paper.Color("#7c3aed");
@@ -388,6 +477,9 @@ function draw(): void {
     box.fillColor.alpha = 0.08;
     if (mode === "crossing") box.dashArray = [5, 4];
   }
+  if (showDims) for (const d of doc.state.dimensions) drawDimension(d, selectedDims.has(d.id), false);
+  const ghost = dimGhost();
+  if (ghost) drawDimension(ghost, false, true);
   if (measureLine) drawMeasure(measureLine.a, measureLine.b);
   if (snapMarker) drawSnapMarker(snapMarker.pt, snapMarker.kind);
   drawGizmo();
@@ -420,10 +512,11 @@ function setTool(next: Tool): void {
   refreshOptions();
   penPoints = [];
   penCursor = null;
+  dimDraft = null;
   trimPreview = null;
   snapMarker = null;
   if (tool !== "measure") measureLine = null;
-  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" || tool === "tab" ? "crosshair" : "";
+  canvas.style.cursor = tool === "trim" || tool === "measure" || tool === "text" || tool === "pen" || tool === "radius" || tool === "nodes" || tool === "tab" || tool === "dim" || tool === "dimr" ? "crosshair" : "";
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === tool));
   draw();
 }
@@ -450,6 +543,7 @@ function refreshOptions(): void {
     "opt-rrect": tool === "rrect",
     "opt-star": tool === "star",
     "opt-tabs": tool === "tab" || hasTabs,
+    "opt-dim": tool === "dim" || tool === "dimr",
   };
   for (const [id, on] of Object.entries(show)) (document.getElementById(id) as HTMLElement).hidden = !on;
   (document.getElementById("opt-none") as HTMLElement).hidden = Object.values(show).some(Boolean);
@@ -463,8 +557,10 @@ function refreshActions(): void {
   const set = (id: string, enabled: boolean) => { (document.getElementById(id) as HTMLButtonElement).disabled = !enabled; };
   for (const id of ["b-union", "b-intersect", "b-subtract", "group"]) set(id, units >= 2);
   set("ungroup", objs.some((o) => o.group !== undefined));
-  for (const id of ["flip-h", "flip-v", "round-all", "act-linear", "act-circular", "copy", "dup", "del"]) set(id, objs.length >= 1);
+  for (const id of ["flip-h", "flip-v", "round-all", "act-linear", "act-circular", "copy", "dup"]) set(id, objs.length >= 1);
   set("act-tabs", objs.some(tabbable));
+  set("act-dim-auto", objs.length >= 1);
+  set("del", objs.length >= 1 || selectedDims.size >= 1);
   set("act-join", objs.filter((o) => !o.path.closed).length >= 2);
   set("act-close", objs.some((o) => !o.path.closed));
   set("act-explode", objs.some((o) => o.path.segs.length >= 2 || (o.path.closed && o.path.segs.length >= 1)));
@@ -515,6 +611,8 @@ document.querySelectorAll<HTMLButtonElement>("[data-align]").forEach((b) => b.ad
 on("dist-h", () => distributeSelected("h"));
 on("dist-v", () => distributeSelected("v"));
 on("b-union", () => booleanSelected("union"));
+on("act-dim-auto", dimensionSelection);
+document.getElementById("show-dims")!.addEventListener("change", (ev) => { showDims = (ev.target as HTMLInputElement).checked; draw(); });
 on("b-intersect", () => booleanSelected("intersect"));
 on("b-subtract", () => booleanSelected("subtract"));
 on("group", () => groupSelected());
@@ -693,7 +791,7 @@ function ungroupSelected(): void {
 }
 
 function deleteSelected(): void {
-  if (selected.size) edit(() => { doc.remove([...selected]); selected.clear(); });
+  if (selected.size || selectedDims.size) edit(() => { doc.remove([...selected]); selected.clear(); doc.removeDimensions([...selectedDims]); selectedDims.clear(); });
 }
 
 function download(name: string, text: string, type: string): void {
@@ -726,13 +824,14 @@ window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLSelectElement || (e.target instanceof HTMLInputElement && e.target.type !== "radio")) return; // typing in a field
   if (tool === "pen" && penPoints.length && e.key === "Enter") { e.preventDefault(); penFinish(false); }
   else if (tool === "pen" && penPoints.length && e.key === "Escape") penCancel();
+  else if (tool === "dim" && dimDraft && e.key === "Escape") { dimDraft = null; draw(); }
   else if (tool === "pen" && penPoints.length && (e.key === "Backspace" || e.key === "Delete")) { penPoints.pop(); draw(); }
   else if ((e.key === "Delete" || e.key === "Backspace") && deleteSelectedNode()) { e.preventDefault(); }
   else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSelected(); }
   else if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) setGimbal(!showGimbal);
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
-  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), draw()); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), selectedDims.clear(), draw()); }
 });
 
 // ---- text ----
@@ -997,6 +1096,8 @@ canvas.addEventListener("mousedown", (e) => {
   if (tool === "radius") { if (e.button === 0) doCorner(bedPt(e)); return; }
   if (tool === "tab") { if (e.button === 0) doTab(bedPt(e)); return; }
   if (tool === "pen") { if (e.button === 0) penClick(snapPt(bedPt(e), e)); return; }
+  if (tool === "dim") { if (e.button === 0) dimClick(snapPt(bedPt(e), e)); return; }
+  if (tool === "dimr") { if (e.button === 0) dimRadialClick(e); return; }
   if (tool === "text") { e.preventDefault(); placeText(snapPt(bedPt(e), e)); snapMarker = null; return; } // preventDefault: keep focus on the text box
   const p = isDrawTool() ? snapPt(bedPt(e), e) : bedPt(e);
   dragStart = dragLast = p;
@@ -1005,6 +1106,16 @@ canvas.addEventListener("mousedown", (e) => {
   if (tool === "trim") { doTrim(p); trimPreview = null; draw(); return; }
   if (tool === "select") {
     const r = canvas.getBoundingClientRect();
+    const dimHit = showDims ? pickDimension(doc.state.dimensions, p, 8 / view.scale) : undefined;
+    if (dimHit) { // a dimension: select it (Delete removes it)
+      if (!e.shiftKey) { selected.clear(); selectedDims = new Set(); }
+      selectedDims.has(dimHit) ? selectedDims.delete(dimHit) : selectedDims.add(dimHit);
+      dragStart = dragLast = null;
+      refreshActions();
+      draw();
+      return;
+    }
+    if (!e.shiftKey) selectedDims = new Set();
     const id = pickObject(new paper.Point(e.clientX - r.left, e.clientY - r.top));
     if (id === undefined) {
       if (!e.shiftKey) selected.clear();
@@ -1043,6 +1154,7 @@ canvas.addEventListener("mousemove", (e) => {
   const raw = bedPt(e);
   cursorEl.textContent = `X ${raw.x.toFixed(1)}  Y ${raw.y.toFixed(1)} mm`;
   if (tool === "pen") { penCursor = snapPt(raw, e); draw(); return; }
+  if (tool === "dim") { dimCursor = snapPt(raw, e); draw(); return; }
   const p = isDrawTool() ? snapPt(raw, e) : raw;
   if (isDrawTool() && !dragStart) draw(); // show the snap marker while hovering
   if (tool === "measure") {
@@ -1411,15 +1523,18 @@ toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
 
 initServerUi({
   objects: () => doc.state.objects,
+  dimensions: () => doc.state.dimensions,
   materialId: () => doc.state.materialId,
   blocker: () =>
     !doc.state.objects.length ? "Draw or import something first."
     : !canSubmit(doc.state.objects, machine.bed) ? "Part of the design is off the bed (shown red). Move it onto the bed first."
     : null,
   notify,
-  load: (shapes, materialId) => {
+  load: (shapes, materialId, dims) => {
     edit(() => {
       doc.state.objects = [];
+      doc.state.dimensions = dims;
+      selectedDims = new Set();
       selected = new Set();
       for (const sh of shapes) {
         const o = doc.add(sh.path, sh.matrix, sh.layer);
@@ -1432,7 +1547,7 @@ initServerUi({
     refreshLayerUI();
     fit();
   },
-  clear: () => { doc.reset(); selected = new Set(); fillMaterials(); refreshLayerUI(); draw(); },
+  clear: () => { doc.reset(); selected = new Set(); selectedDims = new Set(); dimDraft = null; fillMaterials(); refreshLayerUI(); draw(); },
   presetsChanged: () => { fillMaterials(); refreshLayerUI(); },
 });
 

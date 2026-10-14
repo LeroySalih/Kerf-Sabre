@@ -23,6 +23,9 @@ export const ICONS: Record<string, string> = {
   tab: '<path d="M4 18V6h5M15 6h5v12H4"/><path d="M9 3.5v5M15 3.5v5"/>',
   "tabs-auto": '<path d="M4 8V4h5M13 4h7v5M20 13v7h-5M11 20H4v-5"/>',
   measure: '<g transform="rotate(-35 12 12)"><rect x="2" y="8.5" width="20" height="7" rx="1"/><path d="M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3" /></g>',
+  dim: '<path d="M4 8v8M20 8v8"/><path d="M4 12h16"/><path d="M4 12l3-1.8v3.6zM20 12l-3-1.8v3.6z" fill="currentColor"/>',
+  "dim-radial": '<circle cx="12" cy="12" r="8"/><path d="M5.2 16.2L18.8 7.8"/><path d="M5.2 16.2l3-.6-1.4-2zM18.8 7.8l-3 .6 1.4 2z" fill="currentColor"/>',
+  "dim-auto": '<rect x="6" y="5" width="12" height="9"/><path d="M6 19h12M6 17.2v3.6M18 17.2v3.6"/>',
   gimbal: '<circle cx="12" cy="12" r="1.8"/><path d="M12 10.2V3.8M9.9 5.9L12 3.8l2.1 2.1M13.8 12h6.4M18.1 9.9l2.1 2.1-2.1 2.1"/><path d="M7.2 16.8a6.5 6.5 0 0 0 9.6 0"/>',
   // ---- boolean ----
   union: '<path d="M4 4h10v6h6v10H10v-6H4z" fill="currentColor" fill-opacity=".18"/>',

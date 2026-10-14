@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.0"
+      "const": "0.2.1"
     },
     "id": {
       "type": "string",
@@ -161,6 +161,14 @@
       },
       "description": "Non-blocking problems found when the job was accepted"
     },
+    "dimensions": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/dimension"
+      },
+      "description": "Dimension annotations for people looking at the design. They are never cut, never turned into G-code and never sent to the Cutter."
+    },
     "statusReason": {
       "type": "string",
       "description": "Why the job was rejected, cancelled or failed. Never contains a pupil name."
@@ -248,6 +256,36 @@
             "to": {
               "$ref": "#/$defs/point"
             }
+          }
+        }
+      ]
+    },
+    "dimension": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "kind", "axis", "a", "b", "offsetMm"],
+          "additionalProperties": false,
+          "properties": {
+            "id": {"type": "string"},
+            "kind": {"const": "linear"},
+            "axis": {"enum": ["aligned", "horizontal", "vertical"]},
+            "a": {"$ref": "#/$defs/point"},
+            "b": {"$ref": "#/$defs/point"},
+            "offsetMm": {"type": "number", "description": "How far the dimension line sits from the measured points, to the left of a-to-b (aligned) or up/left of the points (horizontal/vertical)"}
+          }
+        },
+        {
+          "type": "object",
+          "required": ["id", "kind", "center", "radiusMm", "angleRad", "diameter"],
+          "additionalProperties": false,
+          "properties": {
+            "id": {"type": "string"},
+            "kind": {"const": "radial"},
+            "center": {"$ref": "#/$defs/point"},
+            "radiusMm": {"type": "number", "exclusiveMinimum": 0},
+            "angleRad": {"type": "number", "description": "Direction from the centre where the leader meets the circle"},
+            "diameter": {"type": "boolean"}
           }
         }
       ]

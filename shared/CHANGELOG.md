@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.1 - dimensions (additive)
+- `job.schema.json`: optional `dimensions` array (linear and radial dimension annotations). They exist so a design can be read at a glance in the Editor and are saved with the job; the Server stores them and never uses them for G-code, estimates or bounds, and they are never sent to the Cutter.
+- Every schema's `schemaVersion` constant, the OpenAPI `info.version` and Editor presets/job documents moved to `0.2.1`.
+
 ## 0.2.0 - server contract (additive)
 Everything below is additive. The only change to existing data is the `schemaVersion` constant: set it to `0.2.0`.
 - `openapi.yaml`:

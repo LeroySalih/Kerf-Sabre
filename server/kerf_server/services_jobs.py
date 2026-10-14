@@ -15,7 +15,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.0"
+SCHEMA_VERSION = "0.2.1"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -44,6 +44,8 @@ def to_doc(j: Job) -> dict[str, Any]:
     }
     if j.estimate:
         doc["estimate"] = j.estimate
+    if j.dimensions:
+        doc["dimensions"] = j.dimensions
     if j.status_reason:
         doc["statusReason"] = j.status_reason
     return doc
@@ -163,7 +165,7 @@ def create(s: Session, cfg: Settings, who, doc: dict[str, Any], *, source: str =
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j = Job(
         id=new_id(), pupil_id=pupil, status="draft", source=source, preset_id=p["id"], preset_version=p["version"],
-        station=doc.get("station"), origin=doc["origin"], objects=doc["objects"], warnings=[], report=report, units=units,
+        station=doc.get("station"), origin=doc["origin"], objects=doc["objects"], dimensions=doc.get("dimensions", []), warnings=[], report=report, units=units,
     )
     s.add(j)
     s.flush()
@@ -180,6 +182,7 @@ def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
     if p is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j.objects, j.origin, j.station = doc["objects"], doc["origin"], doc.get("station")
+    j.dimensions = doc.get("dimensions", [])
     j.preset_id, j.preset_version = p["id"], p["version"]
     j.estimate, j.warnings = None, []
     event(s, j.id, who.id, "replaced")

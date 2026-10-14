@@ -2,6 +2,7 @@
 // Tabs are stored in the Editor as fractions along the outline; the schema wants a distance in bed space
 // (after the matrix) from the object's start point, so they are converted here.
 import type { DocObject, LayerType, ShapeSettings } from "./doc";
+import type { Dimension } from "./dimensions";
 import { transformPath, type Matrix, type Path, type Seg } from "./geometry";
 import { pathLength, type TabSpec } from "./tabs";
 
@@ -37,7 +38,7 @@ export interface JobObject {
 }
 
 export interface JobDoc {
-  schemaVersion: "0.2.0";
+  schemaVersion: "0.2.1";
   id: string;
   pupilId: string;
   createdAt: string;
@@ -46,7 +47,23 @@ export interface JobDoc {
   station: null;
   origin: Origin;
   objects: JobObject[];
+  /** Annotations for people. The server keeps them; they are never cut or sent to the Cutter. */
+  dimensions?: JobDimension[];
 }
+
+export type JobDimension =
+  | { id: string; kind: "linear"; axis: "aligned" | "horizontal" | "vertical"; a: [number, number]; b: [number, number]; offsetMm: number }
+  | { id: string; kind: "radial"; center: [number, number]; radiusMm: number; angleRad: number; diameter: boolean };
+
+export const toJobDimension = (d: Dimension): JobDimension =>
+  d.kind === "linear"
+    ? { id: d.id, kind: "linear", axis: d.axis, a: [d.a.x, d.a.y], b: [d.b.x, d.b.y], offsetMm: d.offsetMm }
+    : { id: d.id, kind: "radial", center: [d.center.x, d.center.y], radiusMm: d.radiusMm, angleRad: d.angleRad, diameter: d.diameter };
+
+export const fromJobDimension = (d: JobDimension): Dimension =>
+  d.kind === "linear"
+    ? { id: d.id, kind: "linear", axis: d.axis, a: { x: d.a[0], y: d.a[1] }, b: { x: d.b[0], y: d.b[1] }, offsetMm: d.offsetMm }
+    : { id: d.id, kind: "radial", center: { x: d.center[0], y: d.center[1] }, radiusMm: d.radiusMm, angleRad: d.angleRad, diameter: d.diameter };
 
 const pt = (p: { x: number; y: number }): [number, number] => [p.x, p.y];
 
@@ -72,11 +89,11 @@ export function toJobObject(o: DocObject): JobObject | null {
   return out;
 }
 
-export function buildJob(opts: { objects: DocObject[]; pupilId: string; presetId: string; presetVersion?: number; origin: Origin; submit: boolean; now?: Date }): JobDoc {
+export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[]; pupilId: string; presetId: string; presetVersion?: number; origin: Origin; submit: boolean; now?: Date }): JobDoc {
   const objects = opts.objects.map(toJobObject).filter((o): o is JobObject => o !== null);
   if (!objects.length) throw new Error("There is nothing to send.");
   return {
-    schemaVersion: "0.2.0",
+    schemaVersion: "0.2.1",
     id: "draft", // the server gives every job its own id
     pupilId: opts.pupilId,
     createdAt: (opts.now ?? new Date()).toISOString(),
@@ -85,6 +102,7 @@ export function buildJob(opts: { objects: DocObject[]; pupilId: string; presetId
     station: null,
     origin: opts.origin,
     objects,
+    ...(opts.dimensions?.length ? { dimensions: opts.dimensions.map(toJobDimension) } : {}),
   };
 }
 

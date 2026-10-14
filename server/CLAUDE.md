@@ -13,3 +13,4 @@ Python: FastAPI, SQLAlchemy (SQLite default, PostgreSQL via `KERF_DATABASE_URL`)
 - Never hold a DB session open while awaiting the Cutter (SQLite would lock); `services_run.start` does the work in two short transactions.
 - Pupil IDs only, never names (uploaded file names are discarded). Camera frames stay in memory.
 - Preset edits create new versions; jobs record the version used.
+- Job `dimensions` (Editor annotations) are stored and returned with the job but never read by `gcode/`, validation, estimates or the Cutter messages.

@@ -1,6 +1,7 @@
 // Document state with snapshot undo/redo. Edits change object matrices, never source geometry.
 import { multiply, translation, type Matrix, type Path } from "./geometry";
 import { DEFAULT_MATERIAL_ID } from "./presets";
+import type { Dimension } from "./dimensions";
 import type { TabSpec } from "./tabs";
 import type { TextSpec } from "./text";
 
@@ -42,10 +43,13 @@ export interface DocState {
   nextText: number;
   /** Selected material preset (shared/preset.schema.json id). A job records it with its version. */
   materialId: string;
+  /** Dimension annotations. Not shapes: never cut, exported or sent to the Cutter. */
+  dimensions: Dimension[];
+  nextDim: number;
 }
 
 export class Doc {
-  state: DocState = { objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1, materialId: DEFAULT_MATERIAL_ID };
+  state: DocState = { objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1, materialId: DEFAULT_MATERIAL_ID, dimensions: [], nextDim: 1 };
   private undoStack: DocState[] = [];
   private redoStack: DocState[] = [];
 
@@ -82,6 +86,18 @@ export class Doc {
     const obj: DocObject = { id: this.state.nextId++, path, matrix, layer };
     this.state.objects.push(obj);
     return obj;
+  }
+
+  newDimId(): string {
+    return `d${this.state.nextDim++}`;
+  }
+
+  addDimensions(dims: Dimension[]): void {
+    this.state.dimensions.push(...dims);
+  }
+
+  removeDimensions(ids: string[]): void {
+    this.state.dimensions = this.state.dimensions.filter((d) => !ids.includes(d.id));
   }
 
   get(id: number): DocObject | undefined {

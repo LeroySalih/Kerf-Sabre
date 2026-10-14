@@ -49,7 +49,7 @@ kerf-admin import-pupils pupils.csv --out tokens.csv  # one token per pupil ID
 kerf-server                                            # http://localhost:8000  (API docs: /api/v1/docs)
 ```
 
-On a real URL use `deploy/` (Docker Compose + Caddy, automatic HTTPS) or `deploy/kerf-server.service` (systemd). Copy `deploy/.env.example` to `.env`, set `KERF_DOMAIN`, `docker compose up -d --build`, then create tokens inside the container: `docker compose exec kerf kerf-admin create-token ...`.
+On a real URL use `deploy/` (Docker Compose + Caddy, automatic HTTPS) or `deploy/kerf-server.service` (systemd). Copy `deploy/.env.example` to `.env`, set `KERF_DOMAIN`, `docker compose up -d --build`, then create tokens inside the container: `docker compose exec kerf kerf-admin create-token ...`. Behind a Cloudflare Tunnel instead of Caddy, use `deploy/docker-compose.cloudflare.yml` (`docker compose -f docker-compose.cloudflare.yml up -d --build --remove-orphans`) and set the route's Service URL to `http://kerf-server:8000`.
 
 Everything is configured with `KERF_*` environment variables (see `deploy/.env.example` and `kerf_server/config.py`). Data (SQLite database, station logs, diagnostic bundles) lives in `KERF_DATA_DIR`; back that folder up.
 

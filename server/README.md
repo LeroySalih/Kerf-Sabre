@@ -25,6 +25,14 @@ kerf-admin reset-pin --id P10234                                  # forgotten PI
 ```
 Or use the **Classes** button in the Editor as a teacher, or the `/api/v1/classes` endpoints. Teachers and laser stations keep using tokens (`kerf-admin create-token`).
 
+## Activities and feedback
+
+A **class belongs to the teacher who created it**: other teachers can't see or change it (a class made with `kerf-admin create-class` and no `--teacher` is shared by all teachers). The class's teacher sets **activities** (`/classes/{code}/activities`: title, instructions, optional suggested material and due date; published when ready, ordered, archived rather than deleted). Pupils see their own class's published activities (`/activities`), save files for one (a job's `activityId`), and **hand in** (`/activities/{id}/submit`). The teacher sees a **progress** grid (`/classes/{code}/progress`: not started, working, handed in, please improve, complete), a pupil's files (`/classes/{code}/pupils/{id}/jobs`) and gives **feedback** (`comment`, `revise`, `complete`); `revise` and `complete` change the pupil's status. Feedback is signed with the teacher's ID, never a name.
+
+## Database
+
+SQLAlchemy 2. **SQLite** by default (one file, `KERF_DATA_DIR/kerf.db`, WAL mode) which is plenty for one school; set `KERF_DATABASE_URL` (e.g. `postgresql+psycopg://user:pass@host/kerf`, install `kerf-server[postgres]`) to use **PostgreSQL**. Tables are created on start-up and columns added by newer versions are added automatically to an existing database (no separate migration step). Back up `KERF_DATA_DIR` (or the Postgres database).
+
 ## Run it
 
 ```bash

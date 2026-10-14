@@ -38,7 +38,7 @@ export interface JobObject {
 }
 
 export interface JobDoc {
-  schemaVersion: "0.2.4";
+  schemaVersion: "0.2.5";
   id: string;
   pupilId: string;
   createdAt: string;
@@ -49,6 +49,8 @@ export interface JobDoc {
   objects: JobObject[];
   /** Annotations for people. The server keeps them; they are never cut or sent to the Cutter. */
   dimensions?: JobDimension[];
+  /** The class activity this file is for (null: not for any). */
+  activityId?: string | null;
 }
 
 export type JobDimension =
@@ -89,11 +91,11 @@ export function toJobObject(o: DocObject): JobObject | null {
   return out;
 }
 
-export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[]; pupilId: string; presetId: string; presetVersion?: number; origin: Origin; submit: boolean; now?: Date }): JobDoc {
+export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[]; activityId?: string | null; pupilId: string; presetId: string; presetVersion?: number; origin: Origin; submit: boolean; now?: Date }): JobDoc {
   const objects = opts.objects.map(toJobObject).filter((o): o is JobObject => o !== null);
   if (!objects.length) throw new Error("There is nothing to send.");
   return {
-    schemaVersion: "0.2.4",
+    schemaVersion: "0.2.5",
     id: "draft", // the server gives every job its own id
     pupilId: opts.pupilId,
     createdAt: (opts.now ?? new Date()).toISOString(),
@@ -102,6 +104,7 @@ export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[];
     station: null,
     origin: opts.origin,
     objects,
+    ...(opts.activityId !== undefined ? { activityId: opts.activityId } : {}),
     ...(opts.dimensions?.length ? { dimensions: opts.dimensions.map(toJobDimension) } : {}),
   };
 }

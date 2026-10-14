@@ -13,7 +13,7 @@ export interface StationInfo {
   s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; lastSeen?: string | null;
   progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
 }
-export interface JobSummary { pupilId?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface JobSummary { activityId?: string | null; pupilId?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {
@@ -103,6 +103,28 @@ export function parseIds(text: string): string[] {
 
 /** "pupilId,pin" lines for handing out. */
 export const pinsCsv = (rows: { pupilId: string; pin: string }[]): string => ["pupilId,pin", ...rows.map((r) => `${r.pupilId},${r.pin}`)].join("\n") + "\n";
+
+export type ActivityStatus = "todo" | "working" | "submitted" | "revise" | "complete";
+export const ACTIVITY_STATUS_TEXT: Record<ActivityStatus, string> = { todo: "Not started", working: "Working on it", submitted: "Handed in", revise: "Please improve", complete: "Complete" };
+export interface FeedbackItem { id: number; teacherId: string; text: string; outcome: "comment" | "revise" | "complete"; jobId?: string | null; createdAt: string }
+export interface Activity { id: string; classCode: string; title: string; instructions?: string; position: number; presetId?: string | null; dueAt?: string | null; published: boolean; counts?: Record<string, number> }
+export interface MyActivity extends Activity { status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedbackCount?: number; feedback?: FeedbackItem[] }
+export interface ClassProgress { activities: { id: string; title: string; published: boolean; dueAt?: string | null }[]; pupils: { pupilId: string; work: Record<string, { status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedbackCount: number }> }[] }
+export interface PupilWork { activityId: string; pupilId: string; status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedback: FeedbackItem[]; files?: { id: string; status: string; createdAt: string; presetId: string }[] }
+export type ActivityInput = { title?: string; instructions?: string; presetId?: string | null; dueAt?: string | null; published?: boolean };
+const cls = (code: string) => `/classes/${encodeURIComponent(code)}`;
+export const classActivities = (s: Session, code: string, f?: Fetch) => request<Activity[]>(s, "GET", `${cls(code)}/activities`, undefined, f);
+export const createActivity = (s: Session, code: string, a: ActivityInput, f?: Fetch) => request<Activity>(s, "POST", `${cls(code)}/activities`, a, f);
+export const updateActivity = (s: Session, code: string, id: string, a: ActivityInput, f?: Fetch) => request<Activity>(s, "PUT", `${cls(code)}/activities/${encodeURIComponent(id)}`, a, f);
+export const archiveActivity = (s: Session, code: string, id: string, f?: Fetch) => request<null>(s, "DELETE", `${cls(code)}/activities/${encodeURIComponent(id)}`, undefined, f);
+export const orderActivities = (s: Session, code: string, ids: string[], f?: Fetch) => request<Activity[]>(s, "POST", `${cls(code)}/activities-order`, { ids }, f);
+export const classProgress = (s: Session, code: string, f?: Fetch) => request<ClassProgress>(s, "GET", `${cls(code)}/progress`, undefined, f);
+export const pupilWork = (s: Session, code: string, activityId: string, pupilId: string, f?: Fetch) => request<PupilWork>(s, "GET", `${cls(code)}/activities/${encodeURIComponent(activityId)}/work/${encodeURIComponent(pupilId)}`, undefined, f);
+export const giveFeedback = (s: Session, code: string, activityId: string, pupilId: string, text: string, outcome: FeedbackItem["outcome"], f?: Fetch) => request<FeedbackItem>(s, "POST", `${cls(code)}/activities/${encodeURIComponent(activityId)}/work/${encodeURIComponent(pupilId)}/feedback`, { text, outcome }, f);
+export const pupilFiles = (s: Session, code: string, pupilId: string, f?: Fetch) => request<(JobSummary & { origin: Origin })[]>(s, "GET", `${cls(code)}/pupils/${encodeURIComponent(pupilId)}/jobs`, undefined, f);
+export const myActivities = (s: Session, f?: Fetch) => request<MyActivity[]>(s, "GET", "/activities", undefined, f);
+export const myActivity = (s: Session, id: string, f?: Fetch) => request<MyActivity>(s, "GET", `/activities/${encodeURIComponent(id)}`, undefined, f);
+export const submitActivity = (s: Session, id: string, jobId?: string, f?: Fetch) => request<PupilWork>(s, "POST", `/activities/${encodeURIComponent(id)}/submit`, jobId ? { jobId } : {}, f);
 
 export const listPresets = (s: Session, f?: Fetch) => request<Preset[]>(s, "GET", "/presets", undefined, f);
 export const sendJob = (s: Session, job: JobDoc, f?: Fetch) => request<Receipt>(s, "POST", "/jobs", job, f);

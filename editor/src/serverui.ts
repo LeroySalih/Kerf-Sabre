@@ -1,6 +1,7 @@
 // Pupil sign-in and their files on the server: Save, Send for cutting, My files (open / send / cancel).
 // All talking is in server.ts; the job document is built and read back in job.ts.
 import { infoDialog, openDialog } from "./dialog";
+import { openMyActivities } from "./activitiesui";
 import { openClasses } from "./classesui";
 import { closeStation, openStation, openTeacher } from "./stationui";
 import type { Dimension } from "./dimensions";
@@ -8,7 +9,7 @@ import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { setPresets } from "./presets";
 import {
-  STATUS_TEXT, ServerError, cancelJob, loginWithPin, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
+  STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, loginWithPin, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -37,6 +38,8 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   let jobId: string | null = null;
   let origin: Origin = DEFAULT_ORIGIN;
   let savedKey = "";
+  /** The class activity new saves are for (null: none). */
+  let activity: { id: string; title: string } | null = null;
   const defaultBase = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
 
   /** A fingerprint of the page, to tell whether there is anything unsaved. */
@@ -51,11 +54,16 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     $("srv-status").textContent = signedIn ? `Signed in: ${session!.id}` : "Working offline";
     $("srv-signin").textContent = signedIn ? "Sign out" : "Sign in";
     ($("srv-queue") as HTMLButtonElement).hidden = session?.role !== "teacher";
+    ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil";
+    const act = $("srv-activity") as HTMLElement;
+    act.hidden = !(session?.role === "pupil" && activity);
+    act.replaceChildren(...(activity ? [document.createTextNode(`Activity: ${activity.title} `), Object.assign(document.createElement("button"), { textContent: "×", title: "Stop saving files for this activity", onclick: () => { activity = null; render(); } })] : []));
     ($("srv-classes") as HTMLButtonElement).hidden = session?.role !== "teacher";
     $("srv-file").textContent = signedIn && jobId ? `Editing ${jobId}` : "";
   };
 
   const dropSession = () => {
+    activity = null;
     if (session?.expiresAt) void logout(session); // a class-login session: end it on the server too
     session = null; saveSession(null); jobId = null; render(); };
   const handle = (e: unknown): string => {
@@ -115,7 +123,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
 
   /** Make sure there is a draft on the server holding the current design. Returns its id. */
   async function saveCurrent(): Promise<string> {
-    const job = buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
+    const job = buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
     if (jobId) {
       try { await saveDraft(session!, jobId, job); markSaved(); return jobId; } catch (e) {
         if (!(e instanceof ServerError && (e.status === 409 || e.status === 404))) throw e; // the draft was sent or cancelled meanwhile: start a new one
@@ -172,6 +180,11 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
     origin = j.origin ?? DEFAULT_ORIGIN;
     jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
+    activity = null;
+    if (j.activityId && session?.role === "pupil") {
+      activity = { id: j.activityId, title: "…" };
+      void myActivity(session, j.activityId).then((a) => { if (activity?.id === a.id) { activity = { id: a.id, title: a.title }; render(); } }).catch(() => {});
+    }
     markSaved();
     render();
     ctx.notify(j.status === "draft" ? `Opened ${j.id}` : `Opened a copy of ${j.id}. Save to keep your changes as a new file.`);
@@ -250,7 +263,45 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
   $("srv-save").addEventListener("click", () => (session ? void save() : (offline = false, render())));
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
-  $("srv-classes").addEventListener("click", () => { if (session?.role === "teacher") openClasses(session); });
+  $("srv-classes").addEventListener("click", () => {
+    if (session?.role !== "teacher") return;
+    openClasses(session, { openFile: (j) => {
+      if (!confirmDiscard("Open this file")) return;
+      ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
+      jobId = null; activity = null; origin = j.origin ?? DEFAULT_ORIGIN;
+      markSaved(); render();
+      ctx.notify(`Opened a copy of ${j.id} (${j.pupilId ?? "pupil"}) to look at. It is not saved unless you save it.`);
+    } });
+  });
+  $("srv-activities").addEventListener("click", () => {
+    if (session?.role !== "pupil") return;
+    const s = session;
+    void openMyActivities(s, {
+      current: () => activity?.id ?? null,
+      work: async (a: MyActivity) => {
+        if (activity?.id !== a.id && !confirmDiscard("Switch activity")) return;
+        activity = { id: a.id, title: a.title };
+        if (a.jobId) {
+          const j = await getJob(s, a.jobId);
+          ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
+          origin = j.origin ?? DEFAULT_ORIGIN;
+          jobId = j.status === "draft" ? j.id : null;
+          markSaved();
+        } else if (!ctx.objects().length) {
+          ctx.load([], a.presetId ?? null, []);
+          jobId = null;
+          markSaved();
+        }
+        render();
+        ctx.notify(`Working on: ${a.title}. Save to keep your file with this activity.`);
+      },
+      handIn: async (a: MyActivity) => {
+        if (activity?.id === a.id && ctx.objects().length) await saveCurrent(); // hand in what is on the page now
+        await submitActivity(s, a.id);
+        ctx.notify(`Handed in: ${a.title}`);
+      },
+    });
+  });
   setMode(false);
   $("srv-queue").addEventListener("click", () => { if (session?.role === "teacher") openTeacher(session); });
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));

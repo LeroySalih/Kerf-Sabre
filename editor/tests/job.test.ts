@@ -90,3 +90,17 @@ describe("Doc.reset", () => {
     expect(d.undo()).toBe(false);
   });
 });
+
+describe("activities", () => {
+  it("a file can say which class activity it is for, and the shared schema accepts it", () => {
+    const d = new Doc();
+    d.add(rectangle(10, 10), translation(0, 0), "cut");
+    const withAct = buildJob({ objects: d.state.objects, activityId: "act-1234", pupilId: "P1", presetId: "x", origin: { mode: "absolute" }, submit: false });
+    expect(withAct.activityId).toBe("act-1234");
+    check(withAct);
+    const none = buildJob({ objects: d.state.objects, activityId: null, pupilId: "P1", presetId: "x", origin: { mode: "absolute" }, submit: false });
+    expect(none.activityId).toBeNull();
+    check(none);
+    expect("activityId" in buildJob({ objects: d.state.objects, pupilId: "P1", presetId: "x", origin: { mode: "absolute" }, submit: false })).toBe(false);
+  });
+});

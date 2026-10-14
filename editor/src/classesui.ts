@@ -1,22 +1,11 @@
 // Teacher: classes, pupil IDs and PINs. A PIN is shown once, when it is made, and never again (the server only keeps a hash).
+import { openClassWork, type TeacherCallbacks } from "./activitiesui";
+import { btn, el, msg } from "./dom";
 import { infoDialog, openDialog } from "./dialog";
 import {
   addPupils, classPupils, createClass, listClasses, parseIds, pinsCsv, removePupil, resetPin,
   type ClassInfo, type ClassPupil, type Session,
 } from "./server";
-
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...kids: (string | Node)[]): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  e.append(...kids);
-  return e;
-};
-const btn = (label: string, fn: () => void, cls = ""): HTMLButtonElement => {
-  const b = el("button", { type: "button", class: cls }, label);
-  b.addEventListener("click", fn);
-  return b;
-};
-const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function download(name: string, text: string): void {
   const a = el("a", { href: URL.createObjectURL(new Blob([text], { type: "text/csv" })), download: name });
@@ -55,7 +44,7 @@ function askIds(code: string): Promise<string[] | null> {
   });
 }
 
-export function openClasses(session: Session): void {
+export function openClasses(session: Session, hooks: TeacherCallbacks): void {
   const dlg = el("dialog", { class: "kdialog teacher" });
   const body = el("div");
   dlg.append(el("h2", {}, "Classes and PINs"), body, el("div", { class: "krow" }, btn("Close", () => dlg.close())));
@@ -93,7 +82,7 @@ export function openClasses(session: Session): void {
         btn("New PIN", () => void run(async () => { const r = await resetPin(session, p.pupilId); await showPins("New PIN", [r]); })),
         btn("Remove", () => { if (confirm(`Remove ${p.pupilId} from ${code}? They will be signed out.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")));
     }
-    body.replaceChildren(list, el("div", { class: "krow" }, btn("‹ All classes", () => void run(async () => { open = null; })), btn("Add pupils…", () => void (async () => {
+    body.replaceChildren(list, el("div", { class: "krow" }, btn("‹ All classes", () => void run(async () => { open = null; })), btn("Activities and progress…", () => void openClassWork(session, code, hooks)), btn("Add pupils…", () => void (async () => {
       const ids = await askIds(code);
       if (!ids) return;
       await run(async () => {

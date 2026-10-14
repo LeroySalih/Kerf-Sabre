@@ -5,6 +5,7 @@ cd /d "%~dp0"
 echo.
 echo ============================================================
 echo  Finished. Results are in the "output" folder next to this file.
+echo  Send the .zip file in that folder back (it holds every log).
 echo  Press any key to close this window.
 echo ============================================================
 pause >nul

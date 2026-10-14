@@ -49,6 +49,13 @@ export class Doc {
   private undoStack: DocState[] = [];
   private redoStack: DocState[] = [];
 
+  /** Forget everything, including undo history (a new pupil must not be able to undo into the last one's design). */
+  reset(): void {
+    this.state = new Doc().state;
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
   /** Call before a mutation to make it undoable. */
   checkpoint(): void {
     this.undoStack.push(structuredClone(this.state));

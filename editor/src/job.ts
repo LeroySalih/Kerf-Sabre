@@ -1,9 +1,9 @@
 // Build a job document (shared/job.schema.json) from the Editor's objects. Pure.
 // Tabs are stored in the Editor as fractions along the outline; the schema wants a distance in bed space
 // (after the matrix) from the object's start point, so they are converted here.
-import type { DocObject } from "./doc";
-import { transformPath, type Matrix, type Path } from "./geometry";
-import { pathLength } from "./tabs";
+import type { DocObject, LayerType, ShapeSettings } from "./doc";
+import { transformPath, type Matrix, type Path, type Seg } from "./geometry";
+import { pathLength, type TabSpec } from "./tabs";
 
 export type Anchor = "top-left" | "top-center" | "top-right" | "middle-left" | "center" | "middle-right" | "bottom-left" | "bottom-center" | "bottom-right";
 export type Origin = { mode: "absolute" } | { mode: "current-position"; anchor: Anchor };
@@ -86,4 +86,28 @@ export function buildJob(opts: { objects: DocObject[]; pupilId: string; presetId
     origin: opts.origin,
     objects,
   };
+}
+
+/** A shape ready to be added to a Doc. */
+export interface LoadedShape { path: Path; matrix: Matrix; layer: LayerType; tabs?: TabSpec; settings?: ShapeSettings }
+
+const xy = (p: [number, number]) => ({ x: p[0], y: p[1] });
+
+/** The reverse of toJobObject: a stored job's objects back into Editor shapes. Groups and live text are not stored, so text comes back as plain paths. */
+export function fromJobObjects(objects: JobObject[]): LoadedShape[] {
+  return objects.map((o) => {
+    const segs: Seg[] = o.segments.map((s) =>
+      s.type === "line" ? { t: "l", to: xy(s.to) }
+      : s.type === "arc" ? { t: "a", c: xy(s.center), to: xy(s.to), ccw: !s.clockwise }
+      : { t: "c", c1: xy(s.c1), c2: xy(s.c2), to: xy(s.to) });
+    const path: Path = { start: xy(o.start), segs, closed: o.closed };
+    const matrix = [...o.matrix] as Matrix;
+    const shape: LoadedShape = { path, matrix, layer: o.layer };
+    if (o.tabs?.length) {
+      const total = pathLength(transformPath(path, matrix));
+      if (total > 0) shape.tabs = { widthMm: o.tabs[0]!.widthMm, at: o.tabs.map((t) => t.atLengthMm / total) };
+    }
+    if (o.settings && o.settings.powerPct !== undefined && o.settings.speedMmPerS !== undefined) shape.settings = { powerPct: o.settings.powerPct, speedMmPerS: o.settings.speedMmPerS };
+    return shape;
+  });
 }

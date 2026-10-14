@@ -1417,6 +1417,22 @@ initServerUi({
     : !canSubmit(doc.state.objects, machine.bed) ? "Part of the design is off the bed (shown red). Move it onto the bed first."
     : null,
   notify,
+  load: (shapes, materialId) => {
+    edit(() => {
+      doc.state.objects = [];
+      selected = new Set();
+      for (const sh of shapes) {
+        const o = doc.add(sh.path, sh.matrix, sh.layer);
+        if (sh.tabs) o.tabs = sh.tabs;
+        if (sh.settings) o.settings = sh.settings;
+      }
+      if (materialId && findPreset(materialId)) doc.state.materialId = materialId;
+    });
+    fillMaterials();
+    refreshLayerUI();
+    fit();
+  },
+  clear: () => { doc.reset(); selected = new Set(); fillMaterials(); refreshLayerUI(); draw(); },
   presetsChanged: () => { fillMaterials(); refreshLayerUI(); },
 });
 

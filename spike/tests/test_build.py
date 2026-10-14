@@ -21,3 +21,12 @@ def test_build_layout(tmp_path):
     assert "Lib\\site-packages" in pth and "\nimport site" in pth.replace("\r", "")
     assert b"\r\n" in z.read("kerf-spike/run_spike.bat")
     assert "python\\python.exe" in z.read("kerf-spike/run_spike.bat").decode()
+
+
+def test_launcher_explains_itself_and_falls_back_to_installed_python():
+    bat = (Path(__file__).resolve().parents[1] / "package" / "run_spike.bat").read_text()
+    assert r".\python\python.exe" in bat                  # the portable zip's bundled Python comes first
+    assert "py -3" in bat and "import serial" in bat       # otherwise the PC's own Python, if it has pyserial
+    assert r"..\spike.py" in bat                           # works from the source folder too
+    for message in (":nospike", ":nopython", ":noserial"):  # and says what to do instead of a bare 'path not found'
+        assert message in bat

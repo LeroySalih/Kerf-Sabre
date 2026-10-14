@@ -1,6 +1,6 @@
 // Lining a design up on the camera picture: the maths, with no screen in it so it can be tested.
 // Bed space is mm, Y up. The camera picture is pixels, Y down; `toBed` / `toCam` are the calibration's homography and its inverse.
-import { applyH, invertH, solveHomography, type H, type Pt } from "./homography";
+import { applyH, invertH, solveHomographyLS, type Pt } from "./homography";
 import { flatten, transformPath, type Matrix } from "./geometry";
 import { fromJobObjects, type JobObject } from "./job";
 
@@ -14,15 +14,33 @@ export interface Calibration {
 /** The four bed corners in the order the teacher clicks them: the origin, then round the bed. Bed space always spans 0..width, 0..height. */
 export const bedCorners = (w: number, h: number): Pt[] => [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
 
-/** Build the calibration from four clicked points (camera pixels) for a bed of this size. null if the clicks cannot make a mapping. */
-export function makeCalibration(camPts: Pt[], bedW: number, bedH: number, imageWidth: number, imageHeight: number): Pick<Calibration, "imageWidth" | "imageHeight" | "points" | "homography"> | null {
-  const corners = bedCorners(bedW, bedH);
-  const h = solveHomography(camPts, corners);
+/** Squares the laser cuts for calibration: each square's four corners in bed mm, in the order to click them (counter-clockwise from the lower left). */
+export interface MarkSquare { square: number; corners: [number, number][] }
+
+/** The reference points to click, in order: the bed's four corners, or every corner of each cut square. */
+export const targetsFromSquares = (squares: MarkSquare[]): Pt[] => squares.flatMap((q) => q.corners.map(([x, y]) => ({ x, y })));
+
+const turn = (p: Pt[]): number => p.reduce((s, q, i) => { const r = p[(i + 1) % p.length]!; return s + (r.x - q.x) * (r.y + q.y); }, 0);
+
+/**
+ * Build the calibration from camera points the teacher clicked, for the known bed points they stand for (in the same order, in
+ * groups of four going round a rectangle). null if they cannot make a mapping: a group that crosses over or goes the wrong way
+ * round (camera Y is flipped, so the right order turns the opposite way to the bed's), or a fit that misses its own points by 15 mm or more.
+ */
+export function makeCalibration(camPts: Pt[], bedPts: Pt[], imageWidth: number, imageHeight: number): Pick<Calibration, "imageWidth" | "imageHeight" | "points" | "homography"> | null {
+  if (camPts.length < 4 || camPts.length !== bedPts.length || camPts.length % 4 !== 0) return null;
+  for (let i = 0; i < camPts.length; i += 4) if (Math.sign(turn(camPts.slice(i, i + 4))) === Math.sign(turn(bedPts.slice(i, i + 4)))) return null;
+  const h = solveHomographyLS(camPts, bedPts);
   if (!h || !invertH(h)) return null;
-  // a good set of clicks keeps the corners in the same turning order as the bed's; a twisted one is a mis-click
-  const turn = (p: Pt[]) => p.reduce((s, q, i) => { const r = p[(i + 1) % p.length]!; return s + (r.x - q.x) * (r.y + q.y); }, 0);
-  if (Math.sign(turn(camPts)) === Math.sign(turn(corners))) return null; // camera Y is flipped, so the right order turns the opposite way round
-  return { imageWidth, imageHeight, points: camPts.map((c, i) => ({ camera: [c.x, c.y] as [number, number], bed: [corners[i]!.x, corners[i]!.y] as [number, number] })), homography: h };
+  const worst = Math.max(...camPts.map((c, i) => { const p = applyH(h, c); return Math.hypot(p.x - bedPts[i]!.x, p.y - bedPts[i]!.y); }));
+  if (!(worst < 15)) return null;
+  return { imageWidth, imageHeight, points: camPts.map((c, i) => ({ camera: [c.x, c.y] as [number, number], bed: [bedPts[i]!.x, bedPts[i]!.y] as [number, number] })), homography: h };
+}
+
+/** How far (mm) the mapping puts each clicked point from where it should be: the worst and the typical. */
+export function fitError(camPts: Pt[], bedPts: Pt[], homography: number[]): { worst: number; mean: number } {
+  const e = camPts.map((c, i) => { const p = applyH(homography, c); return Math.hypot(p.x - bedPts[i]!.x, p.y - bedPts[i]!.y); });
+  return { worst: Math.max(...e), mean: e.reduce((a, b) => a + b, 0) / e.length };
 }
 
 export const toBed = (cal: Pick<Calibration, "homography">, p: Pt): Pt => applyH(cal.homography, p);

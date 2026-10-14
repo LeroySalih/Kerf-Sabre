@@ -42,3 +42,45 @@ export function invertH(h: H): H | null {
   const s = inv[8]!;
   return Math.abs(s) > 1e-14 ? inv.map((v) => v / s) : inv;
 }
+
+const mul3 = (a: H, b: H): H => [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => a[r * 3]! * b[c]! + a[r * 3 + 1]! * b[3 + c]! + a[r * 3 + 2]! * b[6 + c]!));
+
+/** Move the points' centre to the origin and scale them to a mean distance of sqrt(2): keeps the fit well conditioned. */
+function normaliser(pts: Pt[]): { t: H; out: Pt[] } {
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const d = pts.reduce((s, p) => s + Math.hypot(p.x - cx, p.y - cy), 0) / pts.length;
+  const k = d > 1e-12 ? Math.SQRT2 / d : 1;
+  return { t: [k, 0, -k * cx, 0, k, -k * cy, 0, 0, 1], out: pts.map((p) => ({ x: (p.x - cx) * k, y: (p.y - cy) * k })) };
+}
+
+/** The homography that best maps `from` onto `to` in the least-squares sense (4 or more points; exactly 4 is solved exactly). null if degenerate. */
+export function solveHomographyLS(from: Pt[], to: Pt[]): H | null {
+  if (from.length !== to.length || from.length < 4) return null;
+  if (from.length === 4) return solveHomography(from, to);
+  const f = normaliser(from), t = normaliser(to);
+  // normal equations of the same 2n x 8 system (h8 = 1), solved by Gauss-Jordan
+  const n = 8, m: number[][] = Array.from({ length: n }, () => new Array(n + 1).fill(0));
+  const add = (row: number[], rhs: number) => { for (let i = 0; i < n; i++) { for (let j = 0; j < n; j++) m[i]![j]! += row[i]! * row[j]!; m[i]![n]! += row[i]! * rhs; } };
+  f.out.forEach((p, i) => {
+    const { x: u, y: v } = t.out[i]!;
+    add([p.x, p.y, 1, 0, 0, 0, -u * p.x, -u * p.y], u);
+    add([0, 0, 0, p.x, p.y, 1, -v * p.x, -v * p.y], v);
+  });
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(m[r]![c]!) > Math.abs(m[p]![c]!)) p = r;
+    if (Math.abs(m[p]![c]!) < 1e-12) return null;
+    [m[c], m[p]] = [m[p]!, m[c]!];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const k = m[r]![c]! / m[c]![c]!;
+      for (let j = c; j <= n; j++) m[r]![j]! -= k * m[c]![j]!;
+    }
+  }
+  const hn: H = [...m.map((row, i) => row[n]! / row[i]!), 1];
+  const tInv = invertH(t.t);
+  if (!tInv || !hn.every(Number.isFinite)) return null;
+  const h = mul3(mul3(tInv, hn), f.t);
+  const s = h[8]!;
+  return Math.abs(s) > 1e-14 && h.every(Number.isFinite) ? h.map((v) => v / s) : null;
+}

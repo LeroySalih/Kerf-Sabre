@@ -144,8 +144,8 @@ export const saveDraft = (s: Session, id: string, job: JobDoc, f?: Fetch) => req
 export const listQueue = (s: Session, station?: string, f?: Fetch) => request<QueueEntry[]>(s, "GET", station ? `/queue?station=${encodeURIComponent(station)}` : "/queue", undefined, f);
 export const listStations = (s: Session, f?: Fetch) => request<StationInfo[]>(s, "GET", "/stations", undefined, f);
 export const getJob = (s: Session, id: string, f?: Fetch) => request<JobSummary & { origin: Origin; station?: string | null }>(s, "GET", `/jobs/${encodeURIComponent(id)}`, undefined, f);
-export const frameJob = (s: Session, id: string, station: string, f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/frame`, { station }, f);
-export const assignJob = (s: Session, id: string, station: string, materialConfirmed: boolean, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/assign`, { station, materialConfirmed }, f);
+export const frameJob = (s: Session, id: string, station: string, opts: { skipQueue?: boolean } = {}, f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/frame`, { station, ...opts }, f);
+export const assignJob = (s: Session, id: string, station: string, materialConfirmed: boolean, opts: { skipQueue?: boolean; allowUntested?: boolean } = {}, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/assign`, { station, materialConfirmed, ...opts }, f);
 export const controlStation = (s: Session, station: string, command: "stop" | "pause" | "resume", f?: Fetch) => request<unknown>(s, "POST", `/stations/${encodeURIComponent(station)}/control`, { command }, f);
 export const deferJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/defer`, undefined, f);
 export const approveJob = (s: Session, id: string, station?: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/approve`, station ? { station } : {}, f);
@@ -162,6 +162,9 @@ export const putCalibration = (s: Session, station: string, cal: Pick<Calibratio
 export const deleteCalibration = (s: Session, station: string, f?: Fetch) => request<null>(s, "DELETE", `/stations/${encodeURIComponent(station)}/camera-calibration`, undefined, f);
 /** Fix the design's place on the bed after lining it up on the camera picture. `matrix` is a move and turn only. */
 export const placeJob = (s: Session, id: string, station: string, matrix: number[], f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/placement`, { station, matrix }, f);
+export interface MarksRequest { centerX: number; centerY: number; sizeMm: number; spacingMm: number; count: 1 | 4; layer: "score" | "cut"; presetId: string }
+/** A job of known squares to cut (approved and pinned to this laser), for calibrating its camera. Teacher only. */
+export const createCalibrationMarks = (s: Session, station: string, body: MarksRequest, f?: Fetch) => request<{ jobId: string; squares: { square: number; corners: [number, number][] }[] }>(s, "POST", `/stations/${encodeURIComponent(station)}/calibration-marks`, body, f);
 export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }
 export const getMachine = (s: Session, id: string, f?: Fetch) => request<MachineInfo>(s, "GET", `/machines/${encodeURIComponent(id)}`, undefined, f);
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.9
+  version: 0.2.10
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -849,6 +849,29 @@ paths:
       summary: Teacher. Forget the calibration
       responses:
         "204": {description: Removed}
+  /stations/{stationId}/calibration-marks:
+    post:
+      summary: Teacher. Make an approved job of known squares to cut, for calibrating the camera (works when the bed is larger than the camera sees)
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [centerX, centerY, presetId]
+              properties:
+                centerX: {type: number, description: "Bed mm: the middle of the marks"}
+                centerY: {type: number}
+                sizeMm: {type: number, default: 40}
+                spacingMm: {type: number, default: 120, description: "Centre to centre, when count is 4"}
+                count: {type: integer, enum: [1, 4], default: 4}
+                layer: {type: string, enum: [score, cut], default: score}
+                presetId: {type: string}
+      responses:
+        "201": {description: "{jobId, squares: [{square, corners: [[x,y] x4]}]}"}
+        "422": {description: Does not fit the bed, or a bad value}
   /jobs/{jobId}/placement:
     post:
       summary: Station or teacher. Fix the design's position on the bed after it was lined up on the camera picture
@@ -1082,7 +1105,7 @@ components:
         points:
           type: array
           minItems: 4
-          maxItems: 4
+          maxItems: 64
           items:
             type: object
             required: [camera, bed]

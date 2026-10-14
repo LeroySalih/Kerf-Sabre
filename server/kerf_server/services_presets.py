@@ -85,7 +85,7 @@ def project(h: list[float], x: float, y: float) -> tuple[float, float]:
 
 
 def check_calibration(doc: Any) -> dict[str, Any]:
-    """A calibration the server will keep: image size, four camera points with the bed points they mark, and the camera -> bed
+    """A calibration the server will keep: image size, 4 to 64 camera points with the bed points they mark, and the camera -> bed
     homography (row-major 3x3). The server re-projects the points through the matrix, so a wrong matrix is refused."""
     if not isinstance(doc, dict):
         raise ApiError(422, "invalid", "Send the calibration as an object.")
@@ -93,8 +93,8 @@ def check_calibration(doc: Any) -> dict[str, Any]:
     if not all(isinstance(v, int) and not isinstance(v, bool) and 16 <= v <= 20000 for v in (w, hh)):
         raise ApiError(422, "invalid", "imageWidth and imageHeight are the camera picture's size in pixels.")
     pts, h = doc.get("points"), doc.get("homography")
-    if not isinstance(pts, list) or len(pts) != 4:
-        raise ApiError(422, "invalid", "Give exactly 4 points: where each bed corner is in the camera picture.")
+    if not isinstance(pts, list) or not 4 <= len(pts) <= 64:
+        raise ApiError(422, "invalid", "Give 4 to 64 points: where known bed positions (corners, or the corners of squares the laser cut) are in the camera picture.")
     if not isinstance(h, list) or len(h) != 9:
         raise ApiError(422, "invalid", "homography is 9 numbers (a 3x3 matrix, row by row).")
     hm = [_num(v) for v in h]
@@ -107,7 +107,8 @@ def check_calibration(doc: Any) -> dict[str, Any]:
         if not (0 <= c[0] <= w and 0 <= c[1] <= hh):
             raise ApiError(422, "invalid", "A camera point is outside the picture.")
         px, py = project(hm, c[0], c[1])
-        if math.hypot(px - b[0], py - b[1]) > 1.0:
+        # four points are fitted exactly; more are fitted by least squares, so some scatter is normal (this only catches nonsense)
+        if math.hypot(px - b[0], py - b[1]) > (1.0 if len(pts) == 4 else 10.0):
             raise ApiError(422, "invalid", "The matrix does not map the points to their bed positions. Calibrate again.")
         out_pts.append({"camera": c, "bed": b})
     return {"imageWidth": w, "imageHeight": hh, "points": out_pts, "homography": hm}

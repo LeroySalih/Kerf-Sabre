@@ -232,3 +232,6 @@ td.cell.st-todo { background: #f9fafb; }
 .cal-grid { stroke: rgba(249, 115, 22, 0.8); stroke-width: 1.2; }
 .cal-mark circle { fill: rgba(220, 38, 38, 0.25); stroke: #ef4444; stroke-width: 3; cursor: move; }
 .cal-mark text { fill: #ffffff; font-size: 22px; font-weight: 700; paint-order: stroke; stroke: #000; stroke-width: 3; pointer-events: none; }
+.al-choices { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.al-choices button { height: auto; min-height: 44px; padding: 10px 14px; text-align: left; font-size: 15px; white-space: normal; }
+.kdialog .kgrid label span.hint { display: block; margin-top: 2px; }

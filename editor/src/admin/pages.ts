@@ -1,7 +1,6 @@
 // The pages of the admin site. Each page draws itself into a host element and may return a function that stops its refreshing.
 import { openClasses, showPins } from "../classesui";
 import { openClassWork } from "../activitiesui";
-import { openCalibration } from "../calibrateui";
 import { infoDialog, openDialog } from "../dialog";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
@@ -183,7 +182,8 @@ const lasers: Page = {
           el("p", {}, el("span", { class: `ad-tag ${calibrated.get(st.id) ? "ok" : "warn"}` }, calibrated.get(st.id) ? "camera calibrated" : "camera not calibrated")),
           el("div", { class: "row" },
             ...(st.online ? [btn("Pause", () => send("pause")), btn("Resume", () => send("resume")), btn("Stop", () => { if (confirm(`Stop ${st.id}?`)) send("stop"); }, "danger")] : []),
-            ...(st.cameraAvailable ? [btn(calibrated.get(st.id) ? "Recalibrate camera…" : "Calibrate camera…", () => void openCalibration(s, st.id))] : [])));
+            ),
+          ...(calibrated.get(st.id) ? [] : [el("p", { class: "hint" }, "To calibrate: at that laser PC, on its Station page, press \"Calibrate camera\" and enter a teacher token.")]));
       };
       host.replaceChildren(el("div", { class: "ad-stations" }, ...list.map(card)));
     }, 3000);

@@ -226,6 +226,7 @@ class TestCameraIsPerSchool:
         assert client.put(f"{API}/stations/beta-laser/camera-calibration", json=calibration(), headers=b["teacher"]).status_code == 200
         assert client.get(f"{API}/stations/beta-laser/camera-calibration", headers=a["admin"]).status_code == 404
         assert client.delete(f"{API}/stations/beta-laser/camera-calibration", headers=a["admin"]).status_code == 404
+        assert client.post(f"{API}/stations/beta-laser/calibration-marks", json={"centerX": 200, "centerY": 200, "presetId": "ply-3mm"}, headers=a["admin"]).status_code == 404
         jid = TestFilesAndQueueAreSeparate().submit(client, b)
         client.post(f"{API}/jobs/{jid}/approve", headers=b["teacher"])
         r = client.post(f"{API}/jobs/{jid}/placement", json={"station": "beta-laser", "matrix": [1, 0, 0, 1, 1, 1]}, headers=a["admin"])

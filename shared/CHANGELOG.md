@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.10 - calibrate from squares the laser cuts (additive)
+- `openapi.yaml`: `POST /stations/{id}/calibration-marks` (teacher) makes a job of 1 or 4 known squares (`centerX`, `centerY`, `sizeMm`, `spacingMm`, `layer` score or cut, `presetId`), pinned to that laser and already approved, and returns `{jobId, squares}` with each square's corners in bed mm in the order to click them. The teacher cuts it (Frame and Start with `skipQueue`, `allowUntested`) and clicks the corners in the camera picture, so the camera can be calibrated when the bed is bigger than the picture. `camera-calibration` now accepts 4 to 64 points (4 are fitted exactly; more by least squares). `GET /stations` carries `calibrated`.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.10`.
+
 ## 0.2.9 - camera alignment (additive)
 - `openapi.yaml`: **camera calibration** per laser: `GET/PUT/DELETE /stations/{id}/camera-calibration` (a laser PC or teacher reads, a teacher writes; 404 `not_calibrated` until done). It stores the camera picture size, the four bed corners as clicked in the picture, and the camera-pixel -> bed-mm homography (row-major 3x3); the server re-projects the points and refuses a matrix that does not map them. **Placement**: `POST /jobs/{id}/placement` takes `station` and `matrix` (a rigid 2x3, move and turn only) which is applied to every object's matrix; the job becomes `absolute`, must still fit the bed, the earlier Frame is cleared, and only the job whose turn it is can be placed (a teacher may `skipQueue`).
 - This is the first, approximate calibration (four clicked corners). The brief's accurate version (lens undistort + burned reference marks) can later replace the stored matrix without changing these endpoints.

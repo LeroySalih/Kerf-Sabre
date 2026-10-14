@@ -124,3 +124,58 @@ class TestPlacement:
             assert self.place(client, tokens, jid, [1, 0, 0, 1, 30, 0]).status_code == 200
             a = client.post(f"{API}/jobs/{jid}/assign", json={"station": "station-1", "materialConfirmed": True}, headers=sh)
             assert a.status_code == 409 and a.json()["code"] == "not_framed"
+
+
+class TestCalibrationMarks:
+    """A job of known squares the teacher cuts, so the camera can be calibrated from where they land (the bed may be bigger than the picture)."""
+
+    def make(self, client, tokens, who="teacher", **over):
+        body = {"centerX": 200, "centerY": 200, "sizeMm": 40, "spacingMm": 120, "count": 4, "presetId": "ply-3mm", **over}
+        return client.post(f"{API}/stations/station-1/calibration-marks", json=body, headers=auth(tokens[who]))
+
+    def test_four_squares_with_their_corners_in_order(self, client, tokens):
+        r = self.make(client, tokens)
+        assert r.status_code == 201, r.text
+        sq = r.json()["squares"]
+        assert len(sq) == 4 and all(len(s["corners"]) == 4 for s in sq)
+        assert sq[0]["corners"] == [[120.0, 120.0], [160.0, 120.0], [160.0, 160.0], [120.0, 160.0]]  # lower-left square, from its lower-left corner, counter-clockwise
+        assert sq[3]["corners"][0] == [240.0, 240.0]
+        job = client.get(f"{API}/jobs/{r.json()['jobId']}", headers=auth(tokens["teacher"])).json()
+        assert job["status"] == "approved" and job["station"] == "station-1" and job["origin"] == {"mode": "absolute"} and len(job["objects"]) == 4
+        assert {o["layer"] for o in job["objects"]} == {"score"}
+
+    def test_it_can_be_cut_by_the_teacher_ahead_of_the_queue(self, client, tokens):
+        from .fakecutter import FakeCutter
+        from .test_stations import approved_job, st, wait_for
+
+        approved_job(client, tokens)  # a pupil's file is already waiting
+        jid = self.make(client, tokens, count=1).json()["jobId"]
+        t = auth(tokens["teacher"])
+        with FakeCutter(client, tokens["station"]):
+            wait_for(lambda: st(client, tokens)["online"])
+            assert client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1", "skipQueue": True}, headers=t).status_code == 202
+            a = client.post(f"{API}/jobs/{jid}/assign", json={"station": "station-1", "materialConfirmed": True, "skipQueue": True, "allowUntested": True}, headers=t)
+            assert a.status_code == 200, a.text
+
+    def test_one_square_and_the_layer_choice(self, client, tokens):
+        r = self.make(client, tokens, count=1, layer="cut", sizeMm=60)
+        assert [len(s["corners"]) for s in r.json()["squares"]] == [4]
+        job = client.get(f"{API}/jobs/{r.json()['jobId']}", headers=auth(tokens["teacher"])).json()
+        assert {o["layer"] for o in job["objects"]} == {"cut"}
+
+    @pytest.mark.parametrize("over", [{"count": 3}, {"layer": "engrave"}, {"sizeMm": 5}, {"centerX": "mid"}, {"presetId": "nope"}, {"centerX": 4000}, {"sizeMm": 40, "spacingMm": 41, "centerX": 395}])
+    def test_bad_requests_and_squares_off_the_bed_are_refused(self, client, tokens, over):
+        assert self.make(client, tokens, **over).status_code in (422, 400)
+
+    def test_only_teachers_and_only_their_own_school(self, client, tokens):
+        assert self.make(client, tokens, who="pupil").status_code == 403
+        assert self.make(client, tokens, who="station").status_code == 403
+        assert client.post(f"{API}/stations/nope/calibration-marks", json={}, headers=auth(tokens["teacher"])).status_code == 404
+
+    def test_a_calibration_from_many_points_is_kept(self, client, tokens):
+        pts = [{"camera": [x, y], "bed": [x, y]} for x in (50, 150, 250) for y in (50, 150, 250, 350)]
+        assert put(client, tokens, calibration(points=pts)).status_code == 200
+        assert put(client, tokens, calibration(points=pts[:3])).status_code in (422, 400)
+        far = [dict(p) for p in pts]
+        far[0] = {"camera": [50, 50], "bed": [300, 300]}  # a nonsense point is still caught
+        assert put(client, tokens, calibration(points=far)).status_code in (422, 400)

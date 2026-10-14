@@ -68,6 +68,15 @@ def delete_camera_calibration(station_id: str, who: Principal = Depends(require(
     return Response(status_code=204)
 
 
+@router.post("/stations/{station_id}/calibration-marks", status_code=201)
+def calibration_marks(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """Make (and approve, pinned to this laser) a job of known squares. The teacher cuts it, then clicks the squares' corners in the
+    camera picture to calibrate. `corners` lists each square's corners in bed mm, in the order to click them."""
+    j, corners = sj.calibration_marks(s, cfg, who, station_id, body)
+    s.flush()
+    return {"jobId": j.id, "squares": corners}
+
+
 @router.post("/jobs/{job_id}/frame", status_code=202)
 async def frame_job(job_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher")), cfg: Settings = Depends(get_settings)):
     station = body.get("station")

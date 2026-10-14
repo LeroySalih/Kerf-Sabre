@@ -16,7 +16,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.9"
+SCHEMA_VERSION = "0.2.10"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -250,3 +250,44 @@ def cancel(s: Session, who, j: Job) -> Job:
     j.status, j.status_reason = "cancelled", f"Cancelled by {who.id}"
     event(s, j.id, who.id, "cancelled")
     return j
+
+
+# ---------------------------------------------------------------- camera calibration marks
+
+def square_object(oid: str, x: float, y: float, size: float, layer: str) -> dict[str, Any]:
+    """A closed square with its lower-left corner at (x, y) bed mm, drawn counter-clockwise from that corner."""
+    pts = [(x + size, y), (x + size, y + size), (x, y + size), (x, y)]
+    return {"id": oid, "layer": layer, "closed": True, "start": [x, y], "segments": [{"type": "line", "to": [px, py]} for px, py in pts], "matrix": [1, 0, 0, 1, 0, 0]}
+
+
+def calibration_marks(s: Session, cfg: Settings, who, station_id: str, params: dict[str, Any]) -> tuple[Job, list[dict[str, Any]]]:
+    """A job of known squares for a teacher to cut with a laser, so the camera can be calibrated from where they appear.
+    It is pinned to that laser and approved (the teacher runs it from the Admin site). Returns the job and the squares' corners."""
+    if sp.get_machine(s, who.school, station_id) is None:
+        raise ApiError(404, "not_found", f"There is no laser '{station_id}'.")
+
+    def num(key: str, lo: float, hi: float, default: float | None = None) -> float:
+        v = params.get(key, default)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
+            raise ApiError(422, "invalid", f"{key} must be a number from {lo:g} to {hi:g}.")
+        return float(v)
+
+    size, cx, cy = num("sizeMm", 10, 200, 40), num("centerX", 0, 5000), num("centerY", 0, 5000)
+    count = params.get("count", 4)
+    if count not in (1, 4):
+        raise ApiError(422, "invalid", "count is 1 or 4 squares.")
+    layer = params.get("layer", "score")
+    if layer not in ("score", "cut"):
+        raise ApiError(422, "invalid", "layer is score or cut.")
+    spacing = num("spacingMm", size + 5, 2000, 120) if count == 4 else 0.0
+    centres = [(cx, cy)] if count == 1 else [(cx + dx * spacing / 2, cy + dy * spacing / 2) for dy in (-1, 1) for dx in (-1, 1)]
+    squares = [(x - size / 2, y - size / 2) for x, y in centres]
+    objects = [square_object(f"mark{i + 1}", x, y, size, layer) for i, (x, y) in enumerate(squares)]
+    doc = {"pupilId": who.id, "preset": {"id": str(params.get("presetId") or "")}, "station": station_id, "origin": {"mode": "absolute"}, "objects": objects}
+    j = create(s, cfg, who, doc, source="calibration", status="draft")
+    j.status = "submitted"
+    event(s, j.id, who.id, "submitted")
+    validate_for_cutting(s, j, cfg)  # 422 if the squares do not fit the bed
+    approve(s, who, j, station_id)
+    corners = [{"square": i + 1, "corners": [[x, y], [x + size, y], [x + size, y + size], [x, y + size]]} for i, (x, y) in enumerate(squares)]
+    return j, corners

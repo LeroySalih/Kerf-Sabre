@@ -2,11 +2,12 @@
 // Station mode: the queue, the job that is next for this laser, Frame, confirm the material, Start, progress, Stop.
 // Nothing here talks to the laser: the server relays to the Cutter on this PC.
 import { createAlignView, type AlignView } from "./alignui";
+import { openCalibration } from "./calibrateui";
 import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
 import { findPreset, presetLabel } from "./presets";
 import {
-  STATUS_TEXT, ServerError, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, approveJob, request, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -110,7 +111,9 @@ export function openStation(session: Session, onSignOut: () => void): void {
     const head = h("header", { class: "st-head" },
       h("strong", {}, "BISAK Kerf"), h("span", {}, `Laser: ${stationId}`),
       h("span", { class: `st-dot ${st?.online ? "on" : "off"}` }, st?.online ? `Connected · ${st.state ?? "…"}` : "Cutter not connected"),
-      h("span", { class: "spacer" }), button("Sign out", onSignOut));
+      h("span", { class: "spacer" }),
+      ...(st?.cameraAvailable ? [button(st.calibrated ? "Recalibrate camera" : "Calibrate camera", () => void calibrate(), st.calibrated ? "" : "on")] : []),
+      button("Sign out", onSignOut));
     const main = h("div", { class: "st-main" });
     main.append(h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"), queueList(data.queue, stationId)));
     const panel = h("section", { class: "st-card st-job" });
@@ -120,6 +123,20 @@ export function openStation(session: Session, onSignOut: () => void): void {
     if (notice) panel.append(h("p", { class: noticeKind === "error" ? "st-error" : "st-note", role: "alert" }, notice));
     main.append(panel);
     root.replaceChildren(head, main);
+  }
+
+  /** Calibrating changes what every pupil sees, so a teacher must do it: they type their own token, which is used here and then forgotten. */
+  async function calibrate(): Promise<void> {
+    if (aligning) return;
+    const v = await openDialog("Calibrate the camera", [{ key: "token", label: "Teacher token", type: "password", value: "", hint: "Only a teacher can do this. The token is used for this and then forgotten." }],
+      { intro: "You will cut test squares in a scrap of material and click their corners in the camera picture. Have a scrap piece ready.", ok: "Continue" });
+    const token = v ? String(v.token).trim() : "";
+    if (!token) return;
+    try {
+      const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl: session.baseUrl, token }, "GET", "/auth/me");
+      if (me.role !== "teacher" && me.role !== "admin") throw new Error("That is not a teacher's token.");
+      if (await openCalibration(session, { baseUrl: session.baseUrl, token, role: me.role, id: me.id, school: me.school }, stationId)) { calib = undefined; polls = 0; say("The camera calibration was updated."); await refresh(); }
+    } catch (e) { say(msg(e), "error"); }
   }
 
   function stopAlign(): void {

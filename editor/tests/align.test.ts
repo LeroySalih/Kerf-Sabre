@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyMatrix, bedCorners, boundsOf, centreOf, degrees, fitsBed, makeCalibration, placementMatrix, toBed, toCam } from "../src/alignlogic";
-import { applyH, invertH, solveHomography } from "../src/homography";
+import { applyMatrix, bedCorners, boundsOf, centreOf, degrees, fitError, fitsBed, makeCalibration, placementMatrix, targetsFromSquares, toBed, toCam } from "../src/alignlogic";
+import { applyH, invertH, solveHomography, solveHomographyLS } from "../src/homography";
 
 // The pretend camera's picture: a 400 x 400 mm bed seen at these pixels (see devtools/fake_cutter.py).
 const CAM = [{ x: 110, y: 430 }, { x: 540, y: 425 }, { x: 500, y: 40 }, { x: 150, y: 45 }];
@@ -30,7 +30,7 @@ describe("homography", () => {
 
 describe("calibration from four clicks", () => {
   it("accepts the corners in order and keeps the bed points with them", () => {
-    const c = makeCalibration(CAM, 400, 400, 640, 480)!;
+    const c = makeCalibration(CAM, bedCorners(400, 400), 640, 480)!;
     expect(c.points.map((p) => p.bed)).toEqual([[0, 0], [400, 0], [400, 400], [0, 400]]);
     expect(toBed(c, CAM[2]!).x).toBeCloseTo(400, 6);
     const cam = toCam(c)({ x: 400, y: 0 });
@@ -38,8 +38,9 @@ describe("calibration from four clicks", () => {
     expect(cam.y).toBeCloseTo(425, 5);
   });
   it("rejects clicks that go round the wrong way or cross over", () => {
-    expect(makeCalibration([...CAM].reverse(), 400, 400, 640, 480)).toBeNull();
-    expect(makeCalibration([CAM[0]!, CAM[2]!, CAM[1]!, CAM[3]!], 400, 400, 640, 480)).toBeNull();
+    expect(makeCalibration([...CAM].reverse(), bedCorners(400, 400), 640, 480)).toBeNull();
+    expect(makeCalibration([CAM[0]!, CAM[2]!, CAM[1]!, CAM[3]!], bedCorners(400, 400), 640, 480)).toBeNull();
+    expect(makeCalibration(CAM.slice(0, 3), bedCorners(400, 400).slice(0, 3), 640, 480)).toBeNull();
   });
 });
 
@@ -74,5 +75,53 @@ describe("placement", () => {
   it("shows angles in -180..180", () => {
     expect(degrees(Math.PI * 1.5)).toBeCloseTo(-90);
     expect(degrees(Math.PI)).toBeCloseTo(180);
+  });
+});
+
+// A bed bigger than the camera can see: the laser cuts known squares and the teacher clicks their corners.
+describe("calibration from squares the laser cut", () => {
+  const truth = solveHomography(bedCorners(400, 400), CAM)!; // bed mm -> camera px for the pretend camera
+  const squares = [[120, 120], [240, 120], [120, 240], [240, 240]].map(([x, y], i) => ({ square: i + 1, corners: [[x!, y!], [x! + 40, y!], [x! + 40, y! + 40], [x!, y! + 40]] as [number, number][] }));
+  const bed = targetsFromSquares(squares);
+  const clicks = (noise: number) => bed.map((p, i) => { const c = applyH(truth, p); return { x: c.x + Math.sin(i * 12.9) * noise, y: c.y + Math.cos(i * 7.3) * noise }; });
+  it("lists 16 targets, four per square, in the order given", () => {
+    expect(bed).toHaveLength(16);
+    expect(bed[0]).toEqual({ x: 120, y: 120 });
+    expect(bed[5]).toEqual({ x: 280, y: 120 });
+  });
+  it("recovers the whole bed from clicks that only cover a small part of it", () => {
+    const c = makeCalibration(clicks(0), bed, 640, 480)!;
+    expect(c).not.toBeNull();
+    for (const p of bedCorners(400, 400)) { // the bed corners were never clicked, and still land where they should
+      const back = toBed(c, applyH(truth, p));
+      expect(back.x).toBeCloseTo(p.x, 3); expect(back.y).toBeCloseTo(p.y, 3);
+    }
+    expect(fitError(clicks(0), bed, c.homography).worst).toBeLessThan(1e-6);
+  });
+  it("averages out clicking errors of a couple of pixels", () => {
+    const c = makeCalibration(clicks(2), bed, 640, 480)!;
+    expect(c).not.toBeNull();
+    const centre = toBed(c, applyH(truth, { x: 200, y: 200 }));
+    expect(Math.hypot(centre.x - 200, centre.y - 200)).toBeLessThan(2);
+    expect(fitError(clicks(2), bed, c.homography).mean).toBeLessThan(3);
+  });
+  it("one square (four points) is solved exactly", () => {
+    const c = makeCalibration(clicks(0).slice(0, 4), bed.slice(0, 4), 640, 480)!;
+    expect(c).not.toBeNull();
+    const m = solveHomographyLS(clicks(0).slice(0, 4), bed.slice(0, 4))!;
+    expect(c.homography.map((v, i) => Math.abs(v - m[i]!))).toSatisfy((d: number[]) => d.every((x) => x < 1e-9));
+  });
+  it("refuses a wrongly ordered square and clicks that do not fit", () => {
+    const bad = clicks(0);
+    [bad[0], bad[1]] = [bad[1]!, bad[0]!];
+    expect(makeCalibration(bad, bed, 640, 480)).toBeNull();
+    const scattered = clicks(0).map((p, i) => (i === 9 ? { x: p.x + 90, y: p.y - 70 } : p));
+    expect(makeCalibration(scattered, bed, 640, 480)).toBeNull();
+  });
+  it("the least-squares solver agrees with the exact one on four points and refuses too few", () => {
+    const exact = solveHomography(CAM, bedCorners(400, 400))!;
+    const ls = solveHomographyLS(CAM, bedCorners(400, 400))!;
+    exact.forEach((v, i) => expect(ls[i]).toBeCloseTo(v, 9));
+    expect(solveHomographyLS(CAM.slice(0, 3), bedCorners(400, 400).slice(0, 3))).toBeNull();
   });
 });

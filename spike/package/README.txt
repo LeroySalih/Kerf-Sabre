@@ -13,6 +13,9 @@ BEFORE YOU START
   4. Stay at the machine for the whole test. Keep the stop button in reach.
 
 RUN IT
+  (Use the built kerf-spike.zip: unzip it, then run run_spike.bat from INSIDE the
+   kerf-spike folder. Running it from the source code folder will not work
+   unless Python and pyserial are installed on the PC.)
   1. Double-click  run_spike.bat
   2. Choose  a  (auto test) when asked.
   3. Type the station name, e.g.  station1

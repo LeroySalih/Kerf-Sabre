@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.8 - schools (additive)
+- `openapi.yaml`: **schools**. Every class, pupil, activity, file, laser, queue and material list belongs to one school, and nobody in a school can see or change another's (another school's class, file, laser or material answers 404). New roles: `admin` (everything in their school, including every teacher's classes, and managing staff) and `platform` (creates schools and their first admin; sees nothing inside a school). `GET/POST /schools` (platform), `GET /school`, `GET/POST /staff` and `DELETE /staff/{id}` (school admin: teachers, other admins and station tokens; a token is shown once). `GET /auth/me` now includes `school`. `ClassInfo` is unchanged.
+- Class codes, pupil IDs and laser (station) IDs stay unique across the whole server (a pupil types the class code at login; a laser ID is also its station ID), so the second school to ask for a taken one is told to choose another. A station token can only connect as a laser registered to its own school. Material presets are per school: each new school starts with the placeholder list and edits its own.
+- Databases made earlier move into a default school `main` on start-up (presets are rebuilt with a school key; nothing is lost).
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.8`.
+
 ## 0.2.7 - approval per class (additive)
 - `openapi.yaml`: `ClassInfo.requireApproval` (default true). `POST /classes` takes it, and the new teacher endpoint `PUT /classes/{code}` changes it (and the label). When a class does not require approval, a pupil's submitted file goes straight into the queue (`approvedBy: auto`); otherwise it waits for a teacher as before. Files already waiting are not changed. Classes made before this gain the column as "requires approval".
 - The server-wide `KERF_REQUIRE_APPROVAL=false` still switches approval off for everyone.

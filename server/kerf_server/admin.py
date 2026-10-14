@@ -15,6 +15,8 @@ from .db import Database
 from .models import Token
 from . import services_classes as sc
 from .security import ROLES, hash_token, issue_token
+from . import services_schools as ss
+from .models import DEFAULT_SCHOOL
 from .services_seed import seed
 
 
@@ -31,16 +33,23 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="kerf-admin", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init-db", help="create the tables and load the placeholder presets and machines")
-    t = sub.add_parser("create-token", help="issue a token for a pupil, teacher or station")
+    cs = sub.add_parser("create-school", help="create a school (with an optional first admin, whose token is printed once)")
+    cs.add_argument("--id", required=True, help="lower-case letters, digits and -, e.g. bisak")
+    cs.add_argument("--name", required=True)
+    cs.add_argument("--admin", help="ID of the school's first admin")
+    sub.add_parser("list-schools", help="list the schools")
+    t = sub.add_parser("create-token", help="issue a token for a pupil, teacher, school admin, station or the platform owner")
     t.add_argument("--role", choices=ROLES, required=True)
     t.add_argument("--id", required=True, help="pupil ID, teacher ID or station id (e.g. station-1). Never a name.")
     t.add_argument("--label", help="a note for you, e.g. 'Y9 set 2' (not a name)")
+    t.add_argument("--school", default=DEFAULT_SCHOOL, help=f"the school it belongs to (default {DEFAULT_SCHOOL}; ignored for the platform role)")
     ip = sub.add_parser("import-pupils", help="issue a token for every pupil ID in a CSV (column 'pupilId' or one ID per line)")
     ip.add_argument("csv")
     ip.add_argument("--out", help="write pupilId,token to this file instead of the screen")
     cc = sub.add_parser("create-class", help="create a class that pupils log in through")
     cc.add_argument("--code", required=True, help="e.g. 9B-DT")
     cc.add_argument("--label", help="a note for teachers, e.g. 'Y9 set 2' (not a name)")
+    cc.add_argument("--school", default=DEFAULT_SCHOOL)
     ap_ = sub.add_parser("add-pupils", help="add pupil IDs to a class and print a PIN for each new one")
     ap_.add_argument("--class", dest="class_code", required=True)
     ap_.add_argument("file", help="CSV with a 'pupilId' column, or one ID per line")
@@ -55,8 +64,18 @@ def main(argv: list[str] | None = None) -> int:
     db, _ = _db()
     if args.cmd == "init-db":
         print("Database ready.")
+    elif args.cmd == "create-school":
+        with db.session() as s_:
+            school = ss.create_school(s_, args.id, args.name)
+        print(f"Created school {school.id}.", file=sys.stderr)
+        if args.admin:
+            print(ss.add_staff(db, school.id, "admin", args.admin, "first admin"))
+    elif args.cmd == "list-schools":
+        with db.session() as s_:
+            for row in ss.list_schools(s_):
+                print(f"{row['id']:20} {row['name']}")
     elif args.cmd == "create-token":
-        print(issue_token(db, args.role, args.id, args.label))
+        print(issue_token(db, args.role, args.id, args.label, args.school))
     elif args.cmd == "import-pupils":
         with open(args.csv, newline="") as f:
             rows = [r for r in csv.reader(f) if r]
@@ -72,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote {len(rows)} tokens to {args.out}. Hand them out, then delete the file.")
     elif args.cmd == "create-class":
         with db.session() as s_:
-            c = sc.create_class(s_, args.code, args.label)
+            c = sc.create_class(s_, args.code, args.label, school=args.school)
             print(f"Created class {c.code}.")
     elif args.cmd == "add-pupils":
         with open(args.file, newline="") as f:
@@ -96,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "list-tokens":
         with db.session() as s:
             for tok in s.scalars(select(Token).order_by(Token.role, Token.subject_id)):
-                print(f"{tok.role:8} {tok.subject_id:24} {'REVOKED' if tok.revoked else 'active':8} {tok.label or ''}")
+                print(f"{tok.role:8} {tok.school_id or '-':12} {tok.subject_id:24} {'REVOKED' if tok.revoked else 'active':8} {tok.label or ''}")
     elif args.cmd == "revoke":
         with db.session() as s:
             n = 0

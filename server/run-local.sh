@@ -23,6 +23,8 @@ kerf-admin init-db >/dev/null
 CREDS="$KERF_DATA_DIR/demo-logins.txt"
 if [ ! -f "$CREDS" ]; then   # first run: make a demo teacher, a station, a class and a pupil
   {
+    echo "Platform token: $(kerf-admin create-token --role platform --id owner | tail -1)   (creates schools; sees inside none)"
+    echo "Admin token:    $(kerf-admin create-token --role admin --id A001 | tail -1)   (school 'main': all its classes, staff, lasers)"
     echo "Teacher token:  $(kerf-admin create-token --role teacher --id T001 | tail -1)"
     echo "Station token:  $(kerf-admin create-token --role station --id station-1 | tail -1)"
     kerf-admin create-class --code DEMO --label "Demo class" >/dev/null

@@ -34,7 +34,7 @@ def list_jobs(
     who: Principal = Depends(require("pupil", "station")),
     s: Session = Depends(get_session),
 ):
-    q = select(Job).order_by(Job.created_at.desc())
+    q = select(Job).where(Job.school_id == who.school).order_by(Job.created_at.desc())
     if not who.staff():
         q = q.where(Job.pupil_id == who.id)
     if status:

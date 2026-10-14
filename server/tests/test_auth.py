@@ -12,9 +12,9 @@ def test_health_needs_no_token(client):
 
 
 def test_me_reports_role_and_id(client, tokens):
-    assert client.get("/api/v1/auth/me", headers=auth(tokens["pupil"])).json() == {"role": "pupil", "id": "P001"}
-    assert client.get("/api/v1/auth/me", headers=auth(tokens["teacher"])).json() == {"role": "teacher", "id": "T001"}
-    assert client.get("/api/v1/auth/me", headers=auth(tokens["station"])).json() == {"role": "station", "id": "station-1"}
+    assert client.get("/api/v1/auth/me", headers=auth(tokens["pupil"])).json() == {"role": "pupil", "id": "P001", "school": "main"}
+    assert client.get("/api/v1/auth/me", headers=auth(tokens["teacher"])).json() == {"role": "teacher", "id": "T001", "school": "main"}
+    assert client.get("/api/v1/auth/me", headers=auth(tokens["station"])).json() == {"role": "station", "id": "station-1", "school": "main"}
 
 
 def test_missing_or_bad_token_is_401_in_the_contract_error_shape(client, tokens):
@@ -49,7 +49,7 @@ def test_ids_must_be_ids_not_names(app):
         with pytest.raises(ValueError):
             issue_token(db, "pupil", bad)
     with pytest.raises(ValueError):
-        issue_token(db, "admin", "P1")
+        issue_token(db, "wizard", "P1")
 
 
 def test_unknown_route_uses_the_error_shape(client):

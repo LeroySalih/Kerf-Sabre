@@ -10,14 +10,28 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, utcnow
 
 
+DEFAULT_SCHOOL = "main"  # the school that databases made before schools existed belong to
+
+
+class School(Base):
+    """A school. Everything else (classes, pupils, activities, files, lasers, materials) belongs to exactly one school."""
+
+    __tablename__ = "schools"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Token(Base):
     """A bearer token. Only its SHA-256 is stored, so a database leak does not leak working tokens."""
 
     __tablename__ = "tokens"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    role: Mapped[str] = mapped_column(String(16))  # pupil | teacher | station
+    role: Mapped[str] = mapped_column(String(16))  # pupil | teacher | admin | station | platform
     subject_id: Mapped[str] = mapped_column(String(64), index=True)  # pupil ID, teacher ID or station id
+    #: The school this token belongs to. None only for a platform token, which belongs to no school.
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     #: Login sessions expire; tokens issued by an administrator do not (None).
@@ -29,6 +43,7 @@ class Job(Base):
     __tablename__ = "jobs"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     pupil_id: Mapped[str] = mapped_column(String(64), index=True)
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     status: Mapped[str] = mapped_column(String(16), index=True)
@@ -74,6 +89,7 @@ class PresetRow(Base):
     """Every version of every preset is kept, so a job can always be reproduced with the version it recorded."""
 
     __tablename__ = "presets"
+    school_id: Mapped[str] = mapped_column(String(32), primary_key=True, default=DEFAULT_SCHOOL)  # each school keeps its own list
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
@@ -83,7 +99,8 @@ class PresetRow(Base):
 
 class MachineRow(Base):
     __tablename__ = "machines"
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # a laser's ID is unique across all schools (it is also its station ID)
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -119,6 +136,7 @@ class SchoolClass(Base):
     __tablename__ = "classes"
     code: Mapped[str] = mapped_column(String(32), primary_key=True)
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     #: The teacher who set the class up and looks after it. None: a shared class that every teacher may manage.
     teacher_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     #: Must a teacher approve this class's files before they can be cut? NULL (a class made before this existed) counts as yes.

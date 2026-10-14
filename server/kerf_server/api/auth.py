@@ -18,8 +18,8 @@ router = APIRouter(tags=["auth"])
 
 
 @router.get("/auth/me")
-def me(p: Principal = Depends(current_principal)) -> dict[str, str]:
-    return {"role": p.role, "id": p.id}
+def me(p: Principal = Depends(current_principal)) -> dict[str, str | None]:
+    return {"role": p.role, "id": p.id, "school": p.school}
 
 
 @router.post("/auth/login")

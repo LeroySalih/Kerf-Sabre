@@ -20,24 +20,30 @@ router = APIRouter(tags=["stations"])
 LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
 
-def station_ids(s: Session) -> list[str]:
-    return [m["id"] for m in sp.list_machines(s)]
+def station_ids(s: Session, school: str) -> list[str]:
+    return [m["id"] for m in sp.list_machines(s, school)]
 
 
-def known(s: Session, station_id: str) -> None:
-    if sp.get_machine(s, station_id) is None:
+def known(s: Session, who: Principal, station_id: str) -> None:
+    """The laser must belong to the caller's school; another school's laser looks like it does not exist."""
+    if sp.get_machine(s, who.school, station_id) is None:
         raise ApiError(404, "not_found", f"There is no laser '{station_id}'.")
 
 
+def own_station(request: Request, who: Principal, station_id: str) -> None:
+    with request.app.state.db.session() as s:
+        known(s, who, station_id)
+
+
 @router.get("/stations")
-def list_stations(request: Request, _: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
+def list_stations(request: Request, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     hub = request.app.state.hub
-    return [hub.get(i).doc() for i in station_ids(s)]
+    return [hub.get(i).doc() for i in station_ids(s, who.school)]
 
 
 @router.get("/stations/{station_id}")
-def get_station(station_id: str, request: Request, _: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
-    known(s, station_id)
+def get_station(station_id: str, request: Request, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
+    known(s, who, station_id)
     return request.app.state.hub.get(station_id).doc()
 
 
@@ -46,6 +52,7 @@ async def frame_job(job_id: str, request: Request, body: dict[str, Any] = Body(.
     station = body.get("station")
     if not isinstance(station, str):
         raise ApiError(422, "invalid", "Say which station to frame on.")
+    own_station(request, who, station)
     app = request.app
     hub = app.state.hub
     with app.state.db.session() as s:
@@ -60,12 +67,14 @@ async def assign_job(job_id: str, request: Request, body: dict[str, Any] = Body(
     station = body.get("station")
     if not isinstance(station, str):
         raise ApiError(422, "invalid", "Say which station to cut on.")
+    own_station(request, who, station)
     app = request.app
     return await run.start(app.state.db, app.state.hub, cfg, who, job_id, station, body.get("materialConfirmed") is True, body.get("allowUntested") is True, body.get("skipQueue") is True)
 
 
 @router.post("/stations/{station_id}/control", status_code=202)
-async def control(station_id: str, request: Request, body: dict[str, Any] = Body(...), _: Principal = Depends(require("station", "teacher"))):
+async def control(station_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher"))):
+    own_station(request, who, station_id)
     cmd = body.get("command")
     if cmd not in ("stop", "pause", "resume"):
         raise ApiError(422, "invalid", "command must be stop, pause or resume.")
@@ -76,7 +85,8 @@ async def control(station_id: str, request: Request, body: dict[str, Any] = Body
 
 
 @router.get("/stations/{station_id}/camera")
-def camera(station_id: str, request: Request, _: Principal = Depends(require("station", "teacher"))):
+def camera(station_id: str, request: Request, who: Principal = Depends(require("station", "teacher"))):
+    own_station(request, who, station_id)
     jpeg = request.app.state.hub.get(station_id).camera
     if jpeg is None:
         raise ApiError(404, "not_found", "No camera picture is available from that station.")
@@ -84,7 +94,8 @@ def camera(station_id: str, request: Request, _: Principal = Depends(require("st
 
 
 @router.get("/stations/{station_id}/logs")
-def logs(station_id: str, request: Request, limit: int = 200, level: str | None = None, _: Principal = Depends(require("teacher"))):
+def logs(station_id: str, request: Request, limit: int = 200, level: str | None = None, who: Principal = Depends(require("teacher"))):
+    own_station(request, who, station_id)
     if level is not None and level not in LEVELS:
         raise ApiError(422, "invalid", f"level must be one of {', '.join(LEVELS)}.")
     return request.app.state.hub.recent_logs(station_id, max(1, min(limit, 5000)), level)
@@ -92,6 +103,7 @@ def logs(station_id: str, request: Request, limit: int = 200, level: str | None 
 
 @router.put("/stations/{station_id}/log-level", status_code=204)
 async def set_log_level(station_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher"))):
+    own_station(request, who, station_id)
     level = body.get("level")
     if level not in LEVELS:
         raise ApiError(422, "invalid", f"level must be one of {', '.join(LEVELS)}.")
@@ -103,6 +115,7 @@ async def set_log_level(station_id: str, request: Request, body: dict[str, Any] 
 
 @router.post("/stations/{station_id}/diagnostics", status_code=202)
 async def request_diagnostics(station_id: str, request: Request, who: Principal = Depends(require("teacher"))):
+    own_station(request, who, station_id)
     hub = request.app.state.hub
     await hub.send(station_id, {"type": "control", "command": "diagnostic_bundle"})
     hub.server_log(station_id, "INFO", f"diagnostic bundle requested by {who.id}")

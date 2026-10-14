@@ -22,7 +22,7 @@ OUTCOMES = ("comment", "revise", "complete")
 def owned_class(s: Session, who, code: str) -> SchoolClass:
     """The class, if this teacher looks after it (or it is a shared class). 404 otherwise, so other classes stay invisible."""
     c = s.get(SchoolClass, code.strip().upper())
-    if c is None or (c.teacher_id is not None and c.teacher_id != who.id):
+    if c is None or c.school_id != who.school or (c.teacher_id is not None and c.teacher_id != who.id and not who.is_admin):
         raise ApiError(404, "not_found", "There is no such class.")
     return c
 
@@ -86,10 +86,10 @@ def _parse_due(v: Any) -> datetime | None:
         raise ApiError(422, "invalid", "dueAt must be a date and time like 2026-11-05T15:00:00Z.") from exc
 
 
-def _check_preset(s: Session, preset_id: Any) -> str | None:
+def _check_preset(s: Session, school: str | None, preset_id: Any) -> str | None:
     if preset_id in (None, ""):
         return None
-    if sp.latest_preset(s, str(preset_id)) is None:
+    if sp.latest_preset(s, school, str(preset_id)) is None:
         raise ApiError(422, "unknown_preset", f"There is no material '{preset_id}'.")
     return str(preset_id)
 
@@ -98,21 +98,21 @@ def create_activity(s: Session, who, code: str, body: dict[str, Any]) -> Activit
     cls = owned_class(s, who, code)
     nxt = (s.scalar(select(func.max(Activity.position)).where(Activity.class_code == cls.code)) or 0) + 1
     a = Activity(id="act-" + secrets.token_hex(4), class_code=cls.code, title=_clean_title(body.get("title")), instructions=str(body.get("instructions") or "")[:20000],
-                 position=nxt, preset_id=_check_preset(s, body.get("presetId")), due_at=_parse_due(body.get("dueAt")),
+                 position=nxt, preset_id=_check_preset(s, cls.school_id, body.get("presetId")), due_at=_parse_due(body.get("dueAt")),
                  published=bool(body.get("published", False)), created_by=who.id)
     s.add(a)
     return a
 
 
 def update_activity(s: Session, who, code: str, activity_id: str, body: dict[str, Any]) -> Activity:
-    owned_class(s, who, code)
+    cls = owned_class(s, who, code)
     a = class_activity(s, code, activity_id)
     if "title" in body:
         a.title = _clean_title(body["title"])
     if "instructions" in body:
         a.instructions = str(body["instructions"] or "")[:20000]
     if "presetId" in body:
-        a.preset_id = _check_preset(s, body["presetId"])
+        a.preset_id = _check_preset(s, cls.school_id, body["presetId"])
     if "dueAt" in body:
         a.due_at = _parse_due(body["dueAt"])
     if "published" in body:

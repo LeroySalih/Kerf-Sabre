@@ -47,8 +47,20 @@ class Database:
 
     def create_all(self) -> None:
         from . import models  # noqa: F401  (registers the tables)
+        from sqlalchemy import inspect, text
 
+        # Presets used to be keyed by (id, version); they are now per school. A primary key cannot be altered, so an
+        # older table is moved aside, recreated, and its rows copied back into the default school.
+        insp = inspect(self.engine)
+        if insp.has_table("presets") and "school_id" not in {c["name"] for c in insp.get_columns("presets")}:
+            with self.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE presets RENAME TO presets_old"))
         Base.metadata.create_all(self.engine)
+        if inspect(self.engine).has_table("presets_old"):
+            with self.engine.begin() as conn:
+                conn.execute(text(f"INSERT INTO presets (school_id, id, version, data, updated_at, updated_by) "
+                                  f"SELECT '{models.DEFAULT_SCHOOL}', id, version, data, updated_at, updated_by FROM presets_old"))
+                conn.execute(text("DROP TABLE presets_old"))
         self._add_missing_columns()
 
     def _add_missing_columns(self) -> None:

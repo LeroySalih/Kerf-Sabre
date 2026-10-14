@@ -16,7 +16,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.7"
+SCHEMA_VERSION = "0.2.8"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -66,7 +66,7 @@ def receipt(j: Job, position: int | None = None) -> dict[str, Any]:
 def get_visible(s: Session, job_id: str, who) -> Job:
     """404 (not 403) for someone else's job, so job IDs cannot be probed."""
     j = s.get(Job, job_id)
-    if j is None or (not who.staff() and j.pupil_id != who.id):
+    if j is None or j.school_id != who.school or (not who.staff() and j.pupil_id != who.id):
         raise ApiError(404, "not_found", "There is no such job.")
     return j
 
@@ -90,7 +90,7 @@ def check_cut_paths(objects: list[dict[str, Any]], cfg: Settings) -> list[str]:
 
 
 def make_gcode(s: Session, j: Job, machine: dict[str, Any], head=None) -> Result:
-    preset = sp.preset_version(s, j.preset_id, j.preset_version)
+    preset = sp.preset_version(s, j.school_id, j.preset_id, j.preset_version)
     if preset is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{j.preset_id}' version {j.preset_version}.")
     doc = to_doc(j)
@@ -116,10 +116,10 @@ def store_gcode(s: Session, j: Job, station: str, r: Result) -> GcodeRow:
 
 def validate_for_cutting(s: Session, j: Job, cfg: Settings) -> None:
     """Everything that can be checked before a station is chosen. Sets estimate and warnings; stores a general G-code version."""
-    if sp.preset_version(s, j.preset_id, j.preset_version) is None:
+    if sp.preset_version(s, j.school_id, j.preset_id, j.preset_version) is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{j.preset_id}'.")
     warnings = check_cut_paths(j.objects, cfg)
-    machines = sp.list_machines(s)
+    machines = sp.list_machines(s, j.school_id)
     if not machines:
         raise ApiError(422, "no_machines", "No laser is set up on this server yet.")
     wanted = [m for m in machines if j.station in (None, m["id"])]
@@ -165,11 +165,11 @@ def create(s: Session, cfg: Settings, who, doc: dict[str, Any], *, source: str =
     pupil = doc["pupilId"]
     if not who.is_teacher and pupil != who.id:
         raise ApiError(403, "forbidden", "You can only save jobs under your own pupil ID.")
-    p = sp.latest_preset(s, doc["preset"]["id"])
+    p = sp.latest_preset(s, who.school, doc["preset"]["id"])
     if p is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j = Job(
-        id=new_id(), pupil_id=pupil, status="draft", source=source, preset_id=p["id"], preset_version=p["version"],
+        id=new_id(), pupil_id=pupil, school_id=who.school, status="draft", source=source, preset_id=p["id"], preset_version=p["version"],
         station=doc.get("station"), origin=doc["origin"], objects=doc["objects"], dimensions=doc.get("dimensions", []), warnings=[], report=report, units=units,
     )
     s.add(j)
@@ -186,7 +186,7 @@ def create(s: Session, cfg: Settings, who, doc: dict[str, Any], *, source: str =
 def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
     if j.status != "draft":
         raise ApiError(409, "conflict", "Only a draft can be changed. Save it as a new job instead.")
-    p = sp.latest_preset(s, doc["preset"]["id"])
+    p = sp.latest_preset(s, j.school_id, doc["preset"]["id"])
     if p is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j.objects, j.origin, j.station = doc["objects"], doc["origin"], doc.get("station")
@@ -204,7 +204,7 @@ def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
 def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
     if j.status != "draft":
         raise ApiError(409, "conflict", f"This job is already {j.status}.")
-    p = sp.latest_preset(s, j.preset_id)
+    p = sp.latest_preset(s, j.school_id, j.preset_id)
     if p is not None:  # pick up preset edits made since the draft was saved
         j.preset_version = p["version"]
     validate_for_cutting(s, j, cfg)
@@ -225,7 +225,7 @@ def approve(s: Session, who, j: Job, station: str | None) -> Job:
     if j.status != "submitted":
         raise ApiError(409, "conflict", f"Only a submitted job can be approved; this one is {j.status}.")
     if station is not None:
-        if sp.get_machine(s, station) is None:
+        if sp.get_machine(s, j.school_id, station) is None:
             raise ApiError(422, "unknown_station", f"There is no laser '{station}'.")
         j.station = station
     j.status, j.approved_by = "approved", who.id

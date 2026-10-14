@@ -33,7 +33,7 @@ class TestLogin:
         body = r.json()
         assert (body["role"], body["id"], body["classCode"]) == ("pupil", "P001", "9B-DT") and body["token"].startswith("kp_")
         h = auth(body["token"])
-        assert client.get(f"{API}/auth/me", headers=h).json() == {"role": "pupil", "id": "P001"}
+        assert client.get(f"{API}/auth/me", headers=h).json() == {"role": "pupil", "id": "P001", "school": "main"}
         assert client.post(f"{API}/jobs", json=job_doc(pupil="P001"), headers=h).status_code == 201
         assert client.post(f"{API}/jobs", json=job_doc(pupil="P002"), headers=h).status_code == 403  # still only their own
 

@@ -16,7 +16,7 @@ def rect_obj(oid, x, y, w, h, layer="cut", closed=True):
 
 
 def job_doc(pupil="P001", status="draft", objects=None, **over):
-    d = {"schemaVersion": "0.2.7", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
+    d = {"schemaVersion": "0.2.8", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
          "preset": {"id": "ply-3mm", "version": 1}, "station": None, "origin": {"mode": "absolute"},
          "objects": objects or [rect_obj("a", 20, 20, 50, 30)]}
     d.update(over)

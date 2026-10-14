@@ -30,7 +30,7 @@ def _same(a: dict[str, float], b: dict[str, float]) -> bool:
 
 def prepare(s: Session, hub: Hub, cfg: Settings, j: Job, station_id: str, skip_queue: bool = False) -> tuple[Live, dict[str, Any]]:
     """Checks common to frame and assign. Returns the live station and its machine profile."""
-    machine = sp.get_machine(s, station_id)
+    machine = sp.get_machine(s, j.school_id, station_id)
     if machine is None:
         raise ApiError(404, "not_found", f"There is no laser '{station_id}'.")
     if j.status not in ("approved", "queued"):
@@ -93,7 +93,7 @@ async def start(db, hub: Hub, cfg: Settings, who, job_id: str, station_id: str, 
         j = sj.get_visible(s, job_id, who)
         live, machine, r, b = assign_checks(s, hub, cfg, who, j, station_id, material_confirmed, allow_untested, skip_queue)
         row: GcodeRow = sj.store_gcode(s, j, station_id, r)
-        preset = sp.preset_version(s, j.preset_id, j.preset_version) or {}
+        preset = sp.preset_version(s, j.school_id, j.preset_id, j.preset_version) or {}
         j.status, j.station = "assigned", station_id
         sj.event(s, j.id, who.id, "assigned", {"station": station_id})
         s.flush()

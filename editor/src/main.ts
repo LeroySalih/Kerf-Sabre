@@ -15,6 +15,7 @@ import { booleanOp, type BoolOp } from "./boolean";
 import { parseClip, serializeClip } from "./clipboard";
 import { openDialog } from "./dialog";
 import { boxNet, validateBoxNet, type BoxNetParams } from "./boxnet";
+import { fingerBox, validateFingerBox, type FingerBoxParams } from "./fingerbox";
 import { kerfTest, testGrid, validateKerfTest, validateTestGrid, type TestGridParams, type TestItem } from "./testgrid";
 import { canSubmit, outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
@@ -1386,6 +1387,23 @@ async function kerfTestDialog(): Promise<void> {
   insertGenerated(kerfTest(p), "Kerf test coupon");
 }
 
+async function fingerBoxDialog(): Promise<void> {
+  const preset = findPreset(doc.state.materialId) ?? presetStore[0]!;
+  const v = await openDialog("Finger-joint box", [
+    { key: "widthMm", label: "Width (mm)", type: "number", value: 100, min: 20 },
+    { key: "depthMm", label: "Depth (mm)", type: "number", value: 80, min: 20 },
+    { key: "heightMm", label: "Height (mm)", type: "number", value: 50, min: 20 },
+    { key: "thicknessMm", label: "Material thickness (mm)", type: "number", value: preset.thicknessMm, min: 0.1 },
+    { key: "fingerMm", label: "Finger width (mm)", type: "number", value: Math.max(6, Math.round(preset.thicknessMm * 3)), min: 3, hint: "Target width: it is adjusted slightly so a whole number of fingers fit each edge" },
+    { key: "lid", label: "Lid", type: "select", value: "no", options: [{ value: "no", label: "No (open top)" }, { value: "yes", label: "Yes (fingered, glued)" }] },
+  ], { intro: "Cuts the panels of a box with interlocking fingers: base, front and back, left and right (and a lid). Sizes are the outside of the box. Kerf is not allowed for here: set it in the material.", ok: "Add panels" });
+  if (!v) return;
+  const p: FingerBoxParams = { ...(v as unknown as FingerBoxParams), lid: v.lid === "yes" };
+  const error = validateFingerBox(p);
+  if (error) { notify(error); return; }
+  insertGenerated(fingerBox(p), "Finger-joint box");
+}
+
 async function boxNetDialog(): Promise<void> {
   const v = await openDialog("Box net", [
     { key: "widthMm", label: "Width (mm)", type: "number", value: 100, min: 10 },
@@ -1659,7 +1677,7 @@ function roundAllSelected(): void {
 }
 on("round-all", roundAllSelected);
 
-const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog(), "box-net": () => void boxNetDialog() };
+const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog(), "box-net": () => void boxNetDialog(), "finger-box": () => void fingerBoxDialog() };
 on("act-linear", () => menuActions["linear-repeat"]!());
 on("act-circular", () => menuActions["circular-array"]!());
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>

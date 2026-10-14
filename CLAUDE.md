@@ -22,7 +22,7 @@ Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal scho
 - Station PCs: no installers, no Claude Code. Deploy as portable folders (embeddable Python + bundled deps + `.bat`). Everything must be debuggable from logs.
 
 ## Git workflow
-- Brief describes worktrees + merge to `main`, no PRs. In cloud sessions, develop on the branch the session designates, commit small, push that branch. Never open a pull request unless asked.
+- **Always commit to `main` and push `main`** (owner's standing instruction). No feature branches and no pull requests unless explicitly asked. Commit small; pull/rebase before pushing; run the component tests first.
 
 ## Tests
 - Python: `pytest` from the component folder (`spike/`, `shared/`, later `server/`, `cutter/`).

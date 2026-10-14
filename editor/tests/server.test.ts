@@ -48,3 +48,27 @@ describe("queue text", () => {
     expect(queueText(null, null)).toBe("");
   });
 });
+
+import { loginWithPin, parseIds, pinsCsv } from "../src/server";
+describe("class login", () => {
+  it("posts the class code, ID and PIN and returns a pupil session", async () => {
+    let sent: { url: string; body: string } | undefined;
+    const f = (async (url: string, init: RequestInit) => { sent = { url, body: String(init.body) }; return new Response(JSON.stringify({ token: "kp_x", role: "pupil", id: "P001", classCode: "9B-DT", expiresAt: "2026-10-14T20:00:00Z" }), { status: 200 }); }) as unknown as typeof fetch;
+    const s = await loginWithPin("https://k/", " 9b-dt ", " P001 ", " 12345 ", f);
+    expect(sent!.url).toBe("https://k/api/v1/auth/login");
+    expect(JSON.parse(sent!.body)).toEqual({ classCode: "9b-dt", pupilId: "P001", pin: "12345" });
+    expect(s).toMatchObject({ token: "kp_x", role: "pupil", id: "P001", classCode: "9B-DT", expiresAt: "2026-10-14T20:00:00Z" });
+  });
+  it("shows the server's own words for a wrong PIN or a lockout", async () => {
+    const wrong = (async () => new Response(JSON.stringify({ code: "bad_login", message: "That class code, pupil ID or PIN is not right." }), { status: 401 })) as unknown as typeof fetch;
+    await expect(loginWithPin("", "a", "b", "c", wrong)).rejects.toMatchObject({ message: "That class code, pupil ID or PIN is not right.", status: 401 });
+    const locked = (async () => new Response(JSON.stringify({ code: "locked", message: "Too many wrong PINs." }), { status: 429 })) as unknown as typeof fetch;
+    await expect(loginWithPin("", "a", "b", "c", locked)).rejects.toMatchObject({ code: "locked", status: 429 });
+    const down = (async () => { throw new TypeError("x"); }) as unknown as typeof fetch;
+    await expect(loginWithPin("", "a", "b", "c", down)).rejects.toMatchObject({ code: "network" });
+  });
+  it("splits pasted pupil IDs and writes the PIN sheet", () => {
+    expect(parseIds("P1, P2;P3\nP2\n  P4  \n\n")).toEqual(["P1", "P2", "P3", "P4"]);
+    expect(pinsCsv([{ pupilId: "P1", pin: "12345" }, { pupilId: "P2", pin: "00042" }])).toBe("pupilId,pin\nP1,12345\nP2,00042\n");
+  });
+});

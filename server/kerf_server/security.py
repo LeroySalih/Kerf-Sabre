@@ -9,7 +9,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import Database
+from .db import Database, as_utc, utcnow
 from .errors import ApiError
 from .models import Token
 
@@ -56,7 +56,9 @@ def issue_token(db: Database, role: str, subject_id: str, label: str | None = No
 
 def lookup(session: Session, token: str) -> Principal | None:
     row = session.scalar(select(Token).where(Token.token_hash == hash_token(token), Token.revoked.is_(False)))
-    return Principal(row.role, row.subject_id) if row else None
+    if row is None or (row.expires_at is not None and as_utc(row.expires_at) <= utcnow()):
+        return None  # unknown, revoked or expired
+    return Principal(row.role, row.subject_id)
 
 
 def bearer(request: Request) -> str | None:

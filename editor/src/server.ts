@@ -2,7 +2,7 @@
 import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string }
+export interface Session { baseUrl: string; token: string; role: string; id: string; classCode?: string; expiresAt?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
 export interface QueueEntry {
   ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; presetId?: string;
@@ -66,6 +66,43 @@ export async function signIn(baseUrl: string, token: string, f: Fetch = fetch): 
   const me = await request<{ role: string; id: string }>({ baseUrl: base, token }, "GET", "/auth/me", undefined, f);
   return { baseUrl: base, token, role: me.role, id: me.id };
 }
+
+/** Class login: class code + pupil ID + PIN give a short-lived token. Wrong details come back as the server's own words. */
+export async function loginWithPin(baseUrl: string, classCode: string, pupilId: string, pin: string, f: Fetch = fetch): Promise<Session> {
+  const base = normaliseBase(baseUrl);
+  let res: Response;
+  try {
+    res = await f(`${base}/api/v1/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ classCode: classCode.trim(), pupilId: pupilId.trim(), pin: pin.trim() }) });
+  } catch {
+    throw new ServerError("Can't reach the server. Check the address and your network.", 0, "network");
+  }
+  const json = (await res.json().catch(() => null)) as { token?: string; id?: string; classCode?: string; expiresAt?: string; code?: string; message?: string } | null;
+  if (!res.ok || !json?.token) throw new ServerError(json?.message ?? `The server answered ${res.status}.`, res.status, json?.code ?? "error");
+  return { baseUrl: base, token: json.token, role: "pupil", id: json.id!, classCode: json.classCode, expiresAt: json.expiresAt };
+}
+
+/** End a class-login session on the server (best effort: the token also expires by itself). */
+export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
+  try { await f(`${s.baseUrl}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${s.token}` } }); } catch { /* offline: it will expire */ }
+}
+
+export interface ClassInfo { code: string; label: string | null; pupilCount: number }
+export interface ClassPupil { pupilId: string; lastLogin: string | null; locked: boolean }
+export interface AddedPupils { created: { pupilId: string; pin: string }[]; existing: string[]; conflicts: string[] }
+export const listClasses = (s: Session, f?: Fetch) => request<ClassInfo[]>(s, "GET", "/classes", undefined, f);
+export const createClass = (s: Session, code: string, label: string, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { code, label }, f);
+export const classPupils = (s: Session, code: string, f?: Fetch) => request<ClassPupil[]>(s, "GET", `/classes/${encodeURIComponent(code)}/pupils`, undefined, f);
+export const addPupils = (s: Session, code: string, pupilIds: string[], f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, { pupilIds }, f);
+export const resetPin = (s: Session, pupilId: string, f?: Fetch) => request<{ pupilId: string; pin: string }>(s, "POST", `/pupils/${encodeURIComponent(pupilId)}/reset-pin`, undefined, f);
+export const removePupil = (s: Session, code: string, pupilId: string, f?: Fetch) => request<null>(s, "DELETE", `/classes/${encodeURIComponent(code)}/pupils/${encodeURIComponent(pupilId)}`, undefined, f);
+
+/** Pupil IDs pasted from a spreadsheet or typed: split on whitespace, commas and semicolons; drop blanks and repeats. */
+export function parseIds(text: string): string[] {
+  return [...new Set(text.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean))];
+}
+
+/** "pupilId,pin" lines for handing out. */
+export const pinsCsv = (rows: { pupilId: string; pin: string }[]): string => ["pupilId,pin", ...rows.map((r) => `${r.pupilId},${r.pin}`)].join("\n") + "\n";
 
 export const listPresets = (s: Session, f?: Fetch) => request<Preset[]>(s, "GET", "/presets", undefined, f);
 export const sendJob = (s: Session, job: JobDoc, f?: Fetch) => request<Receipt>(s, "POST", "/jobs", job, f);

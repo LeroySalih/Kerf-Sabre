@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.4 - class login (additive)
+- `openapi.yaml`: `POST /auth/login` (class code + pupil ID + PIN -> short-lived token), `POST /auth/logout`, teacher endpoints `GET/POST /classes`, `GET/POST /classes/{code}/pupils`, `DELETE /classes/{code}/pupils/{pupilId}`, `POST /pupils/{pupilId}/reset-pin`. Bearer tokens (teachers, stations, existing pupil tokens) keep working unchanged.
+- Pupils are still identified by ID only; no names are stored. PINs are hashed.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.4`.
+
 ## 0.2.3 - station progress (additive)
 - `openapi.yaml`: `Station.progress` (job id, line, total lines, estimated and actual seconds) so Station mode can show how far a cut has got.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.3`.

@@ -9,10 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
-from .api import auth, catalog, cutter_ws, dxf, jobs, stations
+from .api import auth, catalog, classes, cutter_ws, dxf, jobs, stations
 from .config import Settings
 from .db import Database
 from .services_seed import seed
+from .services_classes import IpThrottle
 from .stations import Hub
 
 API = "/api/v1"
@@ -33,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="BISAK Kerf Server", version=__version__, lifespan=lifespan, docs_url=f"{API}/docs", openapi_url=f"{API}/openapi.json")
     app.state.settings = settings
     app.state.db = db
+    app.state.throttle = IpThrottle()
     app.state.hub = Hub(settings.data_dir / "logs", settings.log_max_bytes, settings.log_backups)
     errors.install(app)
 
@@ -42,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api = APIRouter(prefix=API)
     api.include_router(auth.router)
     api.include_router(catalog.router)
+    api.include_router(classes.router)
     api.include_router(dxf.router)
     api.include_router(jobs.router)
     api.include_router(stations.router)

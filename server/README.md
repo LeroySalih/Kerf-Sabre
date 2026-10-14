@@ -14,6 +14,17 @@ Interlocks (each returns a clear `409`/`422`): job must be approved and **next i
 
 Origin: a job is either `absolute` (bed coordinates) or `current-position` (the anchor of the design goes where the laser head is when the job is framed and started).
 
+## Class login
+
+Pupils sign in with **class code + pupil ID + PIN** (no names anywhere, only IDs). The server issues a token that lasts `KERF_SESSION_HOURS` (default 10) and is revoked on sign-out. Five wrong PINs in a row lock that ID for five minutes; a wrong class, ID or PIN always gives the same message so nobody can find out which IDs exist; many failures from one computer slow it down. PINs are random 5-digit numbers, stored hashed (scrypt), shown once when made.
+
+```bash
+kerf-admin create-class --code 9B-DT --label "Y9 set 2"
+kerf-admin add-pupils --class 9B-DT pupils.csv --out pins.csv     # one pupil ID per line (or a pupilId column); hand out pins.csv, then delete it
+kerf-admin reset-pin --id P10234                                  # forgotten PIN; also clears a lockout and ends their sessions
+```
+Or use the **Classes** button in the Editor as a teacher, or the `/api/v1/classes` endpoints. Teachers and laser stations keep using tokens (`kerf-admin create-token`).
+
 ## Run it
 
 ```bash

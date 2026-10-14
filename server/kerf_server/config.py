@@ -42,6 +42,14 @@ class Settings:
     #: Seconds a run_job may wait for the Cutter's answer before the job returns to the queue.
     ack_timeout_s: float = 20.0
     cors_origins: tuple[str, ...] = ()
+    #: How long a class-login session lasts.
+    session_hours: float = 10.0
+    #: Wrong PINs in a row before a pupil is locked out, and for how long.
+    login_max_failures: int = 5
+    login_lockout_minutes: float = 5.0
+    #: Failed logins allowed from one address in `login_ip_window_s` before it is slowed down.
+    login_ip_failures: int = 30
+    login_ip_window_s: float = 300.0
     log_max_bytes: int = 5_000_000
     log_backups: int = 5
 
@@ -63,6 +71,9 @@ class Settings:
             open_cut_paths=e.get("KERF_OPEN_CUT_PATHS", "block"),
             max_upload_mb=int(e.get("KERF_MAX_UPLOAD_MB", "20")),
             ack_timeout_s=float(e.get("KERF_ACK_TIMEOUT_S", "20")),
+            session_hours=float(e.get("KERF_SESSION_HOURS", "10")),
+            login_max_failures=int(e.get("KERF_LOGIN_MAX_FAILURES", "5")),
+            login_lockout_minutes=float(e.get("KERF_LOGIN_LOCKOUT_MINUTES", "5")),
             cors_origins=tuple(o.strip() for o in e.get("KERF_CORS_ORIGINS", "").split(",") if o.strip()),
         )
         return replace_settings(base, **overrides) if overrides else base

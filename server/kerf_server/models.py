@@ -20,6 +20,8 @@ class Token(Base):
     subject_id: Mapped[str] = mapped_column(String(64), index=True)  # pupil ID, teacher ID or station id
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Login sessions expire; tokens issued by an administrator do not (None).
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -107,3 +109,25 @@ class Counter(Base):
     __tablename__ = "counters"
     name: Mapped[str] = mapped_column(String(32), primary_key=True)
     value: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class SchoolClass(Base):
+    """A class that pupils log in through. The label is a note for teachers (never a pupil name)."""
+
+    __tablename__ = "classes"
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Pupil(Base):
+    """A pupil who can log in with class code + pupil ID + PIN. Pupil ID only: there is no column for a name."""
+
+    __tablename__ = "pupils"
+    pupil_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    class_code: Mapped[str] = mapped_column(String(32), ForeignKey("classes.code", ondelete="CASCADE"), index=True)
+    pin_hash: Mapped[str] = mapped_column(String(200))
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

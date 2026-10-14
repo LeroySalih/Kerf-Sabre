@@ -14,10 +14,18 @@
       <form id="gate-form" class="gate-card">
         <h1>BISAK Kerf</h1>
         <p>Sign in to see your files and send designs to the laser.</p>
-        <label>Your token <input id="gate-token" type="password" autocomplete="off" spellcheck="false" required placeholder="Your teacher gives you this" /></label>
+        <div id="gate-pin-fields" class="gate-fields">
+          <label>Class code <input id="gate-class" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required placeholder="e.g. 9B-DT" /></label>
+          <label>Pupil ID <input id="gate-pid" type="text" autocomplete="username" spellcheck="false" required /></label>
+          <label>PIN <input id="gate-pin" type="password" inputmode="numeric" autocomplete="current-password" required placeholder="From your teacher" /></label>
+        </div>
+        <div id="gate-token-fields" class="gate-fields" hidden>
+          <label>Token <input id="gate-token" type="password" autocomplete="off" spellcheck="false" placeholder="Teachers and laser stations" /></label>
+        </div>
         <details><summary>Server address</summary><input id="gate-url" type="text" placeholder="Leave blank unless your teacher says" /></details>
         <p id="gate-error" role="alert"></p>
         <button type="submit" class="on">Sign in</button>
+        <button type="button" id="gate-mode" class="link">Teacher or laser station? Sign in with a token</button>
         <button type="button" id="gate-offline" class="link">Work without signing in (nothing is saved to the server)</button>
       </form>
     </div>
@@ -36,6 +44,7 @@
           <button id="srv-send" title="Save, then send this design to the server to be cleaned, checked and queued for a laser">Send for cutting</button>
           <button id="srv-files" title="Your files on the server: open one, send it, or cancel it">My files</button>
           <button id="srv-queue" hidden title="Teachers: approve files and put the queue in order">Queue</button>
+          <button id="srv-classes" hidden title="Teachers: classes, pupil IDs and PINs">Classes</button>
           <button id="srv-signin">Sign in</button>
           <span id="srv-status" role="status"></span>
           <span id="srv-file" class="hint"></span>

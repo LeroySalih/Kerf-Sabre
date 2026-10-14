@@ -1,13 +1,14 @@
 // Pupil sign-in and their files on the server: Save, Send for cutting, My files (open / send / cancel).
 // All talking is in server.ts; the job document is built and read back in job.ts.
 import { infoDialog, openDialog } from "./dialog";
+import { openClasses } from "./classesui";
 import { closeStation, openStation, openTeacher } from "./stationui";
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { setPresets } from "./presets";
 import {
-  STATUS_TEXT, ServerError, cancelJob, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
+  STATUS_TEXT, ServerError, cancelJob, loginWithPin, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -50,10 +51,13 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     $("srv-status").textContent = signedIn ? `Signed in: ${session!.id}` : "Working offline";
     $("srv-signin").textContent = signedIn ? "Sign out" : "Sign in";
     ($("srv-queue") as HTMLButtonElement).hidden = session?.role !== "teacher";
+    ($("srv-classes") as HTMLButtonElement).hidden = session?.role !== "teacher";
     $("srv-file").textContent = signedIn && jobId ? `Editing ${jobId}` : "";
   };
 
-  const dropSession = () => { session = null; saveSession(null); jobId = null; render(); };
+  const dropSession = () => {
+    if (session?.expiresAt) void logout(session); // a class-login session: end it on the server too
+    session = null; saveSession(null); jobId = null; render(); };
   const handle = (e: unknown): string => {
     if (e instanceof ServerError && e.status === 401) dropSession();
     return problem(e);
@@ -70,19 +74,42 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     else closeStation();
   }
 
-  async function gateSignIn(base: string, token: string): Promise<void> {
+  /** Everything after a successful sign-in, however it happened. */
+  async function signedIn(next: Session): Promise<void> {
+    session = next;
+    saveSession(session);
+    offline = false;
+    render();
+    await loadPresets();
+    enterRole();
+    if (session.role === "station") return;
+    ctx.notify(`Signed in as ${session.id}`);
+    if (session.role === "pupil") void files(true);
+  }
+
+  /** The sign-in page has two ways in: class code + pupil ID + PIN (pupils), or a token (teachers, laser stations). */
+  let tokenMode = false;
+  const setMode = (token: boolean) => {
+    tokenMode = token;
+    ($("gate-pin-fields") as HTMLElement).hidden = token;
+    ($("gate-token-fields") as HTMLElement).hidden = !token;
+    for (const id of ["gate-class", "gate-pid", "gate-pin"]) ($(id) as HTMLInputElement).required = !token;
+    ($("gate-token") as HTMLInputElement).required = token;
+    $("gate-mode").textContent = token ? "Pupil? Sign in with your class code and PIN" : "Teacher or laser station? Sign in with a token";
+    $("gate-error").textContent = "";
+  };
+
+  async function gateSubmit(): Promise<void> {
     const err = $("gate-error");
+    const base = (($("gate-url") as HTMLInputElement).value);
     err.textContent = "";
     try {
-      session = await signIn(base, token.trim());
-      saveSession(session);
-      offline = false;
-      render();
-      await loadPresets();
-      enterRole();
-      if (session.role === "station") return;
-      ctx.notify(`Signed in as ${session.id}`);
-      if (session.role === "pupil") void files(true);
+      if (tokenMode) { await signedIn(await signIn(base, (($("gate-token") as HTMLInputElement).value).trim())); return; }
+      const cls = (($("gate-class") as HTMLInputElement).value);
+      const next = await loginWithPin(base, cls, (($("gate-pid") as HTMLInputElement).value), (($("gate-pin") as HTMLInputElement).value));
+      try { localStorage.setItem("kerf.classCode", cls.trim()); } catch { /* fine */ }
+      ($("gate-pin") as HTMLInputElement).value = ""; // never leave a PIN sitting in the form
+      await signedIn(next);
     } catch (e) { err.textContent = problem(e); }
   }
 
@@ -214,13 +241,17 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
 
   $("gate-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    void gateSignIn((($("gate-url") as HTMLInputElement).value), (($("gate-token") as HTMLInputElement).value));
+    void gateSubmit();
   });
+  $("gate-mode").addEventListener("click", () => setMode(!tokenMode));
+  try { ($("gate-class") as HTMLInputElement).value = localStorage.getItem("kerf.classCode") ?? ""; } catch { /* fine */ }
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); });
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
   $("srv-save").addEventListener("click", () => (session ? void save() : (offline = false, render())));
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
+  $("srv-classes").addEventListener("click", () => { if (session?.role === "teacher") openClasses(session); });
+  setMode(false);
   $("srv-queue").addEventListener("click", () => { if (session?.role === "teacher") openTeacher(session); });
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
   window.addEventListener("beforeunload", (ev) => { if (session && dirty()) ev.preventDefault(); });

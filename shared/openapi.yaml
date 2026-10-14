@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.3
+  version: 0.2.4
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -35,6 +35,122 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /auth/login:
+    post:
+      summary: Class login. A pupil signs in with their class code, pupil ID and PIN and gets a short-lived token.
+      description: |
+        No authorization header. The answer to a wrong class, ID or PIN is always the same `401` so nobody can find out
+        which IDs exist. After 5 wrong PINs in a row the pupil is locked out for 5 minutes (`429`); too many failures
+        from one address are also slowed down (`429`). The token expires (default 10 hours) and is revoked by `/auth/logout`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [classCode, pupilId, pin]
+              properties:
+                classCode: {type: string, description: "e.g. 9B-DT (not case sensitive)"}
+                pupilId: {type: string}
+                pin: {type: string}
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/LoginResult"}
+        "401":
+          description: Class, ID or PIN not right
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429":
+          description: Locked out or too many attempts; try again later
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /auth/logout:
+    post:
+      summary: End this session (revokes the token that was used)
+      responses:
+        "204": {description: Signed out}
+  /classes:
+    get:
+      summary: Teacher. Classes and how many pupils are in each
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/ClassInfo"}}
+    post:
+      summary: Teacher. Create a class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string, description: "Letters, digits, - and _ (stored upper case)"}
+                label: {type: string, description: "A note for teachers, e.g. Y9 set 2. Not a pupil name"}
+      responses:
+        "201": {description: Created}
+        "409": {description: That code exists}
+  /classes/{code}/pupils:
+    parameters:
+      - {name: code, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Teacher. Pupil IDs in the class (never PINs)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/ClassPupil"}}
+    post:
+      summary: Teacher. Add pupil IDs to the class. New pupils get a random PIN, returned once and never stored in the clear.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pupilIds]
+              properties:
+                pupilIds: {type: array, items: {type: string}, maxItems: 500}
+      responses:
+        "201":
+          description: "PINs for the pupils that were new. Already-listed pupils keep their PIN; an ID that belongs to another class is reported in `conflicts`"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: {type: array, items: {type: object, properties: {pupilId: {type: string}, pin: {type: string}}}}
+                  existing: {type: array, items: {type: string}}
+                  conflicts: {type: array, items: {type: string}}
+  /classes/{code}/pupils/{pupilId}:
+    delete:
+      summary: Teacher. Remove a pupil from the class and end their sessions
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      responses:
+        "204": {description: Removed}
+  /pupils/{pupilId}/reset-pin:
+    post:
+      summary: Teacher. New random PIN (returned once), lockout cleared, existing sessions ended
+      parameters:
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: object, properties: {pupilId: {type: string}, pin: {type: string}}}
   /dxf/cleanup:
     post:
       summary: Run the DXF clean-up pipeline (brief section 7)
@@ -557,6 +673,29 @@ components:
         code: {type: string}
         message: {type: string}
         details: {type: array, items: {type: object}}
+    LoginResult:
+      type: object
+      required: [token, role, id, classCode, expiresAt]
+      properties:
+        token: {type: string}
+        role: {const: pupil}
+        id: {type: string}
+        classCode: {type: string}
+        expiresAt: {type: string, format: date-time}
+    ClassInfo:
+      type: object
+      required: [code, pupilCount]
+      properties:
+        code: {type: string}
+        label: {type: [string, "null"]}
+        pupilCount: {type: integer}
+    ClassPupil:
+      type: object
+      required: [pupilId, locked]
+      properties:
+        pupilId: {type: string}
+        lastLogin: {type: [string, "null"], format: date-time}
+        locked: {type: boolean}
     Me:
       type: object
       required: [role, id]

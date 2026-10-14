@@ -556,6 +556,12 @@ class Runner:
         link.realtime(b"!")
         self.sleep(0.2)
         hold = link.status()
+        # GRBL reports Hold:1 while still decelerating and Hold:0 once stopped; only compare positions once stopped.
+        for _ in range(30):
+            if hold and hold["state"].startswith("Hold") and not hold["state"].endswith(":1"):
+                break
+            self.sleep(0.1)
+            hold = link.status()
         observed["after_hold"] = hold["raw"] if hold else None
         self.sleep(0.5)
         hold2 = link.status()  # position must not creep while held

@@ -18,11 +18,19 @@ RUN IT
   3. Type the station name, e.g.  station1
   4. Type the server address if you were given one, or press Enter to skip.
   5. Answer y or n when it asks about the air assist (listen for the fan).
-  6. Wait for "Done". Press any key to close.
+  6. Wait for "Done". Note the line "Send this ONE file back" - it names a
+     .zip file in the "output" folder. Email or share that one file.
+     Press any key to close.
 
 The laser is NOT fired during the normal test.
 
 IF SOMETHING GOES WRONG
+  - Even if the test stops early, crashes or hangs, send the .zip (or the whole
+    "output" folder). Everything that happened is recorded in it:
+      session.log   one timeline: what was sent to the laser, what it answered,
+                    what the screen showed and what you typed, with times
+      report.txt    pass / fail for each test
+      env.txt       the PC, Python, serial driver and USB devices
   - Windows says the file is blocked, or nothing opens: the school may block
     programs in this folder. Tell IT to allow this folder.
   - "No serial ports found": the CH340 USB driver may be missing. Tell Mr Salih.

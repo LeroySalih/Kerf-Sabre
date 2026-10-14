@@ -10,14 +10,18 @@ The laser stays at S0 in every step except the optional test 11.
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
+import os
 import platform
+import socket
 import re
 import sys
 import time
 import traceback
 import urllib.error
 import urllib.request
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -54,36 +58,92 @@ def position_of(status: dict) -> list[float] | None:
     return status.get("mpos") or status.get("wpos")
 
 
+class SessionLog:
+    """Everything that happens, in order, in one readable file (session.log), flushed line by line so a crash loses nothing.
+
+    Columns: wall-clock time, seconds since the start, a kind, then the text. Kinds: TX/RX (serial), SAY (what the screen
+    showed), IN (what the operator typed), EVT (a step happened), WARN, ERR (with traceback), INFO.
+    """
+
+    def __init__(self, path: Path, clock=time.monotonic):
+        self.f = open(path, "a", encoding="utf-8", buffering=1)
+        self.clock = clock
+        self.t0 = clock()
+
+    def write(self, kind: str, text: str = "") -> None:
+        if not self.f:
+            return
+        now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        body = str(text).replace("\r", "\\r").rstrip("\n")
+        for i, line in enumerate(body.split("\n") or [""]):  # keep multi-line text (tracebacks) readable
+            self.f.write(f"{now} +{self.clock() - self.t0:9.3f}s {kind:4} {line if i == 0 else '    ' + line}\n")
+        self.f.flush()
+
+    def event(self, what: str, /, **data) -> None:
+        self.write("EVT", f"{what} {json.dumps(data, default=str)}" if data else what)
+
+    def error(self, what: str, exc: BaseException | None = None) -> None:
+        self.write("ERR", what + ("\n" + "".join(traceback.format_exception(exc)) if exc else ""))
+
+    def close(self) -> None:
+        if self.f:
+            self.f.close()
+            self.f = None
+
+
 class Link:
     """GRBL line protocol over a pyserial-like object, logging every TX/RX line."""
 
-    def __init__(self, ser, log_file, clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, ser, log_file, clock=time.monotonic, sleep=time.sleep, session: SessionLog | None = None):
         self.ser = ser
         self.log_file = log_file
         self.clock = clock
         self.sleep = sleep
+        self.session = session
+        self.t0 = clock()
 
-    def log(self, direction: str, data: str) -> None:
+    def log(self, direction: str, data: str, raw: bytes | None = None) -> None:
         if self.log_file:
-            self.log_file.write(json.dumps({"ts": utc_now(), "dir": direction, "data": data}) + "\n")
+            rec = {"ts": utc_now(), "t": round(self.clock() - self.t0, 3), "dir": direction, "data": data}
+            if raw is not None and raw != (data + "\n").encode("ascii", "replace"):
+                rec["raw"] = repr(raw)  # only when the bytes differ from the text (odd characters, \r\n, partial line)
+            self.log_file.write(json.dumps(rec) + "\n")
             self.log_file.flush()
+        if self.session:
+            self.session.write(direction, data)
+
+    def _write(self, payload: bytes) -> None:
+        try:
+            self.ser.write(payload)
+        except Exception as exc:  # noqa: BLE001 - a dead port must be visible in the log, then handled by the caller
+            if self.session:
+                self.session.error(f"serial write failed ({payload!r}): {type(exc).__name__}: {exc}", exc)
+            raise
 
     def tx(self, line: str) -> None:
         self.log("TX", line)
-        self.ser.write((line + "\n").encode("ascii"))
+        self._write((line + "\n").encode("ascii"))
 
     def realtime(self, byte: bytes) -> None:
         self.log("TX", repr(byte))
-        self.ser.write(byte)
+        self._write(byte)
 
     def read_line(self) -> str | None:
-        raw = self.ser.readline()
+        try:
+            raw = self.ser.readline()
+        except Exception as exc:  # noqa: BLE001
+            if self.session:
+                self.session.error(f"serial read failed: {type(exc).__name__}: {exc}", exc)
+            raise
         if not raw:
             return None
         text = raw.decode("ascii", errors="replace").strip()
         if not text:
+            self.log("RX", "", raw)  # a blank line: GRBL sends these; also shows stray bytes such as a lone \r
             return None
-        self.log("RX", text)
+        if not raw.endswith(b"\n") and self.session:
+            self.session.write("WARN", f"partial line (no newline before the read timed out): {raw!r}")
+        self.log("RX", text, raw)
         return text
 
     def command(self, line: str, timeout: float = 5.0) -> tuple[list[str], str]:
@@ -97,7 +157,11 @@ class Link:
                 continue
             lines.append(text)
             if text == "ok" or text.startswith("error") or text.startswith("ALARM"):
+                if self.session and text != "ok":
+                    self.session.write("WARN", f"GRBL answered {line!r} with {text!r}")
                 return lines, text
+        if self.session:
+            self.session.write("WARN", f"timeout after {timeout:g}s waiting for ok to {line!r}; {len(lines)} line(s) received: {lines[-3:]}")
         return lines, "timeout"
 
     def status(self, timeout: float = 1.5) -> dict | None:
@@ -109,6 +173,8 @@ class Link:
                 parsed = parse_status(text)
                 if parsed:
                     return parsed
+        if self.session:
+            self.session.write("WARN", f"no status report within {timeout:g}s of '?'")
         return None
 
     def wait_idle(self, timeout: float = 30.0) -> dict | None:
@@ -128,6 +194,8 @@ class Link:
             text = self.read_line()
             if text and BANNER_RE.search(text):
                 return text
+        if self.session:
+            self.session.write("WARN", f"no GRBL banner within {timeout:g}s")
         return None
 
 
@@ -197,8 +265,10 @@ class Runner:
         self.open_serial = open_serial
         self.load_cv2 = load_cv2
         self.http_get = http_get
-        self.prompt = prompt
-        self.say = say
+        self._prompt = prompt
+        self._say = say
+        self.session: SessionLog | None = None
+        self.crash_file = None
         self.clock = clock
         self.sleep = sleep
         self.log_file = None
@@ -212,33 +282,91 @@ class Runner:
         self.results: list[dict] = []
         self.aborted = False
 
+    # ---- screen and keyboard, both recorded -----------------------------------
+    def say(self, text: str = "") -> None:
+        if self.session:
+            self.session.write("SAY", text)
+        try:
+            self._say(text)
+        except UnicodeEncodeError:  # a Windows console that can't show a character must not stop the test
+            self._say(str(text).encode("ascii", "replace").decode())
+
+    def prompt(self, question: str) -> str:
+        if self.session:
+            self.session.write("SAY", question)
+        answer = self._prompt(question)
+        if self.session:
+            self.session.write("IN", answer)
+        return answer
+
+    def event(self, what: str, /, **data) -> None:
+        if self.session:
+            self.session.event(what, **data)
+
     # ---- setup / teardown -------------------------------------------------
     def start(self) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.log_file = open(self.out_dir / "serial.log", "a", encoding="utf-8")
+        self.session = SessionLog(self.out_dir / "session.log", self.clock)
+        # native crashes (a camera driver, the serial driver) and hangs leave a stack trace here instead of nothing
+        self.crash_file = open(self.out_dir / "crash.log", "a", encoding="utf-8")
+        try:
+            faulthandler.enable(file=self.crash_file)
+        except Exception:  # noqa: BLE001
+            pass
+        self.session.write("INFO", f"Kerf Spike {SPIKE_VERSION} started; station={self.args.station!r} mode={getattr(self.args, 'mode', None)!r} "
+                                   f"port={self.args.port!r} baud={self.args.baud} server_url={getattr(self.args, 'server_url', None)!r}")
+        self.session.write("INFO", f"python {sys.version.split()[0]} on {platform.platform()}; pyserial {self._pyserial_version()}; argv={sys.argv}")
+        self.write_env()  # so there is an environment record even if the run never finishes
+
+    @staticmethod
+    def _pyserial_version() -> str:
+        try:
+            import serial
+
+            return getattr(serial, "__version__", "unknown")
+        except Exception as exc:  # noqa: BLE001
+            return f"unavailable ({type(exc).__name__}: {exc})"
 
     def emergency_stop(self) -> None:
         """Feed hold then soft reset. Safe to call at any time."""
         if self.link:
+            self.event("emergency_stop", sends="! (feed hold) then 0x18 (soft reset)")
             for byte in (b"!", b"\x18"):
                 try:
                     self.link.realtime(byte)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    if self.session:
+                        self.session.error(f"emergency stop could not send {byte!r}", exc)
 
     def close(self) -> None:
         if self.link:
             try:
                 self.link.ser.close()
-            except Exception:  # noqa: BLE001
-                pass
+                self.event("port_closed", port=self.port)
+            except Exception as exc:  # noqa: BLE001
+                if self.session:
+                    self.session.error("closing the serial port failed", exc)
+        try:
+            faulthandler.cancel_dump_traceback_later()
+            faulthandler.disable()
+        except Exception:  # noqa: BLE001
+            pass
+        if self.crash_file:
+            self.crash_file.close()
+            self.crash_file = None
         if self.log_file:
             self.log_file.close()
             self.log_file = None
+        if self.session:
+            self.session.write("INFO", "session closed")
+            self.session.close()
+            self.session = None
 
     # ---- shared steps -------------------------------------------------------
     def select_port(self) -> str:
         self.ports = self.list_ports()
+        self.event("ports_found", ports=self.ports)
         for p in self.ports:
             self.say(f"  {p['device']}: {p['description']} (VID {p['vid']}, PID {p['pid']})")
         if self.args.port:
@@ -258,15 +386,25 @@ class Runner:
         return choice
 
     def open_link(self) -> str:
-        ser = self.open_serial(self.port, self.args.baud)
-        self.link = Link(ser, self.log_file, self.clock, self.sleep)
+        self.event("opening_port", port=self.port, baud=self.args.baud)
+        try:
+            ser = self.open_serial(self.port, self.args.baud)
+        except Exception as exc:  # noqa: BLE001
+            hint = ("Access denied: another program (LightBurn, LaserGRBL, a serial monitor, another spike) has the port open. Close it."
+                    if "denied" in str(exc).lower() or "busy" in str(exc).lower() else "Check the cable, the CH340 driver and the port name.")
+            if self.session:
+                self.session.error(f"could not open {self.port}: {type(exc).__name__}: {exc}. {hint}", exc)
+            raise RuntimeError(f"Could not open {self.port}: {exc}. {hint}") from exc
+        self.link = Link(ser, self.log_file, self.clock, self.sleep, self.session)
         banner = self.link.wait_for_banner(2.0)
         if not banner:
+            self.event("no_banner_sending_soft_reset")
             self.link.realtime(b"\x18")  # soft reset provokes the banner
             banner = self.link.wait_for_banner(5.0)
         if not banner:
             raise RuntimeError("No 'Grbl 1.1x' banner received within timeout")
         self.banner = banner
+        self.event("banner", banner=banner)
         return banner
 
     # ---- tests ----------------------------------------------------------------
@@ -487,6 +625,12 @@ class Runner:
                              {"reason": f"skipped (dependency): test(s) {blocked} did not pass"}, 0.0, status_by_id)
                 continue
             self.say(f"\n--- Test {number}: {name} ---")
+            self.event("test_start", test=number, name=name)
+            try:  # a test stuck for 3 minutes dumps where it is stuck into crash.log
+                if self.crash_file:
+                    faulthandler.dump_traceback_later(180, repeat=False, file=self.crash_file)
+            except Exception:  # noqa: BLE001
+                pass
             started = self.clock()
             try:
                 status, details = getattr(self, f"test_{number}")()
@@ -499,28 +643,46 @@ class Runner:
             except Exception as exc:  # noqa: BLE001
                 status, details = FAIL, {"error": f"{type(exc).__name__}: {exc}",
                                          "traceback": traceback.format_exc()}
+                if self.session:
+                    self.session.error(f"test {number} raised {type(exc).__name__}: {exc}", exc)
             self._record(number, name, status, details, self.clock() - started, status_by_id)
             self.say(f"    -> {status.upper()}")
         return self.results
 
     def _record(self, number, name, status, details, duration, status_by_id):
         status_by_id[number] = status
-        self.results.append({"test": number, "name": name, "status": status,
-                             "duration_s": round(duration, 3), "details": details})
+        row = {"test": number, "name": name, "status": status, "duration_s": round(duration, 3), "details": details}
+        self.results.append(row)
+        self.event("test_end", test=number, name=name, status=status, duration_s=row["duration_s"], details=details)
+        try:  # results are saved as they happen, so a hang or crash later on still leaves what was learned
+            with open(self.out_dir / "results.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"ts": utc_now(), **row}, default=str) + "\n")
+            self._write_report_json(partial=True)
+        except Exception as exc:  # noqa: BLE001
+            if self.session:
+                self.session.error("could not save partial results", exc)
 
     # ---- reporting ----------------------------------------------------------------
-    def write_reports(self) -> None:
+    def _write_report_json(self, partial: bool = False) -> dict:
         summary = {s: sum(1 for r in self.results if r["status"] == s) for s in (PASS, FAIL, SKIPPED)}
         report = {
             "spike_version": SPIKE_VERSION,
             "station": self.args.station,
-            "finished": utc_now(),
+            "finished": None if partial else utc_now(),
+            "partial": partial,
             "aborted": self.aborted,
             "banner": self.banner,
+            "settings": {f"${k}": v for k, v in sorted(self.settings.items())},
             "summary": summary,
             "results": self.results,
         }
         (self.out_dir / "report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        return report
+
+    def write_reports(self) -> None:
+        report = self._write_report_json()
+        summary = report["summary"]
+        self.event("report_written", summary=summary, aborted=self.aborted)
 
         lines = [f"Kerf Spike report: station {self.args.station}", f"Finished: {report['finished']}",
                  f"GRBL banner: {self.banner}", ""]
@@ -528,7 +690,7 @@ class Runner:
             reason = r["details"].get("reason") or r["details"].get("error") or ""
             lines.append(f"[{r['status'].upper():7}] {r['test']:>2}. {r['name']}  {reason}")
         lines += ["", f"Totals: {summary[PASS]} passed, {summary[FAIL]} failed, {summary[SKIPPED]} skipped",
-                  "Please send the whole folder back for review."]
+                  "Please send back the .zip next to this folder (or the whole folder). session.log has the full timeline."]
         (self.out_dir / "report.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
         self.write_env()
 
@@ -546,6 +708,14 @@ class Runner:
             f"python: {sys.version}",
             f"executable: {sys.executable}",
             f"opencv: {cv2_version or 'unavailable: ' + str(error)}",
+            f"pyserial: {self._pyserial_version()}",
+            f"machine: {platform.machine()}  processor: {platform.processor()}",
+            f"hostname: {socket.gethostname()}",
+            f"working directory: {os.getcwd()}",
+            f"argv: {sys.argv}",
+            f"timezone: {time.tzname}  utc offset: {-time.timezone // 3600} h",
+            f"started: {utc_now()}",
+            f"serial port chosen: {self.port}  baud: {self.args.baud}",
             "serial ports:",
         ]
         for p in self.ports:
@@ -565,6 +735,7 @@ class Runner:
             except EOFError:
                 break
             if line in ("quit", "exit"):
+                self.event("console_quit")
                 break
             if line in ("?", "!", "~"):
                 self.link.realtime(line.encode())
@@ -607,8 +778,9 @@ def main(argv=None, **deps) -> int:
 
     runner = Runner(args, out_dir, **deps)
     runner.start()
+    runner.event("operator_choices", mode=args.mode, station=args.station, server_url=args.server_url or None)
     say(f"Kerf Spike {SPIKE_VERSION}. Results folder: {out_dir}")
-    say("Make sure LightBurn, LaserGRBL and Creality software are CLOSED. Stay at the machine.")
+    runner.say("Make sure LightBurn, LaserGRBL and Creality software are CLOSED. Stay at the machine.")
     try:
         if args.mode == "console":
             runner.console()
@@ -616,21 +788,46 @@ def main(argv=None, **deps) -> int:
             runner.run_all()
     except KeyboardInterrupt:
         runner.aborted = True
+        runner.event("interrupted", by="Ctrl-C")
         runner.emergency_stop()
     except Exception as exc:  # noqa: BLE001
-        say(f"Error: {exc}")
+        runner.say(f"Error: {exc}")
+        if runner.session:
+            runner.session.error(f"the run stopped with {type(exc).__name__}: {exc}", exc)
         runner.emergency_stop()
     finally:
-        if runner.link and args.mode == "auto":
-            runner.emergency_stop()  # leave the machine in a known, safe state
-        if args.mode == "auto":
-            runner.write_reports()
-        else:
-            runner.write_env()
+        try:
+            if runner.link and args.mode == "auto":
+                runner.emergency_stop()  # leave the machine in a known, safe state
+            if args.mode == "auto":
+                runner.write_reports()
+            else:
+                runner.write_env()
+        except Exception as exc:  # noqa: BLE001 - reporting must never hide the real problem
+            if runner.session:
+                runner.session.error("writing the final reports failed", exc)
         runner.close()
+    zip_path = bundle(out_dir)
     if args.mode == "auto":
         say(f"\nDone. Report: {out_dir / 'report.txt'}")
+    say(f"Everything is saved in: {out_dir}")
+    if zip_path:
+        say(f"Send this ONE file back for diagnosis: {zip_path}")
     return 0
+
+
+def bundle(out_dir: Path) -> Path | None:
+    """Zip the whole results folder next to it, so there is one file to send back."""
+    try:
+        zip_path = out_dir.with_suffix(".zip") if out_dir.suffix == "" else Path(str(out_dir) + ".zip")
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            for p in sorted(out_dir.rglob("*")):
+                if p.is_file():
+                    z.write(p, Path(out_dir.name) / p.relative_to(out_dir))
+        return zip_path
+    except Exception as exc:  # noqa: BLE001
+        print(f"(Could not make the zip: {exc}. Send the whole folder instead.)")
+        return None
 
 
 if __name__ == "__main__":

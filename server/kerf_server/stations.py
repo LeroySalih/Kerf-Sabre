@@ -50,6 +50,7 @@ class Live:
             "cutterVersion": self.cutter_version,
             "s30": self.s30,
             "laserMode": self.laser_mode,
+            "progress": self.progress,
             "cameraAvailable": self.camera is not None,
             "lastSeen": iso(self.last_seen),
         }

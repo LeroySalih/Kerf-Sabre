@@ -1,6 +1,7 @@
 // Pupil sign-in and their files on the server: Save, Send for cutting, My files (open / send / cancel).
 // All talking is in server.ts; the job document is built and read back in job.ts.
 import { infoDialog, openDialog } from "./dialog";
+import { closeStation, openStation, openTeacher } from "./stationui";
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
@@ -48,6 +49,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     $("gate").hidden = signedIn || offline;
     $("srv-status").textContent = signedIn ? `Signed in: ${session!.id}` : "Working offline";
     $("srv-signin").textContent = signedIn ? "Sign out" : "Sign in";
+    ($("srv-queue") as HTMLButtonElement).hidden = session?.role !== "teacher";
     $("srv-file").textContent = signedIn && jobId ? `Editing ${jobId}` : "";
   };
 
@@ -62,6 +64,12 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     try { setPresets(await listPresets(session)); ctx.presetsChanged(); } catch (e) { ctx.notify(`Couldn't load materials: ${handle(e)}`); }
   }
 
+  /** A laser-station token goes straight to Station mode; everyone else gets the design Editor. */
+  function enterRole(): void {
+    if (session?.role === "station") { $("gate").hidden = true; openStation(session, signOut); }
+    else closeStation();
+  }
+
   async function gateSignIn(base: string, token: string): Promise<void> {
     const err = $("gate-error");
     err.textContent = "";
@@ -71,8 +79,10 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       offline = false;
       render();
       await loadPresets();
+      enterRole();
+      if (session.role === "station") return;
       ctx.notify(`Signed in as ${session.id}`);
-      void files(true);
+      if (session.role === "pupil") void files(true);
     } catch (e) { err.textContent = problem(e); }
   }
 
@@ -193,6 +203,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   }
 
   function signOut(): void {
+    if (session?.role === "station") { closeStation(); dropSession(); offline = false; render(); return; }
     if (!confirmDiscard("Sign out")) return;
     dropSession();
     ctx.clear();
@@ -210,12 +221,13 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
   $("srv-save").addEventListener("click", () => (session ? void save() : (offline = false, render())));
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
+  $("srv-queue").addEventListener("click", () => { if (session?.role === "teacher") openTeacher(session); });
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
   window.addEventListener("beforeunload", (ev) => { if (session && dirty()) ev.preventDefault(); });
   render();
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
-    void request<{ id: string }>(session, "GET", "/auth/me").then(() => { void loadPresets(); void files(true); }).catch((e) => {
+    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); if (session?.role === "pupil") void files(true); }).catch((e) => {
       if (e instanceof ServerError && e.status === 401) dropSession();
     });
   }

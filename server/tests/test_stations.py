@@ -254,3 +254,19 @@ class TestControlAndMonitoring:
             c.status("Idle")
             job = wait_for(lambda: (j := client.get(f"{API}/jobs/{jid}", headers=auth(tokens["pupil"])).json())["status"] == "failed" and j)
             assert "without reporting" in job["statusReason"]
+
+
+class TestProgress:
+    def test_progress_is_shown_while_cutting_and_cleared_after(self, client, tokens):
+        jid = approved_job(client, tokens)
+        sh = auth(tokens["station"])
+        with FakeCutter(client, tokens["station"], auto_finish=None) as c:
+            wait_for(lambda: st(client, tokens)["online"])
+            assert st(client, tokens)["progress"] is None
+            client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=sh)
+            client.post(f"{API}/jobs/{jid}/assign", json={"station": "station-1", "materialConfirmed": True}, headers=sh)
+            c.send({"type": "progress", "station": "station-1", "jobId": jid, "line": 40, "totalLines": 100, "estimatedS": 60.0, "actualS": 24.0})
+            p = wait_for(lambda: st(client, tokens)["progress"])
+            assert p == {"jobId": jid, "line": 40, "totalLines": 100, "estimatedS": 60.0, "actualS": 24.0}
+            c.send({"type": "result", "station": "station-1", "jobId": jid, "outcome": "done"})
+            wait_for(lambda: st(client, tokens)["progress"] is None)

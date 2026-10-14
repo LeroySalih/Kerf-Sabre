@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.3 - station progress (additive)
+- `openapi.yaml`: `Station.progress` (job id, line, total lines, estimated and actual seconds) so Station mode can show how far a cut has got.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.3`.
+
 ## 0.2.2 - ticket queue (additive)
 - `openapi.yaml`: `GET /queue` (ordered ticket queue, `QueueEntry`), `POST /queue/{jobId}/move` (teacher reorders), `POST /jobs/{jobId}/defer` (let others go first); `assign` takes teacher-only `skipQueue` and can answer `not_your_turn`; `JobReceipt` carries `ticket` and `position`.
 - `job.schema.json`: optional `ticket`.

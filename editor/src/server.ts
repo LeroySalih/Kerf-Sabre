@@ -4,8 +4,16 @@ import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 
 export interface Session { baseUrl: string; token: string; role: string; id: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
-export interface QueueEntry { ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; estimatedS?: number | null; aheadS?: number | null }
-export interface JobSummary { ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface QueueEntry {
+  ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; presetId?: string;
+  station?: string | null; framedOn?: string | null; next?: boolean; estimatedS?: number | null; aheadS?: number | null; approvedAt?: string | null;
+}
+export interface StationInfo {
+  id: string; online: boolean; state?: string | null; mpos?: number[] | null; currentJobId?: string | null; cutterVersion?: string | null;
+  s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; lastSeen?: string | null;
+  progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
+}
+export interface JobSummary { pupilId?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {
@@ -56,14 +64,31 @@ export async function request<T>(s: { baseUrl: string; token: string }, method: 
 export async function signIn(baseUrl: string, token: string, f: Fetch = fetch): Promise<Session> {
   const base = normaliseBase(baseUrl);
   const me = await request<{ role: string; id: string }>({ baseUrl: base, token }, "GET", "/auth/me", undefined, f);
-  if (me.role === "station") throw new ServerError("That is a laser-station token. Pupils use their own token.", 403, "forbidden");
   return { baseUrl: base, token, role: me.role, id: me.id };
 }
 
 export const listPresets = (s: Session, f?: Fetch) => request<Preset[]>(s, "GET", "/presets", undefined, f);
 export const sendJob = (s: Session, job: JobDoc, f?: Fetch) => request<Receipt>(s, "POST", "/jobs", job, f);
 export const saveDraft = (s: Session, id: string, job: JobDoc, f?: Fetch) => request<Receipt>(s, "PUT", `/jobs/${encodeURIComponent(id)}`, job, f);
-export const listQueue = (s: Session, f?: Fetch) => request<QueueEntry[]>(s, "GET", "/queue", undefined, f);
+export const listQueue = (s: Session, station?: string, f?: Fetch) => request<QueueEntry[]>(s, "GET", station ? `/queue?station=${encodeURIComponent(station)}` : "/queue", undefined, f);
+export const listStations = (s: Session, f?: Fetch) => request<StationInfo[]>(s, "GET", "/stations", undefined, f);
+export const getJob = (s: Session, id: string, f?: Fetch) => request<JobSummary & { origin: Origin; station?: string | null }>(s, "GET", `/jobs/${encodeURIComponent(id)}`, undefined, f);
+export const frameJob = (s: Session, id: string, station: string, f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/frame`, { station }, f);
+export const assignJob = (s: Session, id: string, station: string, materialConfirmed: boolean, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/assign`, { station, materialConfirmed }, f);
+export const controlStation = (s: Session, station: string, command: "stop" | "pause" | "resume", f?: Fetch) => request<unknown>(s, "POST", `/stations/${encodeURIComponent(station)}/control`, { command }, f);
+export const deferJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/defer`, undefined, f);
+export const approveJob = (s: Session, id: string, station?: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/approve`, station ? { station } : {}, f);
+export const rejectJob = (s: Session, id: string, reason: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/reject`, { reason }, f);
+export const moveInQueue = (s: Session, id: string, body: { to?: "front" | "back" | "up" | "down"; position?: number }, f?: Fetch) => request<QueueEntry[]>(s, "POST", `/queue/${encodeURIComponent(id)}/move`, body, f);
+export const listJobsByStatus = (s: Session, status: string, f?: Fetch) => request<JobSummary[]>(s, "GET", `/jobs?status=${encodeURIComponent(status)}`, undefined, f);
+
+/** The latest camera picture as an object URL (the caller revokes it), or null when there is none. */
+export async function cameraUrl(s: Session, station: string, f: Fetch = fetch): Promise<string | null> {
+  try {
+    const res = await f(`${s.baseUrl}/api/v1/stations/${encodeURIComponent(station)}/camera`, { headers: { Authorization: `Bearer ${s.token}` } });
+    return res.ok ? URL.createObjectURL(await res.blob()) : null;
+  } catch { return null; }
+}
 export const listJobs = (s: Session, f?: Fetch) => request<JobSummary[]>(s, "GET", "/jobs", undefined, f);
 export const cancelJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/cancel`, undefined, f);
 export const submitJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/submit`, undefined, f);

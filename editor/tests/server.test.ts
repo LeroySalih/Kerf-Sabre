@@ -30,10 +30,11 @@ describe("server client", () => {
     await expect(request({ baseUrl: "", token: "t" }, "GET", "/jobs", undefined, down)).rejects.toMatchObject({ code: "network" });
   });
 
-  it("signs in and refuses a station token", async () => {
+  it("signs in with any role (a station token opens Station mode)", async () => {
     const s = await signIn("https://k/", "kp_1", reply(200, { role: "pupil", id: "P001" }));
     expect(s).toEqual({ baseUrl: "https://k", token: "kp_1", role: "pupil", id: "P001" });
-    await expect(signIn("", "ks_1", reply(200, { role: "station", id: "station-1" }))).rejects.toBeInstanceOf(ServerError);
+    expect((await signIn("", "ks_1", reply(200, { role: "station", id: "station-1" }))).role).toBe("station");
+    await expect(signIn("", "bad", reply(401, { code: "unauthorized", message: "x" }))).rejects.toBeInstanceOf(ServerError);
   });
 });
 

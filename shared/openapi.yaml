@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.2
+  version: 0.2.3
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -648,6 +648,15 @@ components:
         cutterVersion: {type: [string, "null"]}
         s30: {type: [number, "null"], description: "$30 reported by the Cutter"}
         laserMode: {type: [boolean, "null"], description: "$32=1 reported by the Cutter"}
+        progress:
+          description: "Live progress of the job being cut, from the Cutter. Null when nothing is running."
+          type: [object, "null"]
+          properties:
+            jobId: {type: string}
+            line: {type: integer}
+            totalLines: {type: integer}
+            estimatedS: {type: number}
+            actualS: {type: number}
         cameraAvailable: {type: boolean}
         lastSeen: {type: [string, "null"], format: date-time}
     CutterMessage:

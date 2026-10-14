@@ -8,6 +8,9 @@ Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal scho
 - **BISAK Kerf Cutter** (`cutter/`): Python station agent. GRBL serial, camera, logs. Outbound connection only.
 - `shared/`: versioned JSON schemas and API contract. `spike/`: throwaway connectivity spike. `fixtures/dxf/`: real Onshape DXFs.
 
+## Running it
+`python3 start.py` (Windows `start.bat`, Mac/Linux `./start.sh`) starts the Server, Editor and a laser connector on one PC on non-clashing ports (`--dev` adds Vite live reload, `--lan` shares on the network). The connector is the pretend Cutter until the real one exists.
+
 ## Rules
 - Units are millimetres (float) everywhere. Bed space is Y-up, origin = machine origin from the machine profile.
 - G-code is absolute: start with `G21` and `G90`. **Never use `G92`.**

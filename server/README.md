@@ -32,6 +32,14 @@ On a real URL use `deploy/` (Docker Compose + Caddy, automatic HTTPS) or `deploy
 
 Everything is configured with `KERF_*` environment variables (see `deploy/.env.example` and `kerf_server/config.py`). Data (SQLite database, station logs, diagnostic bundles) lives in `KERF_DATA_DIR`; back that folder up.
 
+## Try it without a laser
+
+```bash
+kerf-server &                                                    # the server (set KERF_EDITOR_DIST to serve the Editor)
+python -m kerf_server.devtools.fake_cutter --token <station token> --station station-1   # a pretend Cutter
+```
+Open the Editor: sign in as a pupil and send a design; as a teacher (the **Queue** button) approve it; then sign in with the **station token** to get Station mode: Frame, tick the material, Start, watch it "cut" (`--speed` makes the fake Cutter faster than the estimate).
+
 ## Cutter connection
 
 Each Cutter opens an **outbound** WebSocket to `wss://<server>/api/v1/ws/cutter` with `Authorization: Bearer <station token>` (or `?token=`). Messages are in `shared/openapi.yaml` (`CutterMessage`, `ServerMessage`). `tests/fakecutter.py` is a working reference client.

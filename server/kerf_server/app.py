@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
-from .api import auth, catalog, classes, cutter_ws, dxf, jobs, stations
+from .api import activities, auth, catalog, classes, cutter_ws, dxf, jobs, stations
 from .config import Settings
 from .db import Database
 from .services_seed import seed
@@ -45,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(auth.router)
     api.include_router(catalog.router)
     api.include_router(classes.router)
+    api.include_router(activities.router)
     api.include_router(dxf.router)
     api.include_router(jobs.router)
     api.include_router(stations.router)

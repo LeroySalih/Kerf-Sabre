@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.4"
+      "const": "0.2.5"
     },
     "id": {
       "type": "string",
@@ -160,6 +160,10 @@
         "type": "string"
       },
       "description": "Non-blocking problems found when the job was accepted"
+    },
+    "activityId": {
+      "type": ["string", "null"],
+      "description": "The class activity this file is for. The server checks the pupil's class has it."
     },
     "ticket": {
       "type": ["integer", "null"],

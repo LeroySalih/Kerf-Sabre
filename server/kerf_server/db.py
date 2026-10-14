@@ -49,6 +49,26 @@ class Database:
         from . import models  # noqa: F401  (registers the tables)
 
         Base.metadata.create_all(self.engine)
+        self._add_missing_columns()
+
+    def _add_missing_columns(self) -> None:
+        """A light migration: columns added to a model since the database was made are added as nullable columns.
+
+        create_all only makes missing tables; without this an older database would fail on the first query that
+        mentions a new column. Nothing is dropped or changed, and rows keep their data (a new column reads as NULL).
+        """
+        from sqlalchemy import inspect, text
+
+        insp = inspect(self.engine)
+        with self.engine.begin() as conn:
+            for table in Base.metadata.sorted_tables:
+                if not insp.has_table(table.name):
+                    continue
+                have = {c["name"] for c in insp.get_columns(table.name)}
+                for col in table.columns:
+                    if col.name not in have:
+                        ddl = col.type.compile(dialect=self.engine.dialect)
+                        conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
 
     @contextmanager
     def session(self) -> Iterator[Session]:

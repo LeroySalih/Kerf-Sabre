@@ -15,7 +15,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.4"
+SCHEMA_VERSION = "0.2.5"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -46,6 +46,8 @@ def to_doc(j: Job) -> dict[str, Any]:
         doc["estimate"] = j.estimate
     if j.ticket is not None:
         doc["ticket"] = j.ticket
+    if j.activity_id:
+        doc["activityId"] = j.activity_id
     if j.dimensions:
         doc["dimensions"] = j.dimensions
     if j.status_reason:
@@ -171,6 +173,9 @@ def create(s: Session, cfg: Settings, who, doc: dict[str, Any], *, source: str =
     )
     s.add(j)
     s.flush()
+    from . import services_activities as activities
+
+    activities.link_job(s, who, j, doc.get("activityId"))
     event(s, j.id, who.id, "created", {"source": source})
     if status == "submitted":
         submit(s, cfg, who, j)
@@ -185,6 +190,10 @@ def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j.objects, j.origin, j.station = doc["objects"], doc["origin"], doc.get("station")
     j.dimensions = doc.get("dimensions", [])
+    if "activityId" in doc:
+        from . import services_activities as activities
+
+        activities.link_job(s, who, j, doc["activityId"])
     j.preset_id, j.preset_version = p["id"], p["version"]
     j.estimate, j.warnings = None, []
     event(s, j.id, who.id, "replaced")

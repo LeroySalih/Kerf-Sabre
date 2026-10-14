@@ -65,27 +65,28 @@ class IpThrottle:
 
 # ---------------------------------------------------------------- teacher side
 
-def create_class(s: Session, code: str, label: str | None) -> SchoolClass:
+def create_class(s: Session, code: str, label: str | None, teacher_id: str | None = None) -> SchoolClass:
     if not CODE_RE.match(code or ""):
         raise ApiError(422, "invalid", "A class code is letters, digits, - and _ (up to 32).")
     code = norm_code(code)
     if s.get(SchoolClass, code) is not None:
         raise ApiError(409, "conflict", f"The class {code} already exists.")
-    c = SchoolClass(code=code, label=(label or "").strip()[:128] or None)
+    c = SchoolClass(code=code, label=(label or "").strip()[:128] or None, teacher_id=teacher_id)
     s.add(c)
     return c
 
 
-def get_class(s: Session, code: str) -> SchoolClass:
+def get_class(s: Session, code: str, teacher_id: str | None = None) -> SchoolClass:
+    """The class. With a teacher ID, only that teacher's own classes (and shared ones) are visible: others look like they don't exist."""
     c = s.get(SchoolClass, norm_code(code))
-    if c is None:
+    if c is None or (teacher_id is not None and c.teacher_id is not None and c.teacher_id != teacher_id):
         raise ApiError(404, "not_found", f"There is no class {norm_code(code)}.")
     return c
 
 
-def add_pupils(s: Session, code: str, pupil_ids: list[str]) -> dict[str, list]:
+def add_pupils(s: Session, code: str, pupil_ids: list[str], teacher_id: str | None = None) -> dict[str, list]:
     """New IDs get a PIN (returned here, the only time it is ever visible). Existing members are left alone."""
-    cls = get_class(s, code)
+    cls = get_class(s, code, teacher_id)
     out: dict[str, list] = {"created": [], "existing": [], "conflicts": []}
     for raw in pupil_ids:
         pid = str(raw).strip()
@@ -103,14 +104,19 @@ def add_pupils(s: Session, code: str, pupil_ids: list[str]) -> dict[str, list]:
     return out
 
 
+def _may_manage(s: Session, pupil: Pupil, teacher_id: str) -> bool:
+    c = s.get(SchoolClass, pupil.class_code)
+    return c is not None and (c.teacher_id is None or c.teacher_id == teacher_id)
+
+
 def revoke_sessions(s: Session, pupil_id: str) -> None:
     for t in s.scalars(select(Token).where(Token.subject_id == pupil_id, Token.role == "pupil", Token.expires_at.is_not(None), Token.revoked.is_(False))):
         t.revoked = True
 
 
-def reset_pin(s: Session, pupil_id: str) -> str:
+def reset_pin(s: Session, pupil_id: str, teacher_id: str | None = None) -> str:
     row = s.get(Pupil, pupil_id)
-    if row is None:
+    if row is None or (teacher_id is not None and not _may_manage(s, row, teacher_id)):
         raise ApiError(404, "not_found", f"There is no pupil {pupil_id} in any class.")
     pin = new_pin()
     row.pin_hash, row.failed_attempts, row.locked_until = hash_pin(pin), 0, None
@@ -118,16 +124,16 @@ def reset_pin(s: Session, pupil_id: str) -> str:
     return pin
 
 
-def remove_pupil(s: Session, code: str, pupil_id: str) -> None:
+def remove_pupil(s: Session, code: str, pupil_id: str, teacher_id: str | None = None) -> None:
     row = s.get(Pupil, pupil_id)
-    if row is None or row.class_code != norm_code(code):
+    if row is None or row.class_code != norm_code(code) or (teacher_id is not None and not _may_manage(s, row, teacher_id)):
         raise ApiError(404, "not_found", "That pupil is not in this class.")
     revoke_sessions(s, pupil_id)
     s.delete(row)
 
 
-def class_pupils(s: Session, code: str) -> list[dict]:
-    cls = get_class(s, code)
+def class_pupils(s: Session, code: str, teacher_id: str | None = None) -> list[dict]:
+    cls = get_class(s, code, teacher_id)
     now = utcnow()
     rows = s.scalars(select(Pupil).where(Pupil.class_code == cls.code).order_by(Pupil.pupil_id))
     return [{"pupilId": p.pupil_id, "lastLogin": p.last_login and as_utc(p.last_login).isoformat().replace("+00:00", "Z"),

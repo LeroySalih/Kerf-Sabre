@@ -49,6 +49,8 @@ class Job(Base):
     ticket: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
     rank: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The class activity this file was made for, if any.
+    activity_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     framed_station: Mapped[str | None] = mapped_column(String(64), nullable=True)
     framed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -117,6 +119,8 @@ class SchoolClass(Base):
     __tablename__ = "classes"
     code: Mapped[str] = mapped_column(String(32), primary_key=True)
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    #: The teacher who set the class up and looks after it. None: a shared class that every teacher may manage.
+    teacher_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -130,4 +134,47 @@ class Pupil(Base):
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Activity(Base):
+    """Something a class works through: instructions, an optional suggested material, an optional due date."""
+
+    __tablename__ = "activities"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    class_code: Mapped[str] = mapped_column(String(32), ForeignKey("classes.code", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    instructions: Mapped[str] = mapped_column(Text, default="")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    preset_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published: Mapped[bool] = mapped_column(Boolean, default=False)  # pupils only see published activities
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)  # hidden from everyone, work and feedback are kept
+    created_by: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ActivityWork(Base):
+    """One pupil's progress on one activity: todo (no row), working, submitted, revise, complete."""
+
+    __tablename__ = "activity_work"
+    pupil_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    activity_id: Mapped[str] = mapped_column(String(32), ForeignKey("activities.id", ondelete="CASCADE"), primary_key=True)
+    status: Mapped[str] = mapped_column(String(12), default="working")
+    job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # the file the pupil handed in
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class Feedback(Base):
+    """A teacher's comment on a pupil's work for an activity. Author is a teacher ID, never a name."""
+
+    __tablename__ = "feedback"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pupil_id: Mapped[str] = mapped_column(String(64), index=True)
+    activity_id: Mapped[str] = mapped_column(String(32), ForeignKey("activities.id", ondelete="CASCADE"), index=True)
+    teacher_id: Mapped[str] = mapped_column(String(64))
+    text: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(String(12), default="comment")  # comment | revise | complete
+    job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # the file it was about
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

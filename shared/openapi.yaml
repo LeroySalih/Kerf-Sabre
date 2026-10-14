@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.4
+  version: 0.2.5
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -77,7 +77,7 @@ paths:
         "204": {description: Signed out}
   /classes:
     get:
-      summary: Teacher. Classes and how many pupils are in each
+      summary: Teacher. My classes (the ones I created, plus shared ones) and how many pupils are in each. Another teacher's class is invisible to me.
       responses:
         "200":
           description: OK
@@ -151,6 +151,165 @@ paths:
           content:
             application/json:
               schema: {type: object, properties: {pupilId: {type: string}, pin: {type: string}}}
+  /classes/{code}/activities:
+    parameters:
+      - {name: code, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Teacher (who looks after the class). The class's activities, in order, with how many pupils are at each stage
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/ActivityWithCounts"}}
+    post:
+      summary: Teacher. Set an activity for the class (pupils see it once `published` is true)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: {type: string}
+                instructions: {type: string}
+                presetId: {type: [string, "null"], description: A suggested material}
+                dueAt: {type: [string, "null"], format: date-time}
+                published: {type: boolean, default: false}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Activity"}
+  /classes/{code}/activities/{activityId}:
+    parameters:
+      - {name: code, in: path, required: true, schema: {type: string}}
+      - {name: activityId, in: path, required: true, schema: {type: string}}
+    put:
+      summary: Teacher. Change an activity (any of title, instructions, presetId, dueAt, published)
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Activity"}
+    delete:
+      summary: Teacher. Archive an activity. It disappears for everyone; pupils' work and feedback are kept.
+      responses:
+        "204": {description: Archived}
+  /classes/{code}/activities-order:
+    post:
+      summary: Teacher. Put the activities in order (list every active activity id once)
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [ids], properties: {ids: {type: array, items: {type: string}}}}
+      responses:
+        "200": {description: The activities in their new order}
+  /classes/{code}/progress:
+    get:
+      summary: Teacher. Every pupil against every activity
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ClassProgress"}
+  /classes/{code}/activities/{activityId}/work/{pupilId}:
+    get:
+      summary: "Teacher. One pupil's work on an activity: status, the file handed in, every file made for it, and the feedback so far"
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: activityId, in: path, required: true, schema: {type: string}}
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PupilWork"}
+  /classes/{code}/activities/{activityId}/work/{pupilId}/feedback:
+    post:
+      summary: Teacher. Give feedback. `revise` asks the pupil to improve and resubmit; `complete` closes the activity; `comment` changes nothing.
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: activityId, in: path, required: true, schema: {type: string}}
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: {type: string}
+                outcome: {enum: [comment, revise, complete], default: comment}
+      responses:
+        "201":
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Feedback"}
+  /classes/{code}/pupils/{pupilId}/jobs:
+    get:
+      summary: Teacher (who looks after the class). All of a pupil's files
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "./job.schema.json"}}
+  /activities:
+    get:
+      summary: Pupil. The published activities set for my class, with where I am on each
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/MyActivity"}}
+  /activities/{activityId}:
+    get:
+      summary: Pupil. One activity with my status and the feedback I have had
+      parameters:
+        - {name: activityId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MyActivity"}
+  /activities/{activityId}/submit:
+    post:
+      summary: Pupil. Hand in a file for review. Defaults to the latest file made for this activity.
+      parameters:
+        - {name: activityId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {type: object, properties: {jobId: {type: string}}}
+      responses:
+        "200":
+          description: Handed in
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PupilWork"}
+        "409":
+          description: No file saved for this activity yet, or it is already complete
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /dxf/cleanup:
     post:
       summary: Run the DXF clean-up pipeline (brief section 7)
@@ -673,6 +832,80 @@ components:
         code: {type: string}
         message: {type: string}
         details: {type: array, items: {type: object}}
+    ActivityStatus:
+      enum: [todo, working, submitted, revise, complete]
+    Activity:
+      type: object
+      required: [id, classCode, title, position, published]
+      properties:
+        id: {type: string}
+        classCode: {type: string}
+        title: {type: string}
+        instructions: {type: string}
+        position: {type: integer}
+        presetId: {type: [string, "null"]}
+        dueAt: {type: [string, "null"], format: date-time}
+        published: {type: boolean}
+    ActivityWithCounts:
+      allOf:
+        - {$ref: "#/components/schemas/Activity"}
+        - type: object
+          properties:
+            counts: {type: object, description: "Pupils at each stage: working, submitted, revise, complete", additionalProperties: {type: integer}}
+    Feedback:
+      type: object
+      required: [id, teacherId, text, outcome, createdAt]
+      properties:
+        id: {type: integer}
+        teacherId: {type: string, description: Teacher ID, never a name}
+        text: {type: string}
+        outcome: {enum: [comment, revise, complete]}
+        jobId: {type: [string, "null"], description: The file it was about}
+        createdAt: {type: string, format: date-time}
+    PupilWork:
+      type: object
+      required: [activityId, pupilId, status, feedback]
+      properties:
+        activityId: {type: string}
+        pupilId: {type: string}
+        status: {$ref: "#/components/schemas/ActivityStatus"}
+        jobId: {type: [string, "null"], description: The file handed in}
+        submittedAt: {type: [string, "null"], format: date-time}
+        feedback: {type: array, items: {$ref: "#/components/schemas/Feedback"}}
+        files: {type: array, description: "Teacher view only: every file made for the activity", items: {type: object}}
+    MyActivity:
+      allOf:
+        - {$ref: "#/components/schemas/Activity"}
+        - type: object
+          properties:
+            status: {$ref: "#/components/schemas/ActivityStatus"}
+            jobId: {type: [string, "null"]}
+            submittedAt: {type: [string, "null"], format: date-time}
+            feedbackCount: {type: integer, description: In the list only}
+            feedback: {type: array, items: {$ref: "#/components/schemas/Feedback"}, description: In the single-activity view only}
+    ClassProgress:
+      type: object
+      required: [activities, pupils]
+      properties:
+        activities:
+          type: array
+          items: {type: object, properties: {id: {type: string}, title: {type: string}, published: {type: boolean}, dueAt: {type: [string, "null"]}}}
+        pupils:
+          type: array
+          items:
+            type: object
+            properties:
+              pupilId: {type: string}
+              work:
+                type: object
+                description: By activity id
+                additionalProperties:
+                  type: object
+                  properties:
+                    status: {$ref: "#/components/schemas/ActivityStatus"}
+                    jobId: {type: [string, "null"]}
+                    submittedAt: {type: [string, "null"]}
+                    feedbackCount: {type: integer}
     LoginResult:
       type: object
       required: [token, role, id, classCode, expiresAt]
@@ -688,6 +921,7 @@ components:
       properties:
         code: {type: string}
         label: {type: [string, "null"]}
+        teacherId: {type: [string, "null"], description: "The teacher who looks after the class; null for a shared class any teacher may manage"}
         pupilCount: {type: integer}
     ClassPupil:
       type: object

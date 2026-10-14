@@ -1,0 +1,25 @@
+# Use this instead of docker-compose.yml when a Cloudflare Tunnel (cloudflared, in another compose file) fronts the server.
+# No Caddy: Cloudflare provides the hostname and HTTPS. Tunnel route Service URL: http://kerf-server:8000
+# Run from server/deploy:   docker compose -f docker-compose.cloudflare.yml up -d --build --remove-orphans
+# `dino-app` must be the Docker network cloudflared is on (docker inspect cloudflared --format '{{json .NetworkSettings.Networks}}').
+services:
+  kerf:
+    build: {context: ../.., dockerfile: server/Dockerfile}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      KERF_FORWARDED_ALLOW_IPS: "*"   # any container on dino-app can reach this, which is fine on a private host
+    volumes:
+      - kerf-data:/data
+    expose: ["8000"]
+    networks:
+      default:
+      dino-app:
+        aliases: [kerf-server]
+
+networks:
+  dino-app:
+    external: true
+
+volumes:
+  kerf-data:

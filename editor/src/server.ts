@@ -3,8 +3,9 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 
 export interface Session { baseUrl: string; token: string; role: string; id: string }
-export interface Receipt { id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
-export interface JobSummary { objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
+export interface QueueEntry { ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; estimatedS?: number | null; aheadS?: number | null }
+export interface JobSummary { ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {
@@ -62,6 +63,7 @@ export async function signIn(baseUrl: string, token: string, f: Fetch = fetch): 
 export const listPresets = (s: Session, f?: Fetch) => request<Preset[]>(s, "GET", "/presets", undefined, f);
 export const sendJob = (s: Session, job: JobDoc, f?: Fetch) => request<Receipt>(s, "POST", "/jobs", job, f);
 export const saveDraft = (s: Session, id: string, job: JobDoc, f?: Fetch) => request<Receipt>(s, "PUT", `/jobs/${encodeURIComponent(id)}`, job, f);
+export const listQueue = (s: Session, f?: Fetch) => request<QueueEntry[]>(s, "GET", "/queue", undefined, f);
 export const listJobs = (s: Session, f?: Fetch) => request<JobSummary[]>(s, "GET", "/jobs", undefined, f);
 export const cancelJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/cancel`, undefined, f);
 export const submitJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/submit`, undefined, f);
@@ -83,3 +85,13 @@ export const STATUS_TEXT: Record<string, string> = {
   failed: "Failed",
   cancelled: "Cancelled",
 };
+
+export const ordinal = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
+
+/** "Ticket 17, 3rd in the queue (about 6 min before yours)" for a waiting job; "" when it is not in the queue. */
+export function queueText(ticket: number | null | undefined, position: number | null | undefined, aheadS?: number | null): string {
+  if (ticket == null) return "";
+  if (position == null) return `Ticket ${ticket}`;
+  const wait = aheadS ? `, about ${describeDuration(aheadS)} of cutting before yours` : "";
+  return position === 1 ? `Ticket ${ticket}, you are next` : `Ticket ${ticket}, ${ordinal(position)} in the queue${wait}`;
+}

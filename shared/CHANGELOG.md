@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.2 - ticket queue (additive)
+- `openapi.yaml`: `GET /queue` (ordered ticket queue, `QueueEntry`), `POST /queue/{jobId}/move` (teacher reorders), `POST /jobs/{jobId}/defer` (let others go first); `assign` takes teacher-only `skipQueue` and can answer `not_your_turn`; `JobReceipt` carries `ticket` and `position`.
+- `job.schema.json`: optional `ticket`.
+- Behaviour: approved jobs are served first in, first out; a station can only frame or start the job that is next for it.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.2`.
+
 ## 0.2.1 - dimensions (additive)
 - `job.schema.json`: optional `dimensions` array (linear and radial dimension annotations). They exist so a design can be read at a glance in the Editor and are saved with the job; the Server stores them and never uses them for G-code, estimates or bounds, and they are never sent to the Cutter.
 - Every schema's `schemaVersion` constant, the OpenAPI `info.version` and Editor presets/job documents moved to `0.2.1`.

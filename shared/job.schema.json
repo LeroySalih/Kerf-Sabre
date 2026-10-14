@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.1"
+      "const": "0.2.2"
     },
     "id": {
       "type": "string",
@@ -160,6 +160,10 @@
         "type": "string"
       },
       "description": "Non-blocking problems found when the job was accepted"
+    },
+    "ticket": {
+      "type": ["integer", "null"],
+      "description": "Queue ticket number, given when the job is approved. Numbers only go up and are never reused."
     },
     "dimensions": {
       "type": "array",

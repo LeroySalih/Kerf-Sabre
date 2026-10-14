@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import services_jobs as sj
+from .. import services_queue as queue
 from .. import services_presets as sp
 from ..config import Settings
 from ..deps import get_session, get_settings
@@ -19,6 +20,11 @@ from ..security import Principal, require
 from .dxf import check_options, read_upload, run_cleanup
 
 router = APIRouter(tags=["jobs"])
+
+
+def _receipt(s: Session, j: Job) -> dict[str, Any]:
+    """The receipt, with the job's place in the queue while it is waiting there."""
+    return sj.receipt(j, queue.position_of(s, j) if j.status == "approved" else None)
 
 
 @router.get("/jobs")
@@ -49,7 +55,7 @@ def create_job(
     if doc["status"] not in ("draft", "submitted"):
         raise ApiError(422, "invalid", "A new job can only be saved as 'draft' or 'submitted'.")
     j = sj.create(s, cfg, who, doc, status=doc["status"])
-    return sj.receipt(j)
+    return _receipt(s, j)
 
 
 @router.post("/jobs/from-dxf", status_code=201)
@@ -71,7 +77,7 @@ async def job_from_dxf(
     out = await run_cleanup(await read_upload(file, cfg), toleranceMm, unitsOverride)
     doc = {"pupilId": owner, "preset": {"id": presetId}, "origin": {"mode": "current-position", "anchor": "bottom-left"}, "objects": out.objects}
     j = sj.create(s, cfg, who, doc, source="dxf", report=out.report, units=out.units, status="submitted" if submit else "draft")
-    return {**sj.receipt(j), "report": out.report, "units": out.units}
+    return {**_receipt(s, j), "report": out.report, "units": out.units}
 
 
 @router.get("/jobs/{job_id}")
@@ -101,13 +107,17 @@ def replace_job(
 
 @router.post("/jobs/{job_id}/submit")
 def submit_job(job_id: str, who: Principal = Depends(require("pupil")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
-    return sj.receipt(sj.submit(s, cfg, who, sj.get_owned(s, job_id, who)))
+    j = sj.submit(s, cfg, who, sj.get_owned(s, job_id, who))
+    s.flush()
+    return _receipt(s, j)
 
 
 @router.post("/jobs/{job_id}/approve")
 def approve_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     j = sj.get_visible(s, job_id, who)
-    return sj.receipt(sj.approve(s, who, j, (body or {}).get("station")))
+    sj.approve(s, who, j, (body or {}).get("station"))
+    s.flush()
+    return _receipt(s, j)
 
 
 @router.post("/jobs/{job_id}/reject")
@@ -116,6 +126,29 @@ def reject_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = D
     if not isinstance(reason, str) or not reason.strip():
         raise ApiError(422, "invalid", "Give a reason so the pupil knows what to fix.")
     return sj.receipt(sj.reject(s, who, sj.get_visible(s, job_id, who), reason))
+
+
+@router.post("/jobs/{job_id}/defer")
+def defer_job(job_id: str, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
+    j = sj.get_visible(s, job_id, who)  # a pupil can only defer their own
+    queue.defer(s, who, j)
+    return _receipt(s, j)
+
+
+@router.get("/queue")
+def get_queue(station: str | None = Query(None), who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    return queue.entries(s, who, cfg, station)
+
+
+@router.post("/queue/{job_id}/move")
+def move_in_queue(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    j = sj.get_visible(s, job_id, who)
+    pos = body.get("position")
+    if pos is not None and (not isinstance(pos, int) or isinstance(pos, bool) or pos < 1):
+        raise ApiError(422, "invalid", "'position' must be a whole number from 1.")
+    queue.move(s, who, j, body.get("to"), pos)
+    s.flush()
+    return queue.entries(s, who, cfg)
 
 
 @router.post("/jobs/{job_id}/cancel")

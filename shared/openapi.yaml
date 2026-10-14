@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.1
+  version: 0.2.2
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -349,6 +349,7 @@ paths:
                 station: {type: string}
                 materialConfirmed: {type: boolean, description: "The pupil confirmed 'Load: <material>'. Must be true."}
                 allowUntested: {type: boolean, default: false, description: Teachers only}
+                skipQueue: {type: boolean, default: false, description: "Teachers only: start this job although it is not next in the queue"}
       responses:
         "200":
           description: Assigned; run_job sent
@@ -356,12 +357,28 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/JobReceipt"}
         "409":
-          description: Station offline, busy or not idle; job not approved; job not framed on this station
+          description: Station offline, busy or not idle; job not approved; not this job's turn in the queue (`not_your_turn`); job not framed on this station
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "422":
           description: Out of bounds for this laser, untested material, or unknown laser settings
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/defer:
+    post:
+      summary: Let others go first. An approved job goes to the back of the queue (it gets a new place, same ticket) and any framing is cleared. Owner, teacher or station.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Moved to the back
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/JobReceipt"}
+        "409":
+          description: Not waiting in the queue
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -377,6 +394,48 @@ paths:
           content:
             text/plain:
               schema: {type: string}
+  /queue:
+    get:
+      summary: The ticket queue, in cutting order (first in, first out)
+      description: |
+        Every approved job gets a ticket number when it enters the queue (numbers only go up and are never reused) and
+        is served in queue order. A station may only frame or start the job that is next for it: the first approved
+        job, in queue order, that is not pinned to another station and not reserved (framed) on another station. Teachers can move jobs
+        (`/queue/{jobId}/move`) or override with `skipQueue` when assigning. Pupils see their own jobs in full; other
+        pupils' entries have no pupil ID.
+      parameters:
+        - {name: station, in: query, required: false, schema: {type: string}, description: "Show who is next for this station (`next: true`)"}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/QueueEntry"}}
+  /queue/{jobId}/move:
+    post:
+      summary: Teacher. Change a waiting job's place in the queue. Its ticket number does not change.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                to: {enum: [front, back, up, down]}
+                position: {type: integer, minimum: 1, description: "1 = next. Use `to` or `position`, not both"}
+      responses:
+        "200":
+          description: The queue after the move
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/QueueEntry"}}
+        "409":
+          description: Job is not waiting in the queue
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /stations:
     get:
       summary: Every laser station with its live state
@@ -523,6 +582,25 @@ components:
         status: {type: string}
         warnings: {type: array, items: {type: string}}
         estimate: {type: object}
+        ticket: {type: [integer, "null"], description: "Ticket number, once the job is approved and in the queue"}
+        position: {type: [integer, "null"], description: "Place in the queue now (1 = next), while waiting"}
+    QueueEntry:
+      type: object
+      required: [ticket, jobId, status, position, own]
+      properties:
+        ticket: {type: integer}
+        jobId: {type: string}
+        status: {enum: [approved, assigned, running]}
+        position: {type: [integer, "null"], description: "1 = next. Null for jobs already on a laser"}
+        pupilId: {type: [string, "null"], description: "Hidden (null) for other pupils' jobs when the caller is a pupil"}
+        own: {type: boolean}
+        presetId: {type: string}
+        station: {type: [string, "null"], description: "A teacher pinned the job to this station, or the laser it is cutting on"}
+        framedOn: {type: [string, "null"], description: "Reserved: framed on this station and being lined up"}
+        next: {type: boolean, description: "Only with ?station=: this is the job that station may start now"}
+        estimatedS: {type: [number, "null"]}
+        aheadS: {type: [number, "null"], description: Estimated cutting time of the jobs ahead in the queue}
+        approvedAt: {type: [string, "null"], format: date-time}
     DxfJobReceipt:
       allOf:
         - {$ref: "#/components/schemas/JobReceipt"}

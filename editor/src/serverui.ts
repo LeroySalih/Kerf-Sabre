@@ -6,7 +6,7 @@ import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { setPresets } from "./presets";
 import {
-  STATUS_TEXT, ServerError, cancelJob, describeDuration, listJobs, listPresets, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
+  STATUS_TEXT, ServerError, cancelJob, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -117,6 +117,8 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       render();
       const est = r.estimate;
       const facts = [`File number ${r.id}`, STATUS_TEXT[r.status] ?? r.status];
+      const q = queueText(r.ticket, r.position);
+      if (q) facts.push(q);
       if (est?.durationS) facts.push(`About ${describeDuration(est.durationS)} to cut`);
       if (est?.percentUsed !== undefined) facts.push(`Uses ${est.percentUsed}% of the sheet${est.costSar != null ? `, about ${est.costSar} SAR` : ""}`);
       await infoDialog("Sent", [...facts, ...(r.warnings ?? []).map((w) => `Note: ${w}`)]);
@@ -144,6 +146,8 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     let jobs: JobSummary[];
     try { jobs = await listJobs(session); } catch (e) { await infoDialog("Couldn't load your files", [handle(e)]); return; }
     if (auto && !jobs.length) return; // nothing to show a new pupil yet
+    let queued = new Map<string, QueueEntry>();
+    try { queued = new Map((await listQueue(session)).filter((q) => q.jobId).map((q) => [q.jobId!, q])); } catch { /* the list still works without queue places */ }
     const dlg = document.createElement("dialog");
     dlg.className = "kdialog wide";
     dlg.innerHTML = `<h2>My files</h2><p class="hint">${session.id}. Open a file to keep working on it, or send it for cutting.</p>`;
@@ -162,7 +166,9 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
         const est = j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : "";
         const reason = j.statusReason && j.status !== "done" ? ` (${j.statusReason})` : "";
         const info = document.createElement("span");
-        info.textContent = `${j.id} · ${j.preset.id} · ${new Date(j.createdAt).toLocaleString()}${est} · ${STATUS_TEXT[j.status] ?? j.status}${reason}`;
+        const place = queued.get(j.id);
+        const where = j.status === "approved" ? queueText(j.ticket ?? place?.ticket, place?.position, place?.aheadS) : j.ticket != null ? `Ticket ${j.ticket}` : "";
+        info.textContent = `${where ? where + " · " : ""}${j.id} · ${j.preset.id} · ${new Date(j.createdAt).toLocaleString()}${est} · ${STATUS_TEXT[j.status] ?? j.status}${reason}`;
         row.append(info);
         const btn = (label: string, run: () => Promise<void> | void) => {
           const b = document.createElement("button");

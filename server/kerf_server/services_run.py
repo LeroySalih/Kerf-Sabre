@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from . import services_jobs as sj
 from . import services_presets as sp
+from . import services_queue as queue
 from .config import Settings
 from .db import as_utc, utcnow
 from .errors import ApiError
@@ -27,7 +28,7 @@ def _same(a: dict[str, float], b: dict[str, float]) -> bool:
     return all(abs(a[k] - b[k]) <= HEAD_TOLERANCE_MM for k in ("minX", "minY", "maxX", "maxY"))
 
 
-def prepare(s: Session, hub: Hub, j: Job, station_id: str) -> tuple[Live, dict[str, Any]]:
+def prepare(s: Session, hub: Hub, cfg: Settings, j: Job, station_id: str, skip_queue: bool = False) -> tuple[Live, dict[str, Any]]:
     """Checks common to frame and assign. Returns the live station and its machine profile."""
     machine = sp.get_machine(s, station_id)
     if machine is None:
@@ -36,6 +37,8 @@ def prepare(s: Session, hub: Hub, j: Job, station_id: str) -> tuple[Live, dict[s
         raise ApiError(409, "not_approved", f"This job is {j.status}; only an approved job can be put on a laser.")
     if j.station and j.station != station_id:
         raise ApiError(409, "wrong_station", f"A teacher chose {j.station} for this job.")
+    if not skip_queue:
+        queue.check_turn(s, cfg, j, station_id)
     live = hub.online(station_id)
     if live.state not in ("Idle", None) or live.current_job:
         raise ApiError(409, "station_busy", f"{station_id} is busy ({live.current_job or live.state}).")
@@ -50,8 +53,8 @@ def head_of(live: Live):
     return (live.mpos[0], live.mpos[1]) if live.mpos else None
 
 
-def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str) -> dict[str, Any]:
-    live, machine = prepare(s, hub, j, station_id)
+def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, skip_queue: bool = False) -> dict[str, Any]:
+    live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.is_teacher)
     head = head_of(live)
     if j.origin["mode"] == "current-position" and head is None:
         raise ApiError(409, "position_unknown", "The laser has not reported where its head is yet. Wait a moment and try again.")
@@ -62,11 +65,11 @@ def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str) -> 
     return b
 
 
-def assign_checks(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, material_confirmed: bool, allow_untested: bool):
+def assign_checks(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, material_confirmed: bool, allow_untested: bool, skip_queue: bool = False):
     """Everything that must hold before the Cutter is told to cut. Returns (live, machine, result, gcode row)."""
     if not material_confirmed:
         raise ApiError(422, "material_not_confirmed", "Confirm the right material is loaded before cutting.")
-    live, machine = prepare(s, hub, j, station_id)
+    live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.is_teacher)
     head = head_of(live)
     if j.origin["mode"] == "current-position" and head is None:
         raise ApiError(409, "position_unknown", "The laser has not reported where its head is yet.")
@@ -84,11 +87,11 @@ def assign_checks(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: 
     return live, machine, r, b
 
 
-async def start(db, hub: Hub, cfg: Settings, who, job_id: str, station_id: str, material_confirmed: bool, allow_untested: bool) -> dict[str, Any]:
+async def start(db, hub: Hub, cfg: Settings, who, job_id: str, station_id: str, material_confirmed: bool, allow_untested: bool, skip_queue: bool = False) -> dict[str, Any]:
     """Assign + run_job. The database is released while we wait for the Cutter's answer."""
     with db.session() as s:
         j = sj.get_visible(s, job_id, who)
-        live, machine, r, b = assign_checks(s, hub, cfg, who, j, station_id, material_confirmed, allow_untested)
+        live, machine, r, b = assign_checks(s, hub, cfg, who, j, station_id, material_confirmed, allow_untested, skip_queue)
         row: GcodeRow = sj.store_gcode(s, j, station_id, r)
         preset = sp.preset_version(s, j.preset_id, j.preset_version) or {}
         j.status, j.station = "assigned", station_id

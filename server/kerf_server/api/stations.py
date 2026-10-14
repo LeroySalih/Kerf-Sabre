@@ -49,7 +49,7 @@ async def frame_job(job_id: str, request: Request, body: dict[str, Any] = Body(.
     app = request.app
     hub = app.state.hub
     with app.state.db.session() as s:
-        b = run.frame(s, hub, cfg, who, sj.get_visible(s, job_id, who), station)
+        b = run.frame(s, hub, cfg, who, sj.get_visible(s, job_id, who), station, body.get("skipQueue") is True)
     await hub.send(station, {"type": "control", "command": "frame", "jobId": job_id, "bounds": b})
     hub.server_log(station, "INFO", "frame sent", job_id)
     return {"bounds": b}
@@ -61,7 +61,7 @@ async def assign_job(job_id: str, request: Request, body: dict[str, Any] = Body(
     if not isinstance(station, str):
         raise ApiError(422, "invalid", "Say which station to cut on.")
     app = request.app
-    return await run.start(app.state.db, app.state.hub, cfg, who, job_id, station, body.get("materialConfirmed") is True, body.get("allowUntested") is True)
+    return await run.start(app.state.db, app.state.hub, cfg, who, job_id, station, body.get("materialConfirmed") is True, body.get("allowUntested") is True, body.get("skipQueue") is True)
 
 
 @router.post("/stations/{station_id}/control", status_code=202)

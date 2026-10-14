@@ -15,7 +15,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.1"
+SCHEMA_VERSION = "0.2.2"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -44,6 +44,8 @@ def to_doc(j: Job) -> dict[str, Any]:
     }
     if j.estimate:
         doc["estimate"] = j.estimate
+    if j.ticket is not None:
+        doc["ticket"] = j.ticket
     if j.dimensions:
         doc["dimensions"] = j.dimensions
     if j.status_reason:
@@ -51,8 +53,8 @@ def to_doc(j: Job) -> dict[str, Any]:
     return doc
 
 
-def receipt(j: Job) -> dict[str, Any]:
-    out: dict[str, Any] = {"id": j.id, "status": j.status, "warnings": j.warnings or []}
+def receipt(j: Job, position: int | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {"id": j.id, "status": j.status, "warnings": j.warnings or [], "ticket": j.ticket, "position": position}
     if j.estimate:
         out["estimate"] = j.estimate
     return out
@@ -201,6 +203,9 @@ def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
     if not cfg.require_approval:
         j.status = "approved"
         j.approved_by = "auto"
+        from . import services_queue as queue  # (the queue module imports this one)
+
+        queue.enqueue(s, j)
         event(s, j.id, "server", "approved", {"auto": True})
     return j
 
@@ -213,6 +218,9 @@ def approve(s: Session, who, j: Job, station: str | None) -> Job:
             raise ApiError(422, "unknown_station", f"There is no laser '{station}'.")
         j.station = station
     j.status, j.approved_by = "approved", who.id
+    from . import services_queue as queue
+
+    queue.enqueue(s, j)
     event(s, j.id, who.id, "approved", {"station": station})
     return j
 

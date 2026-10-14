@@ -36,3 +36,14 @@ describe("server client", () => {
     await expect(signIn("", "ks_1", reply(200, { role: "station", id: "station-1" }))).rejects.toBeInstanceOf(ServerError);
   });
 });
+
+import { ordinal, queueText } from "../src/server";
+describe("queue text", () => {
+  it("says where a job is in the queue", () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 112].map(ordinal)).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "112th"]);
+    expect(queueText(17, 1)).toBe("Ticket 17, you are next");
+    expect(queueText(17, 3, 360)).toBe("Ticket 17, 3rd in the queue, about 6 min of cutting before yours");
+    expect(queueText(17, null)).toBe("Ticket 17");
+    expect(queueText(null, null)).toBe("");
+  });
+});

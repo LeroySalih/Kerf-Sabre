@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Float, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base, utcnow
@@ -43,6 +43,10 @@ class Job(Base):
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     report: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # DXF clean-up report
     units: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: Queue ticket (only ever goes up, never reused) and sort key (changes when a teacher reorders or a job is deferred).
+    ticket: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
+    rank: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     framed_station: Mapped[str | None] = mapped_column(String(64), nullable=True)
     framed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -95,3 +99,11 @@ class GcodeRow(Base):
     estimated_s: Mapped[float] = mapped_column(default=0.0)
     bounds: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Counter(Base):
+    """Named counters that only go up (the queue ticket number)."""
+
+    __tablename__ = "counters"
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, default=0)

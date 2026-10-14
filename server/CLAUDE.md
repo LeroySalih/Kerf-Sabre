@@ -14,3 +14,4 @@ Python: FastAPI, SQLAlchemy (SQLite default, PostgreSQL via `KERF_DATABASE_URL`)
 - Pupil IDs only, never names (uploaded file names are discarded). Camera frames stay in memory.
 - Preset edits create new versions; jobs record the version used.
 - Job `dimensions` (Editor annotations) are stored and returned with the job but never read by `gcode/`, validation, estimates or the Cutter messages.
+- Ticket queue (`services_queue.py`): approved jobs get an ever-increasing ticket and are served first in, first out by `rank` (moved only by a teacher or `defer`). A station may only frame/start the job that is next for it (`not_your_turn`); jobs pinned to another station and jobs framed (reserved) on another station are skipped; teachers may `skipQueue`. A refused start keeps its place.

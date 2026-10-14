@@ -4,7 +4,7 @@ export type DialogValue = number | string;
 export interface DialogField {
   key: string;
   label: string;
-  type: "number" | "select";
+  type: "number" | "select" | "text" | "password";
   value: DialogValue;
   min?: number;
   max?: number;
@@ -40,6 +40,12 @@ export function openDialog(title: string, fields: DialogField[], opts: { intro?:
       if (f.type === "select") {
         el = document.createElement("select");
         for (const o of f.options ?? []) el.add(new Option(o.label, o.value));
+        el.value = String(f.value);
+      } else if (f.type === "text" || f.type === "password") {
+        el = document.createElement("input");
+        el.type = f.type;
+        el.autocomplete = "off";
+        el.spellcheck = false;
         el.value = String(f.value);
       } else {
         el = document.createElement("input");
@@ -83,5 +89,35 @@ export function openDialog(title: string, fields: DialogField[], opts: { intro?:
     dlg.addEventListener("close", () => { dlg.remove(); resolve(result); });
     dlg.showModal();
     (inputs.values().next().value as HTMLElement | undefined)?.focus();
+  });
+}
+
+/** A message dialog with an OK button and, optionally, a list of lines. */
+export function infoDialog(title: string, lines: string[], opts: { intro?: string } = {}): Promise<void> {
+  return new Promise((resolve) => {
+    const dlg = document.createElement("dialog");
+    dlg.className = "kdialog";
+    const h = document.createElement("h2");
+    h.textContent = title;
+    dlg.append(h);
+    if (opts.intro) {
+      const p = document.createElement("p");
+      p.textContent = opts.intro;
+      dlg.append(p);
+    }
+    if (lines.length) {
+      const ul = document.createElement("ul");
+      for (const l of lines) ul.append(Object.assign(document.createElement("li"), { textContent: l }));
+      dlg.append(ul);
+    }
+    const ok = document.createElement("button");
+    ok.className = "on";
+    ok.textContent = "OK";
+    ok.addEventListener("click", () => dlg.close());
+    dlg.append(ok);
+    document.body.append(dlg);
+    dlg.addEventListener("close", () => { dlg.remove(); resolve(); });
+    dlg.showModal();
+    ok.focus();
   });
 }

@@ -42,7 +42,12 @@ export const PLACEHOLDER_PRESETS: Preset[] = [
 export const DEFAULT_MATERIAL_ID = "ply-3mm";
 
 export const presetLabel = (p: Preset): string => `${p.material} ${p.thicknessMm} mm`;
-export const findPreset = (id: string | undefined, presets: Preset[] = PLACEHOLDER_PRESETS): Preset | undefined => presets.find((p) => p.id === id);
+/** The presets in use: the placeholders until the Editor signs in to a server, then the server's list (edited in place). */
+export const presetStore: Preset[] = [...PLACEHOLDER_PRESETS];
+export function setPresets(list: Preset[]): void {
+  if (list.length) presetStore.splice(0, presetStore.length, ...list);
+}
+export const findPreset = (id: string | undefined, presets: Preset[] = presetStore): Preset | undefined => presets.find((p) => p.id === id);
 
 export interface ResolvedPreset {
   preset: Preset;

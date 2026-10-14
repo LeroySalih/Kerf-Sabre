@@ -15,10 +15,10 @@ import { booleanOp, type BoolOp } from "./boolean";
 import { parseClip, serializeClip } from "./clipboard";
 import { openDialog } from "./dialog";
 import { kerfTest, testGrid, validateKerfTest, validateTestGrid, type TestGridParams, type TestItem } from "./testgrid";
-import { outOfBounds } from "./bounds";
+import { canSubmit, outOfBounds } from "./bounds";
 import { snapTo, type SnapKind } from "./snap";
 import { DEFAULT_FONT, getFont, listFonts, loadBundledFonts, registerOutlineFont, textToPaths, type TextSpec } from "./text";
-import { PLACEHOLDER_PRESETS, findPreset, formatOperation, presetLabel, resolvePreset, type Operation } from "./presets";
+import { PLACEHOLDER_PRESETS, presetStore, findPreset, formatOperation, presetLabel, resolvePreset, type Operation } from "./presets";
 import { selectionSummary } from "./status";
 import { formatMeasurement, measure, rulerTicks } from "./ruler";
 import { boxMode, boxSelect, rectOf } from "./select";
@@ -27,6 +27,7 @@ import { mountIcons } from "./icons";
 import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs";
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles, type MachineProfile } from "./machine";
+import { initServerUi } from "./serverui";
 
 mountIcons();
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -477,7 +478,7 @@ function refreshLayerUI(): void {
   const shown: LayerType = layers.size === 1 ? [...layers][0]! : activeLayer;
   document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => b.classList.toggle("on", b.dataset.layer === shown));
 
-  const preset = findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!;
+  const preset = findPreset(doc.state.materialId) ?? presetStore[0]!;
   const r = resolvePreset(preset, machine.id);
   const op = (o: Operation) => `${o.powerPct}% \u00b7 ${o.speedMmPerS} mm/s \u00b7 \u00d7${o.passes} \u00b7 air ${o.airAssist ? "on" : "off"}`;
   document.getElementById("mat-kerf")!.textContent = `Kerf ${r.kerfMm} mm`;
@@ -494,7 +495,12 @@ function refreshLayerUI(): void {
 
 // Material: pupils pick one and the settings follow, locked. Presets are placeholders until the Server provides them.
 const materialSel = document.getElementById("material") as HTMLSelectElement;
-for (const p of PLACEHOLDER_PRESETS) materialSel.add(new Option(presetLabel(p), p.id));
+function fillMaterials(): void {
+  materialSel.replaceChildren();
+  for (const p of presetStore) materialSel.add(new Option(presetLabel(p), p.id));
+  if (!findPreset(doc.state.materialId)) doc.state.materialId = presetStore[0]!.id;
+}
+fillMaterials();
 materialSel.addEventListener("change", () => edit(() => { doc.state.materialId = materialSel.value; }));
 on("del", () => deleteSelected());
 const gimbalBtn = document.getElementById("gimbal") as HTMLButtonElement;
@@ -1117,7 +1123,7 @@ function insertGenerated(items: TestItem[], what: string): void {
 }
 
 async function materialTestGridDialog(): Promise<void> {
-  const r = resolvePreset(findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!, machine.id);
+  const r = resolvePreset(findPreset(doc.state.materialId) ?? presetStore[0]!, machine.id);
   const v = await openDialog("Material test grid", [
     { key: "mode", label: "Cells", type: "select", value: "cut", options: [{ value: "cut", label: "Cut through" }, { value: "score", label: "Score only" }] },
     { key: "cellMm", label: "Cell size (mm)", type: "number", value: 10, min: 2 },
@@ -1138,7 +1144,7 @@ async function materialTestGridDialog(): Promise<void> {
 }
 
 async function kerfTestDialog(): Promise<void> {
-  const preset = findPreset(doc.state.materialId) ?? PLACEHOLDER_PRESETS[0]!;
+  const preset = findPreset(doc.state.materialId) ?? presetStore[0]!;
   const v = await openDialog("Kerf test", [
     { key: "thicknessMm", label: "Material thickness (mm)", type: "number", value: preset.thicknessMm, min: 0.1 },
     { key: "count", label: "Slots", type: "number", value: 8, min: 2, max: 20, integer: true },
@@ -1402,6 +1408,17 @@ on("act-circular", () => menuActions["circular-array"]!());
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
   b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
 );
+
+initServerUi({
+  objects: () => doc.state.objects,
+  materialId: () => doc.state.materialId,
+  blocker: () =>
+    !doc.state.objects.length ? "Draw or import something first."
+    : !canSubmit(doc.state.objects, machine.bed) ? "Part of the design is off the bed (shown red). Move it onto the bed first."
+    : null,
+  notify,
+  presetsChanged: () => { fillMaterials(); refreshLayerUI(); },
+});
 
 paper.view.onResize = fit;
 fit();

@@ -1,0 +1,258 @@
+08:54:21.501 +    0.000s INFO Kerf Spike 0.1.0 started; station='2' mode='auto' port=None baud=115200 server_url=''
+08:54:21.603 +    0.094s INFO python 3.11.9 on Windows-10-10.0.26200-SP0; pyserial 3.5; argv=['spike.py']
+08:54:21.804 +    0.297s EVT  operator_choices {"mode": "auto", "station": "2", "server_url": null}
+08:54:21.804 +    0.297s SAY  Make sure LightBurn, LaserGRBL and Creality software are CLOSED. Stay at the machine.
+08:54:21.804 +    0.297s SAY  
+08:54:21.804 +    0.297s SAY      --- Test 1: List serial ports ---
+08:54:21.804 +    0.297s EVT  test_start {"test": 1, "name": "List serial ports"}
+08:54:21.826 +    0.328s EVT  ports_found {"ports": [{"device": "COM3", "description": "Intel(R) Active Management Technology - SOL (COM3)", "vid": null, "pid": null, "hwid": "PCI\\VEN_8086&DEV_7AEB&SUBSYS_8959103C&REV_11\\3&11583659&0&B3"}, {"device": "COM9", "description": "USB Serial Device (COM9)", "vid": 12346, "pid": 16385, "hwid": "USB VID:PID=303A:4001 SER=123456 LOCATION=1-5.2:x.0"}]}
+08:54:21.826 +    0.328s SAY    COM3: Intel(R) Active Management Technology - SOL (COM3) (VID None, PID None)
+08:54:21.826 +    0.328s SAY    COM9: USB Serial Device (COM9) (VID 12346, PID 16385)
+08:54:21.826 +    0.328s SAY  Will try these ports in turn until one answers like GRBL: COM9, COM3
+08:54:21.827 +    0.328s EVT  test_end {"test": 1, "name": "List serial ports", "status": "pass", "duration_s": 0.031, "details": {"selected": "COM9", "ports": [{"device": "COM3", "description": "Intel(R) Active Management Technology - SOL (COM3)", "vid": null, "pid": null, "hwid": "PCI\\VEN_8086&DEV_7AEB&SUBSYS_8959103C&REV_11\\3&11583659&0&B3"}, {"device": "COM9", "description": "USB Serial Device (COM9)", "vid": 12346, "pid": 16385, "hwid": "USB VID:PID=303A:4001 SER=123456 LOCATION=1-5.2:x.0"}], "ch340_ports": [], "note": "selected port is not a CH340-type port"}}
+08:54:21.828 +    0.328s SAY      -> PASS
+08:54:21.828 +    0.328s SAY  
+08:54:21.828 +    0.328s SAY      --- Test 2: Open port and read GRBL banner ---
+08:54:21.828 +    0.328s EVT  test_start {"test": 2, "name": "Open port and read GRBL banner"}
+08:54:21.828 +    0.328s SAY  Trying COM9 ...
+08:54:21.829 +    0.328s EVT  opening_port {"port": "COM9", "baud": 115200}
+08:54:23.976 +    2.469s WARN no GRBL banner within 2s
+08:54:23.976 +    2.469s EVT  no_banner_sending_soft_reset {"port": "COM9"}
+08:54:23.976 +    2.469s TX   b'\x18'
+08:54:23.981 +    2.484s RX   [MSG:Using cpu_map...esp32-s3]
+08:54:23.981 +    2.484s RX   
+08:54:23.983 +    2.484s RX   Grbl 1.1f ['$' for help]
+08:54:23.983 +    2.484s EVT  banner {"banner": "Grbl 1.1f ['$' for help]", "port": "COM9"}
+08:54:23.983 +    2.484s EVT  test_end {"test": 2, "name": "Open port and read GRBL banner", "status": "pass", "duration_s": 2.156, "details": {"banner": "Grbl 1.1f ['$' for help]"}}
+08:54:23.992 +    2.484s SAY      -> PASS
+08:54:23.992 +    2.484s SAY  
+08:54:23.992 +    2.484s SAY      --- Test 3: Read settings ($$) ---
+08:54:23.992 +    2.484s EVT  test_start {"test": 3, "name": "Read settings ($$)"}
+08:54:23.992 +    2.484s TX   $$
+08:54:24.083 +    2.578s RX   $0=10
+08:54:24.085 +    2.578s RX   $1=250
+08:54:24.086 +    2.578s RX   $2=0
+08:54:24.086 +    2.578s RX   $3=4
+08:54:24.087 +    2.578s RX   $4=0
+08:54:24.087 +    2.578s RX   $5=0
+08:54:24.087 +    2.578s RX   $6=0
+08:54:24.088 +    2.578s RX   $10=3
+08:54:24.088 +    2.578s RX   $11=0.010
+08:54:24.089 +    2.594s RX   $12=0.002
+08:54:24.089 +    2.594s RX   $13=0
+08:54:24.089 +    2.594s RX   $20=0
+08:54:24.090 +    2.594s RX   $21=1
+08:54:24.090 +    2.594s RX   $22=1
+08:54:24.090 +    2.594s RX   $23=3
+08:54:24.090 +    2.594s RX   $24=2000.000
+08:54:24.091 +    2.594s RX   $25=4000.000
+08:54:24.091 +    2.594s RX   $26=20
+08:54:24.091 +    2.594s RX   $27=5.000
+08:54:24.092 +    2.594s RX   $30=1000.000
+08:54:24.092 +    2.594s RX   $31=0.000
+08:54:24.092 +    2.594s RX   $32=1
+08:54:24.092 +    2.594s RX   $100=80.000
+08:54:24.093 +    2.594s RX   $101=80.000
+08:54:24.093 +    2.594s RX   $110=25000.000
+08:54:24.094 +    2.594s RX   $111=8000.000
+08:54:24.094 +    2.594s RX   $120=1000.000
+08:54:24.094 +    2.594s RX   $121=1000.000
+08:54:24.094 +    2.594s RX   $130=400.000
+08:54:24.094 +    2.594s RX   $131=415.000
+08:54:24.094 +    2.594s RX   $150=36
+08:54:24.094 +    2.594s RX   $151=100
+08:54:24.094 +    2.594s RX   $152=30
+08:54:24.094 +    2.594s RX   $153=0
+08:54:24.094 +    2.594s RX   $154=1
+08:54:24.094 +    2.594s RX   $155=1
+08:54:24.094 +    2.594s RX   $156=0
+08:54:24.094 +    2.594s RX   $157=1
+08:54:24.097 +    2.594s RX   $158=1
+08:54:24.097 +    2.594s RX   $160=1
+08:54:24.097 +    2.594s RX   $161=13.00
+08:54:24.097 +    2.594s RX   ok
+08:54:24.097 +    2.594s EVT  test_end {"test": 3, "name": "Read settings ($$)", "status": "pass", "duration_s": 0.11, "details": {"final": "ok", "count": 41, "$30": "1000.000", "$32": "1", "$130": "400.000", "$131": "415.000"}}
+08:54:24.097 +    2.594s SAY      -> PASS
+08:54:24.097 +    2.594s SAY  
+08:54:24.097 +    2.594s SAY      --- Test 4: Status reports (?) ---
+08:54:24.097 +    2.594s EVT  test_start {"test": 4, "name": "Status reports (?)"}
+08:54:24.097 +    2.594s TX   b'?'
+08:54:24.097 +    2.594s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>
+08:54:24.204 +    2.703s TX   b'?'
+08:54:24.211 +    2.703s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0|Ov:100,100,100|A:S>
+08:54:24.313 +    2.813s TX   b'?'
+08:54:24.318 +    2.813s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:24.418 +    2.922s TX   b'?'
+08:54:24.423 +    2.922s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:24.524 +    3.016s TX   b'?'
+08:54:24.532 +    3.031s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:24.632 +    3.125s EVT  test_end {"test": 4, "name": "Status reports (?)", "status": "pass", "duration_s": 0.531, "details": {"reports": ["<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>", "<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0|Ov:100,100,100|A:S>", "<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>", "<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>", "<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>"]}}
+08:54:24.637 +    3.141s SAY      -> PASS
+08:54:24.638 +    3.141s SAY  
+08:54:24.638 +    3.141s SAY      --- Test 5: Home ($H) ---
+08:54:24.638 +    3.141s EVT  test_start {"test": 5, "name": "Home ($H)"}
+08:54:24.639 +    3.141s TX   M5
+08:54:24.640 +    3.141s RX   ok
+08:54:24.640 +    3.141s TX   $H
+08:54:25.277 +    3.781s RX   ok
+08:54:25.277 +    3.781s TX   b'?'
+08:54:25.293 +    3.797s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.293 +    3.797s EVT  test_end {"test": 5, "name": "Home ($H)", "status": "pass", "duration_s": 0.656, "details": {"home_reply": "ok", "final_status": "<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>"}}
+08:54:25.297 +    3.797s SAY      -> PASS
+08:54:25.297 +    3.797s SAY  
+08:54:25.297 +    3.797s SAY      --- Test 6: Jog 10 mm X/Y and back ---
+08:54:25.297 +    3.797s EVT  test_start {"test": 6, "name": "Jog 10 mm X/Y and back"}
+08:54:25.297 +    3.797s TX   M5
+08:54:25.297 +    3.797s RX   ok
+08:54:25.297 +    3.797s TX   b'?'
+08:54:25.297 +    3.797s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.297 +    3.797s TX   b'?'
+08:54:25.297 +    3.797s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.297 +    3.797s TX   $J=G21G91X10F1000
+08:54:25.297 +    3.797s RX   ok
+08:54:25.297 +    3.797s TX   b'?'
+08:54:25.297 +    3.797s RX   <Jog|MPos:0.025,0.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:25.407 +    3.906s TX   b'?'
+08:54:25.414 +    3.906s RX   <Jog|MPos:1.612,0.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:25.515 +    4.016s TX   b'?'
+08:54:25.520 +    4.016s RX   <Jog|MPos:3.412,0.025,0.000|Bf:126,65535|FS:1000,0|WCO:0.000,0.000,0.000>
+08:54:25.623 +    4.125s TX   b'?'
+08:54:25.629 +    4.125s RX   <Jog|MPos:5.200,0.025,0.000|Bf:127,65535|FS:0,0|Ov:100,100,100|A:S>
+08:54:25.731 +    4.234s TX   b'?'
+08:54:25.735 +    4.234s RX   <Jog|MPos:7.012,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.836 +    4.328s TX   b'?'
+08:54:25.841 +    4.344s RX   <Jog|MPos:8.750,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.942 +    4.438s TX   b'?'
+08:54:25.944 +    4.438s RX   <Idle|MPos:10.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.944 +    4.438s TX   b'?'
+08:54:25.946 +    4.438s RX   <Idle|MPos:10.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:25.946 +    4.438s TX   $J=G21G91X-10F1000
+08:54:25.947 +    4.438s RX   ok
+08:54:25.947 +    4.438s TX   b'?'
+08:54:25.950 +    4.453s RX   <Jog|MPos:10.025,0.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:26.052 +    4.547s TX   b'?'
+08:54:26.058 +    4.563s RX   <Jog|MPos:8.413,0.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:26.159 +    4.656s TX   b'?'
+08:54:26.162 +    4.656s RX   <Jog|MPos:6.625,0.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:26.265 +    4.766s TX   b'?'
+08:54:26.274 +    4.766s RX   <Jog|MPos:4.812,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:26.374 +    4.875s TX   b'?'
+08:54:26.382 +    4.875s RX   <Jog|MPos:3.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:26.482 +    4.984s TX   b'?'
+08:54:26.486 +    4.984s RX   <Jog|MPos:1.237,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:26.587 +    5.078s TX   b'?'
+08:54:26.593 +    5.094s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:26.593 +    5.094s TX   b'?'
+08:54:26.596 +    5.094s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:26.596 +    5.094s TX   b'?'
+08:54:26.596 +    5.094s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:26.596 +    5.094s TX   $J=G21G91Y10F1000
+08:54:26.596 +    5.094s RX   ok
+08:54:26.596 +    5.094s TX   b'?'
+08:54:26.596 +    5.094s RX   <Jog|MPos:0.025,0.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:26.703 +    5.203s TX   b'?'
+08:54:26.707 +    5.203s RX   <Jog|MPos:0.025,1.625,0.000|Bf:126,65535|FS:1000,0>
+08:54:26.809 +    5.313s TX   b'?'
+08:54:26.815 +    5.313s RX   <Jog|MPos:0.025,3.388,0.000|Bf:126,65535|FS:1000,0>
+08:54:26.916 +    5.406s TX   b'?'
+08:54:26.920 +    5.422s RX   <Jog|MPos:0.025,5.175,0.000|Bf:127,65535|FS:0,0>
+08:54:27.020 +    5.516s TX   b'?'
+08:54:27.026 +    5.516s RX   <Jog|MPos:0.025,6.912,0.000|Bf:127,65535|FS:0,0>
+08:54:27.126 +    5.625s TX   b'?'
+08:54:27.128 +    5.625s RX   <Jog|MPos:0.025,8.688,0.000|Bf:127,65535|FS:0,0>
+08:54:27.233 +    5.734s TX   b'?'
+08:54:27.233 +    5.734s RX   <Idle|MPos:0.025,10.025,0.000|Bf:127,65535|FS:0,0|Ov:100,100,100|A:S>
+08:54:27.233 +    5.734s TX   b'?'
+08:54:27.233 +    5.734s RX   <Idle|MPos:0.025,10.025,0.000|Bf:127,65535|FS:0,0>
+08:54:27.233 +    5.734s TX   $J=G21G91Y-10F1000
+08:54:27.233 +    5.734s RX   ok
+08:54:27.233 +    5.734s TX   b'?'
+08:54:27.233 +    5.734s RX   <Jog|MPos:0.025,10.025,0.000|Bf:126,65535|FS:1000,0>
+08:54:27.341 +    5.844s TX   b'?'
+08:54:27.346 +    5.844s RX   <Jog|MPos:0.025,8.438,0.000|Bf:126,65535|FS:1000,0>
+08:54:27.447 +    5.938s TX   b'?'
+08:54:27.452 +    5.953s RX   <Jog|MPos:0.025,6.662,0.000|Bf:126,65535|FS:1000,0>
+08:54:27.554 +    6.047s TX   b'?'
+08:54:27.560 +    6.063s RX   <Jog|MPos:0.025,4.887,0.000|Bf:127,65535|FS:0,0>
+08:54:27.662 +    6.156s TX   b'?'
+08:54:27.667 +    6.172s RX   <Jog|MPos:0.025,3.100,0.000|Bf:127,65535|FS:0,0>
+08:54:27.768 +    6.266s TX   b'?'
+08:54:27.774 +    6.266s RX   <Jog|MPos:0.025,1.325,0.000|Bf:127,65535|FS:0,0>
+08:54:27.874 +    6.375s TX   b'?'
+08:54:27.877 +    6.375s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>
+08:54:27.877 +    6.375s TX   b'?'
+08:54:27.885 +    6.375s RX   <Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>
+08:54:27.885 +    6.375s EVT  test_end {"test": 6, "name": "Jog 10 mm X/Y and back", "status": "pass", "duration_s": 2.578, "details": {"start": [0.025, 0.025, 0.0], "moves": [{"axis": "X", "commanded": 10, "measured": 10.0, "returned": true}, {"axis": "Y", "commanded": 10, "measured": 10.0, "returned": true}]}}
+08:54:27.887 +    6.391s SAY      -> PASS
+08:54:27.887 +    6.391s SAY  
+08:54:27.887 +    6.391s SAY      --- Test 7: Air assist M8/M9 ---
+08:54:27.887 +    6.391s EVT  test_start {"test": 7, "name": "Air assist M8/M9"}
+08:54:27.887 +    6.391s TX   M8
+08:54:27.889 +    6.391s RX   ok
+08:54:27.889 +    6.391s SAY  
+08:54:27.889 +    6.391s SAY      >>> Air assist test: look and listen at the laser head.
+08:54:27.889 +    6.391s SAY  Did the air assist start when M8 was sent? (y/n): 
+08:54:39.349 +   17.844s IN   y
+08:54:39.349 +   17.844s TX   M9
+08:54:39.361 +   17.859s RX   ok
+08:54:39.361 +   17.859s SAY  Did it stop after M9? (y/n): 
+08:54:42.360 +   20.859s IN   y
+08:54:42.360 +   20.859s EVT  test_end {"test": 7, "name": "Air assist M8/M9", "status": "pass", "duration_s": 14.468, "details": {"M8_reply": "ok", "M9_reply": "ok", "started": "y", "stopped": "y"}}
+08:54:42.372 +   20.875s SAY      -> PASS
+08:54:42.372 +   20.875s SAY  
+08:54:42.372 +   20.875s SAY      --- Test 8: Feed hold, resume, soft reset ---
+08:54:42.376 +   20.875s EVT  test_start {"test": 8, "name": "Feed hold, resume, soft reset"}
+08:54:42.376 +   20.875s TX   M5
+08:54:42.377 +   20.875s RX   ok
+08:54:42.377 +   20.875s TX   G21 G91 G1 X30 F60
+08:54:42.379 +   20.875s RX   ok
+08:54:42.379 +   20.875s TX   b'?'
+08:54:42.382 +   20.875s RX   <Run|MPos:0.025,0.025,0.000|Bf:126,65535|FS:60,0|Ov:100,100,100|A:S>
+08:54:42.382 +   20.875s TX   b'!'
+08:54:42.583 +   21.078s TX   b'?'
+08:54:42.583 +   21.078s RX   <Hold:1|MPos:0.225,0.025,0.000|Bf:126,65535|FS:0,0>
+08:54:42.687 +   21.188s TX   b'?'
+08:54:42.691 +   21.188s RX   <Hold:1|MPos:0.338,0.025,0.000|Bf:126,65535|FS:0,0>
+08:54:42.792 +   21.297s TX   b'?'
+08:54:42.799 +   21.297s RX   <Hold:1|MPos:0.438,0.025,0.000|Bf:126,65535|FS:0,0>
+08:54:42.900 +   21.391s TX   b'?'
+08:54:42.905 +   21.406s RX   <Hold:1|MPos:0.550,0.025,0.000|Bf:126,65535|FS:0,0>
+08:54:43.006 +   21.500s TX   b'?'
+08:54:43.013 +   21.516s RX   <Hold:0|MPos:0.637,0.025,0.000|Bf:126,65535|FS:0,0>
+08:54:43.514 +   22.016s TX   b'?'
+08:54:43.519 +   22.016s RX   <Hold:0|MPos:0.637,0.025,0.000|Bf:126,65535|FS:0,0>
+08:54:43.519 +   22.016s TX   b'~'
+08:54:43.720 +   22.219s TX   b'?'
+08:54:43.724 +   22.219s RX   <Run|MPos:0.825,0.025,0.000|Bf:126,65535|FS:60,0>
+08:54:43.726 +   22.219s TX   b'\x18'
+08:54:43.727 +   22.219s RX   ALARM:3
+08:54:44.231 +   22.734s RX   [MSG:Using cpu_map...esp32-s3]
+08:54:44.231 +   22.734s RX   
+08:54:44.233 +   22.734s RX   Grbl 1.1f ['$' for help]
+08:54:44.233 +   22.734s TX   G90
+08:54:44.329 +   22.828s RX   ok
+08:54:44.329 +   22.828s TX   b'?'
+08:54:44.336 +   22.828s RX   <Idle|MPos:0.837,0.025,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>
+08:54:44.336 +   22.828s EVT  test_end {"test": 8, "name": "Feed hold, resume, soft reset", "status": "pass", "duration_s": 1.953, "details": {"move_reply": "ok", "before_hold": "<Run|MPos:0.025,0.025,0.000|Bf:126,65535|FS:60,0|Ov:100,100,100|A:S>", "after_hold": "<Hold:0|MPos:0.637,0.025,0.000|Bf:126,65535|FS:0,0>", "after_hold_0.5s": "<Hold:0|MPos:0.637,0.025,0.000|Bf:126,65535|FS:0,0>", "held_still": true, "after_resume": "<Run|MPos:0.825,0.025,0.000|Bf:126,65535|FS:60,0>", "banner_after_reset": "Grbl 1.1f ['$' for help]", "after_reset": "<Idle|MPos:0.837,0.025,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>"}}
+08:54:44.336 +   22.828s SAY      -> PASS
+08:54:44.336 +   22.828s SAY  
+08:54:44.336 +   22.828s SAY      --- Test 9: Camera probe ---
+08:54:44.336 +   22.828s EVT  test_start {"test": 9, "name": "Camera probe"}
+08:54:48.451 +   26.953s EVT  test_end {"test": 9, "name": "Camera probe", "status": "pass", "duration_s": 4.125, "details": {"outcome": "camera captured", "index": 0}}
+08:54:48.451 +   26.953s SAY      -> PASS
+08:54:48.451 +   26.953s SAY  
+08:54:48.451 +   26.953s SAY      --- Test 10: Outbound HTTPS to server ---
+08:54:48.451 +   26.953s EVT  test_start {"test": 10, "name": "Outbound HTTPS to server"}
+08:54:48.451 +   26.953s EVT  test_end {"test": 10, "name": "Outbound HTTPS to server", "status": "skipped", "duration_s": 0.0, "details": {"reason": "no server URL configured"}}
+08:54:48.451 +   26.953s SAY      -> SKIPPED
+08:54:48.451 +   26.953s SAY  
+08:54:48.451 +   26.953s SAY      --- Test 11: Optional laser fire (10 mm square, <=5% power) ---
+08:54:48.451 +   26.953s EVT  test_start {"test": 11, "name": "Optional laser fire (10 mm square, <=5% power)"}
+08:54:48.451 +   26.953s EVT  test_end {"test": 11, "name": "Optional laser fire (10 mm square, <=5% power)", "status": "skipped", "duration_s": 0.0, "details": {"reason": "skipped by default (use --enable-fire to allow)"}}
+08:54:48.451 +   26.953s SAY      -> SKIPPED
+08:54:48.451 +   26.953s EVT  emergency_stop {"sends": "! (feed hold) then 0x18 (soft reset)"}
+08:54:48.451 +   26.953s TX   b'!'
+08:54:48.451 +   26.953s TX   b'\x18'
+08:54:48.459 +   26.953s EVT  report_written {"summary": {"pass": 9, "fail": 0, "skipped": 2}, "aborted": false}
+08:54:48.465 +   26.969s EVT  port_closed {"port": "COM9"}
+08:54:48.465 +   26.969s INFO session closed

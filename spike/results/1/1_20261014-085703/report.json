@@ -1,0 +1,216 @@
+{
+  "spike_version": "0.1.0",
+  "station": "1",
+  "finished": "2026-10-14T05:57:24.037+00:00",
+  "partial": false,
+  "aborted": false,
+  "banner": "Grbl 1.1f ['$' for help]",
+  "settings": {
+    "$0": "10",
+    "$1": "250",
+    "$2": "0",
+    "$3": "4",
+    "$4": "0",
+    "$5": "0",
+    "$6": "0",
+    "$10": "3",
+    "$11": "0.010",
+    "$12": "0.002",
+    "$13": "0",
+    "$20": "0",
+    "$21": "1",
+    "$22": "1",
+    "$23": "3",
+    "$24": "2000.000",
+    "$25": "4000.000",
+    "$26": "20",
+    "$27": "5.000",
+    "$30": "1000.000",
+    "$31": "0.000",
+    "$32": "1",
+    "$100": "80.000",
+    "$101": "80.000",
+    "$110": "25000.000",
+    "$111": "8000.000",
+    "$120": "1000.000",
+    "$121": "1000.000",
+    "$130": "400.000",
+    "$131": "415.000",
+    "$150": "36",
+    "$151": "100",
+    "$152": "30",
+    "$153": "0",
+    "$154": "1",
+    "$155": "1",
+    "$156": "0",
+    "$157": "1",
+    "$158": "1",
+    "$160": "1",
+    "$161": "13.00"
+  },
+  "summary": {
+    "pass": 9,
+    "fail": 0,
+    "skipped": 2
+  },
+  "results": [
+    {
+      "test": 1,
+      "name": "List serial ports",
+      "status": "pass",
+      "duration_s": 0.047,
+      "details": {
+        "selected": "COM4",
+        "ports": [
+          {
+            "device": "COM4",
+            "description": "USB Serial Device (COM4)",
+            "vid": 12346,
+            "pid": 16385,
+            "hwid": "USB VID:PID=303A:4001 SER=123456 LOCATION=1-5.1:x.0"
+          },
+          {
+            "device": "COM3",
+            "description": "Intel(R) Active Management Technology - SOL (COM3)",
+            "vid": null,
+            "pid": null,
+            "hwid": "PCI\\VEN_8086&DEV_A363&SUBSYS_83EB103C&REV_10\\3&11583659&0&B3"
+          }
+        ],
+        "ch340_ports": [],
+        "note": "selected port is not a CH340-type port"
+      }
+    },
+    {
+      "test": 2,
+      "name": "Open port and read GRBL banner",
+      "status": "pass",
+      "duration_s": 2.125,
+      "details": {
+        "banner": "Grbl 1.1f ['$' for help]"
+      }
+    },
+    {
+      "test": 3,
+      "name": "Read settings ($$)",
+      "status": "pass",
+      "duration_s": 0.125,
+      "details": {
+        "final": "ok",
+        "count": 41,
+        "$30": "1000.000",
+        "$32": "1",
+        "$130": "400.000",
+        "$131": "415.000"
+      }
+    },
+    {
+      "test": 4,
+      "name": "Status reports (?)",
+      "status": "pass",
+      "duration_s": 0.516,
+      "details": {
+        "reports": [
+          "<Idle|MPos:0.000,0.000,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>",
+          "<Idle|MPos:0.000,0.000,0.000|Bf:127,65535|FS:0,0|Ov:100,100,100|A:S>",
+          "<Idle|MPos:0.000,0.000,0.000|Bf:127,65535|FS:0,0>",
+          "<Idle|MPos:0.000,0.000,0.000|Bf:127,65535|FS:0,0>",
+          "<Idle|MPos:0.000,0.000,0.000|Bf:127,65535|FS:0,0>"
+        ]
+      }
+    },
+    {
+      "test": 5,
+      "name": "Home ($H)",
+      "status": "pass",
+      "duration_s": 0.656,
+      "details": {
+        "home_reply": "ok",
+        "final_status": "<Idle|MPos:0.025,0.025,0.000|Bf:127,65535|FS:0,0>"
+      }
+    },
+    {
+      "test": 6,
+      "name": "Jog 10 mm X/Y and back",
+      "status": "pass",
+      "duration_s": 2.531,
+      "details": {
+        "start": [
+          0.025,
+          0.025,
+          0.0
+        ],
+        "moves": [
+          {
+            "axis": "X",
+            "commanded": 10,
+            "measured": 10.0,
+            "returned": true
+          },
+          {
+            "axis": "Y",
+            "commanded": 10,
+            "measured": 10.0,
+            "returned": true
+          }
+        ]
+      }
+    },
+    {
+      "test": 7,
+      "name": "Air assist M8/M9",
+      "status": "pass",
+      "duration_s": 3.922,
+      "details": {
+        "M8_reply": "ok",
+        "M9_reply": "ok",
+        "started": "y",
+        "stopped": "y"
+      }
+    },
+    {
+      "test": 8,
+      "name": "Feed hold, resume, soft reset",
+      "status": "pass",
+      "duration_s": 1.438,
+      "details": {
+        "move_reply": "ok",
+        "before_hold": "<Run|MPos:0.025,0.025,0.000|Bf:126,65535|FS:60,0|Ov:100,100,100|A:S>",
+        "after_hold": "<Hold:0|MPos:0.637,0.025,0.000|Bf:126,65535|FS:0,0>",
+        "after_hold_0.5s": "<Hold:0|MPos:0.637,0.025,0.000|Bf:126,65535|FS:0,0>",
+        "held_still": true,
+        "after_resume": "<Run|MPos:0.837,0.025,0.000|Bf:126,65535|FS:60,0>",
+        "banner_after_reset": "Grbl 1.1f ['$' for help]",
+        "after_reset": "<Idle|MPos:0.837,0.025,0.000|Bf:127,65535|FS:0,0|WCO:0.000,0.000,0.000>"
+      }
+    },
+    {
+      "test": 9,
+      "name": "Camera probe",
+      "status": "pass",
+      "duration_s": 8.329,
+      "details": {
+        "outcome": "camera captured",
+        "index": 0
+      }
+    },
+    {
+      "test": 10,
+      "name": "Outbound HTTPS to server",
+      "status": "skipped",
+      "duration_s": 0.0,
+      "details": {
+        "reason": "no server URL configured"
+      }
+    },
+    {
+      "test": 11,
+      "name": "Optional laser fire (10 mm square, <=5% power)",
+      "status": "skipped",
+      "duration_s": 0.0,
+      "details": {
+        "reason": "skipped by default (use --enable-fire to allow)"
+      }
+    }
+  ]
+}

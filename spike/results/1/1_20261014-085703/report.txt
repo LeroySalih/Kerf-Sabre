@@ -1,0 +1,18 @@
+Kerf Spike report: station 1
+Finished: 2026-10-14T05:57:24.037+00:00
+GRBL banner: Grbl 1.1f ['$' for help]
+
+[PASS   ]  1. List serial ports  
+[PASS   ]  2. Open port and read GRBL banner  
+[PASS   ]  3. Read settings ($$)  
+[PASS   ]  4. Status reports (?)  
+[PASS   ]  5. Home ($H)  
+[PASS   ]  6. Jog 10 mm X/Y and back  
+[PASS   ]  7. Air assist M8/M9  
+[PASS   ]  8. Feed hold, resume, soft reset  
+[PASS   ]  9. Camera probe  
+[SKIPPED] 10. Outbound HTTPS to server  no server URL configured
+[SKIPPED] 11. Optional laser fire (10 mm square, <=5% power)  skipped by default (use --enable-fire to allow)
+
+Totals: 9 passed, 0 failed, 2 skipped
+Please send back the .zip next to this folder (or the whole folder). session.log has the full timeline.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.5
+  version: 0.2.6
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -211,6 +211,34 @@ paths:
             schema: {type: object, required: [ids], properties: {ids: {type: array, items: {type: string}}}}
       responses:
         "200": {description: The activities in their new order}
+  /classes/{code}/activities-copy:
+    post:
+      summary: "Teacher. Copy activities into this class from another class of theirs (or duplicate within this class). Copies are hidden from pupils until published, and go to the end of the order."
+      description: |
+        Copies the title, instructions and suggested material. Pupils' work and feedback are never copied. Due dates are
+        not copied unless `keepDueDates` is true (a new class has new dates). Within the same class, copies are titled
+        "<title> (copy)". The teacher must look after both classes.
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}, description: The class that receives the copies}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromClass]
+              properties:
+                fromClass: {type: string}
+                activityIds: {type: array, items: {type: string}, description: Default is every active activity in the source class}
+                keepDueDates: {type: boolean, default: false}
+                published: {type: boolean, default: false, description: Make the copies visible to pupils straight away}
+      responses:
+        "201":
+          description: The new activities
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Activity"}}
+        "404": {description: A class or an activity was not found, or is not yours}
   /classes/{code}/progress:
     get:
       summary: Teacher. Every pupil against every activity

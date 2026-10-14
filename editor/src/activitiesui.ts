@@ -3,7 +3,7 @@ import { infoDialog } from "./dialog";
 import { btn, el, modal, msg, shortDate } from "./dom";
 import { presetStore, presetLabel } from "./presets";
 import {
-  ACTIVITY_STATUS_TEXT, archiveActivity, classActivities, classProgress, createActivity, giveFeedback, myActivities, myActivity, orderActivities,
+  ACTIVITY_STATUS_TEXT, archiveActivity, classActivities, classProgress, copyActivities, createActivity, listClasses, giveFeedback, myActivities, myActivity, orderActivities,
   pupilFiles, pupilWork, updateActivity,
   type Activity, type ActivityInput, type ActivityStatus, type FeedbackItem, type JobSummary, type MyActivity, type Session,
 } from "./server";
@@ -100,6 +100,50 @@ function activityForm(existing?: Activity): Promise<ActivityInput | null> {
   });
 }
 
+/** Pick another of the teacher's classes and which of its activities to copy here. Returns how many were copied, or 0 if cancelled. */
+async function copyDialog(session: Session, into: string): Promise<number> {
+  let classes;
+  try { classes = (await listClasses(session)).filter((c) => c.code !== into); } catch (e) { await infoDialog("Couldn't load your classes", [msg(e)]); return 0; }
+  if (!classes.length) { await infoDialog("No other class", ["You need another class to copy from. Create one first (it can be empty)."]); return 0; }
+  return new Promise<number>((resolve) => {
+    const { dlg, show } = modal("kdialog wide");
+    const from = el("select", {}, ...classes.map((c) => new Option(`${c.code}${c.label ? ` (${c.label})` : ""}`, c.code)));
+    const list = el("div", { class: "copylist" });
+    const keep = el("input", { type: "checkbox" });
+    const pub = el("input", { type: "checkbox" });
+    const boxes: { id: string; box: HTMLInputElement }[] = [];
+    const status = el("p", { class: "hint" });
+    async function loadSource(): Promise<void> {
+      boxes.length = 0;
+      list.replaceChildren(el("span", { class: "hint" }, "Loading…"));
+      try {
+        const acts = await classActivities(session, from.value);
+        list.replaceChildren();
+        if (!acts.length) list.append(el("p", { class: "hint" }, "That class has no activities."));
+        for (const a of acts) {
+          const box = el("input", { type: "checkbox" });
+          box.checked = true;
+          boxes.push({ id: a.id, box });
+          list.append(el("label", {}, box, ` ${a.title}${a.published ? "" : " (hidden)"}`));
+        }
+      } catch (e) { list.replaceChildren(el("p", { class: "st-error" }, msg(e))); }
+    }
+    from.addEventListener("change", () => void loadSource());
+    let copied = 0;
+    const go = btn("Copy", () => void (async () => {
+      const ids = boxes.filter((b) => b.box.checked).map((b) => b.id);
+      if (!ids.length) { status.textContent = "Tick at least one activity."; return; }
+      try { copied = (await copyActivities(session, into, { fromClass: from.value, activityIds: ids, keepDueDates: keep.checked, published: pub.checked })).length; dlg.close(); }
+      catch (e) { status.textContent = msg(e); }
+    })(), "on");
+    dlg.append(el("h2", {}, `Copy activities into ${into}`), el("label", {}, "From class ", from), list,
+      el("label", {}, keep, " Keep the due dates (otherwise copies have none)"), el("label", {}, pub, " Make them visible to pupils now (otherwise they start hidden)"),
+      status, el("div", { class: "krow" }, btn("Cancel", () => dlg.close()), go));
+    void show().then(() => resolve(copied));
+    void loadSource();
+  });
+}
+
 export interface TeacherCallbacks {
   /** Open a pupil's file in the Editor (as a copy to look at). */
   openFile: (job: JobSummary) => void;
@@ -132,9 +176,12 @@ export async function openClassWork(session: Session, code: string, cb: TeacherC
         btn("↑", () => move(-1), "icon"), btn("↓", () => move(1), "icon"),
         btn(a.published ? "Hide" : "Publish", () => void run(() => updateActivity(session, code, a.id, { published: !a.published }))),
         btn("Edit", () => void (async () => { const v = await activityForm(a); if (v) await run(() => updateActivity(session, code, a.id, v)); })()),
+        btn("Duplicate", () => void run(() => copyActivities(session, code, { fromClass: code, activityIds: [a.id] }))),
         btn("Archive", () => { if (confirm(`Archive "${a.title}"? Pupils won't see it. Their work and your feedback are kept.`)) void run(() => archiveActivity(session, code, a.id)); }, "danger")));
     });
-    body.append(el("div", { class: "krow" }, btn("New activity…", () => void (async () => { const v = await activityForm(); if (v) await run(() => createActivity(session, code, v)); })(), "on")));
+    body.append(el("div", { class: "krow" },
+      btn("Copy from another class…", () => void (async () => { const n = await copyDialog(session, code); if (n) await run(async () => n); })()),
+      btn("New activity…", () => void (async () => { const v = await activityForm(); if (v) await run(() => createActivity(session, code, v)); })(), "on")));
   }
 
   async function drawProgress(): Promise<void> {

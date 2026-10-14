@@ -118,6 +118,7 @@ export const createActivity = (s: Session, code: string, a: ActivityInput, f?: F
 export const updateActivity = (s: Session, code: string, id: string, a: ActivityInput, f?: Fetch) => request<Activity>(s, "PUT", `${cls(code)}/activities/${encodeURIComponent(id)}`, a, f);
 export const archiveActivity = (s: Session, code: string, id: string, f?: Fetch) => request<null>(s, "DELETE", `${cls(code)}/activities/${encodeURIComponent(id)}`, undefined, f);
 export const orderActivities = (s: Session, code: string, ids: string[], f?: Fetch) => request<Activity[]>(s, "POST", `${cls(code)}/activities-order`, { ids }, f);
+export const copyActivities = (s: Session, intoCode: string, body: { fromClass: string; activityIds?: string[]; keepDueDates?: boolean; published?: boolean }, f?: Fetch) => request<Activity[]>(s, "POST", `${cls(intoCode)}/activities-copy`, body, f);
 export const classProgress = (s: Session, code: string, f?: Fetch) => request<ClassProgress>(s, "GET", `${cls(code)}/progress`, undefined, f);
 export const pupilWork = (s: Session, code: string, activityId: string, pupilId: string, f?: Fetch) => request<PupilWork>(s, "GET", `${cls(code)}/activities/${encodeURIComponent(activityId)}/work/${encodeURIComponent(pupilId)}`, undefined, f);
 export const giveFeedback = (s: Session, code: string, activityId: string, pupilId: string, text: string, outcome: FeedbackItem["outcome"], f?: Fetch) => request<FeedbackItem>(s, "POST", `${cls(code)}/activities/${encodeURIComponent(activityId)}/work/${encodeURIComponent(pupilId)}/feedback`, { text, outcome }, f);

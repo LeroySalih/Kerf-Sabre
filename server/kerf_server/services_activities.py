@@ -120,6 +120,38 @@ def update_activity(s: Session, who, code: str, activity_id: str, body: dict[str
     return a
 
 
+def copy_activities(s: Session, who, code: str, body: dict[str, Any]) -> list[Activity]:
+    """Copy activities into `code` from another class this teacher looks after. Work and feedback stay behind."""
+    target = owned_class(s, who, code)
+    source = owned_class(s, who, str(body.get("fromClass") or ""))
+    q = select(Activity).where(Activity.class_code == source.code, Activity.archived.is_(False)).order_by(Activity.position, Activity.created_at)
+    pool = list(s.scalars(q))
+    ids = body.get("activityIds")
+    if ids is None:
+        chosen = pool
+    else:
+        if not isinstance(ids, list):
+            raise ApiError(422, "invalid", "activityIds must be a list.")
+        by_id = {a.id: a for a in pool}
+        missing = [i for i in ids if i not in by_id]
+        if missing:
+            raise ApiError(404, "not_found", f"Not an activity in {source.code}: {missing[0]}")
+        chosen = [by_id[i] for i in dict.fromkeys(ids)]  # in the order asked for, once each
+    if not chosen:
+        raise ApiError(422, "invalid", f"There are no activities in {source.code} to copy.")
+    pos = s.scalar(select(func.max(Activity.position)).where(Activity.class_code == target.code)) or 0
+    keep, publish = bool(body.get("keepDueDates", False)), bool(body.get("published", False))
+    out: list[Activity] = []
+    for a in chosen:
+        pos += 1
+        title = f"{a.title} (copy)" if source.code == target.code else a.title
+        copy = Activity(id="act-" + secrets.token_hex(4), class_code=target.code, title=title[:200], instructions=a.instructions, position=pos,
+                        preset_id=a.preset_id, due_at=a.due_at if keep else None, published=publish, created_by=who.id)
+        s.add(copy)
+        out.append(copy)
+    return out
+
+
 def archive_activity(s: Session, who, code: str, activity_id: str) -> None:
     owned_class(s, who, code)
     class_activity(s, code, activity_id).archived = True

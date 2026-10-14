@@ -27,6 +27,11 @@ def create_activity(code: str, body: dict[str, Any] = Body(...), who: Principal 
     return sa.activity_doc(sa.create_activity(s, who, code, body))
 
 
+@router.post("/classes/{code}/activities-copy", status_code=201)
+def copy_activities(code: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
+    return [sa.activity_doc(a) for a in sa.copy_activities(s, who, code, body)]
+
+
 @router.put("/classes/{code}/activities/{activity_id}")
 def update_activity(code: str, activity_id: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
     return sa.activity_doc(sa.update_activity(s, who, code, activity_id, body))

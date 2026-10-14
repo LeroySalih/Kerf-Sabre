@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.6 - copy activities (additive)
+- `openapi.yaml`: `POST /classes/{code}/activities-copy` copies activities from another of the teacher's classes (or duplicates within the class). Copies start hidden and without due dates; pupils' work and feedback are not copied.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.6`.
+
 ## 0.2.5 - activities and feedback (additive)
 - `openapi.yaml`: teachers set **activities** for a class (`/classes/{code}/activities`, order, publish, archive) and see **progress** (`/classes/{code}/progress`), a pupil's work and files, and give **feedback** (`comment`, `revise`, `complete`). Pupils see their class's published activities (`/activities`) with status and feedback and hand in a file (`/activities/{id}/submit`). `ClassInfo.teacherId`: a class belongs to the teacher who created it; other teachers cannot see or change it (a class with no owner is shared).
 - `job.schema.json`: optional `activityId` (the activity a file is for; the server checks the pupil's class has it).

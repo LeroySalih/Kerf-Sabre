@@ -195,3 +195,71 @@ def test_an_old_database_gains_the_new_columns(tmp_path):
     with db.session() as s:
         row = s.scalar(select(SchoolClass))
         assert (row.code, row.label, row.teacher_id) == ("9B", "x", None)
+
+
+class TestCopy:
+    def two_classes(self, client, tokens):
+        make(client, tokens)
+        t = auth(tokens["teacher"])
+        client.post(f"{API}/classes", json={"code": "10A"}, headers=t)
+        one = act(client, tokens, title="One", presetId="ply-3mm", dueAt="2026-11-05T15:00:00Z")
+        two = act(client, tokens, title="Two", published=False)
+        return t, one, two
+
+    def copy(self, client, t, into="10A", **body):
+        return client.post(f"{API}/classes/{into}/activities-copy", json={"fromClass": "9B-DT", **body}, headers=t)
+
+    def test_copies_everything_in_order_hidden_and_without_dates(self, client, tokens):
+        t, one, two = self.two_classes(client, tokens)
+        r = self.copy(client, t)
+        assert r.status_code == 201, r.text
+        got = r.json()
+        assert [(a["title"], a["position"], a["published"], a["dueAt"], a["classCode"]) for a in got] == [("One", 1, False, None, "10A"), ("Two", 2, False, None, "10A")]
+        assert got[0]["id"] not in (one["id"], two["id"]) and got[0]["presetId"] == "ply-3mm" and got[0]["instructions"] == one["instructions"]
+        assert [a["title"] for a in client.get(f"{API}/classes/10A/activities", headers=t).json()] == ["One", "Two"]
+        assert len(client.get(f"{API}/classes/9B-DT/activities", headers=t).json()) == 2  # the originals are untouched
+
+    def test_choose_which_keep_dates_and_publish(self, client, tokens):
+        t, one, two = self.two_classes(client, tokens)
+        got = self.copy(client, t, activityIds=[one["id"]], keepDueDates=True, published=True).json()
+        assert [(a["title"], a["dueAt"], a["published"]) for a in got] == [("One", "2026-11-05T15:00:00Z", True)]
+        more = self.copy(client, t, activityIds=[two["id"]]).json()
+        assert more[0]["position"] == 2  # added to the end of what is already there
+
+    def test_duplicate_within_the_same_class(self, client, tokens):
+        t, one, _ = self.two_classes(client, tokens)
+        got = client.post(f"{API}/classes/9B-DT/activities-copy", json={"fromClass": "9B-DT", "activityIds": [one["id"]]}, headers=t).json()
+        assert got[0]["title"] == "One (copy)" and got[0]["position"] == 3 and got[0]["published"] is False
+
+    def test_work_and_feedback_are_not_copied(self, client, tokens):
+        h = make(client, tokens)
+        a = act(client, tokens)
+        post_job(client, h["P001"], "P001", a["id"])
+        client.post(f"{API}/activities/{a['id']}/submit", headers=h["P001"])
+        t = auth(tokens["teacher"])
+        client.post(f"{API}/classes/9B-DT/activities/{a['id']}/work/P001/feedback", json={"text": "hi", "outcome": "complete"}, headers=t)
+        client.post(f"{API}/classes", json={"code": "10A"}, headers=t)
+        client.post(f"{API}/classes/10A/pupils", json={"pupilIds": ["P900"]}, headers=t)
+        new = client.post(f"{API}/classes/10A/activities-copy", json={"fromClass": "9B-DT", "published": True}, headers=t).json()[0]
+        prog = client.get(f"{API}/classes/10A/progress", headers=t).json()
+        assert prog["pupils"][0]["work"][new["id"]] == {"status": "todo", "jobId": None, "submittedAt": None, "feedbackCount": 0}
+
+    def test_only_between_your_own_classes_and_valid_requests(self, client, tokens, app):
+        t, one, _ = self.two_classes(client, tokens)
+        other = auth(issue_token(app.state.db, "teacher", "T002"))
+        client.post(f"{API}/classes", json={"code": "7X"}, headers=other)
+        assert client.post(f"{API}/classes/7X/activities-copy", json={"fromClass": "9B-DT"}, headers=other).status_code == 404  # not their source
+        assert self.copy(client, t, into="7X").status_code == 404  # not their target
+        assert client.post(f"{API}/classes/10A/activities-copy", json={"fromClass": "NOPE"}, headers=t).status_code == 404
+        assert self.copy(client, t, activityIds=["act-nope"]).status_code == 404
+        assert self.copy(client, t, activityIds="x").status_code == 422
+        client.post(f"{API}/classes", json={"code": "EMPTY"}, headers=t)
+        assert client.post(f"{API}/classes/10A/activities-copy", json={"fromClass": "EMPTY"}, headers=t).status_code == 422
+        for who in ("pupil", "station"):
+            assert client.post(f"{API}/classes/10A/activities-copy", json={"fromClass": "9B-DT"}, headers=auth(tokens[who])).status_code == 403
+
+    def test_archived_activities_are_not_copied(self, client, tokens):
+        t, one, two = self.two_classes(client, tokens)
+        client.delete(f"{API}/classes/9B-DT/activities/{one['id']}", headers=t)
+        assert [a["title"] for a in self.copy(client, t).json()] == ["Two"]
+        assert self.copy(client, t, activityIds=[one["id"]]).status_code == 404

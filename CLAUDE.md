@@ -15,7 +15,7 @@ Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal scho
 - Units are millimetres (float) everywhere. Bed space is Y-up, origin = machine origin from the machine profile.
 - G-code is absolute: start with `G21` and `G90`. **Never use `G92`.**
 - Machine facts (bed size, origin, `$30`, air assist) come from machine profiles, never hard-coded.
-- Only two layer types: Score and Cut. No engraving.
+- Layer types: Score and Cut (no engraving), plus **Ignore** (dark grey): drawn and saved with the file but never cut, scored, exported to DXF/SVG, sized, fit-checked or put in G-code (`gcode.cuttable` on the server).
 - Logs carry pupil IDs, never names. No camera frames in logs.
 - Each session edits only its own folder. `shared/` changes need a version bump and a `shared/CHANGELOG.md` entry; only one feature at a time may change `shared/`.
 - Production Cutter work is gated on spike results from all four station PCs. Editor and Server work is not.

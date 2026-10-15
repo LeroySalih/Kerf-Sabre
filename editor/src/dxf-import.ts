@@ -168,8 +168,9 @@ function toPath(e: Entity, verts: Entity[]): Path | null {
   }
 }
 
-/** Score for a layer: name contains "score", or ACI colour 5 (blue) / 4 (cyan). Everything else is Cut. */
+/** Ignore for a layer whose name contains "ignore"; Score for "score" or ACI colour 5 (blue) / 4 (cyan). Everything else is Cut. */
 export function layerFor(dxfLayer: string, colour: number | null): LayerType {
+  if (/ignore/i.test(dxfLayer)) return "ignore";
   if (/score/i.test(dxfLayer)) return "score";
   if (colour === 5 || colour === 4) return "score";
   return "cut";

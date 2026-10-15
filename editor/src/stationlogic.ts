@@ -38,7 +38,7 @@ export function formatClock(s: number): string {
 
 /** An SVG of the job's outlines (Cut red, Score blue), true shape, Y up. Numbers only, so it is safe to inject. */
 export function previewSvg(objects: JobObject[], size = 220): string {
-  const shapes = fromJobObjects(objects).map((sh) => ({ pts: flatten(transformPath(sh.path, sh.matrix), 0.2), layer: sh.layer, closed: sh.path.closed }));
+  const shapes = fromJobObjects(objects).filter((sh) => sh.layer !== "ignore").map((sh) => ({ pts: flatten(transformPath(sh.path, sh.matrix), 0.2), layer: sh.layer, closed: sh.path.closed }));
   const all = shapes.flatMap((s) => s.pts);
   if (!all.length) return "";
   const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
@@ -51,7 +51,7 @@ export function previewSvg(objects: JobObject[], size = 220): string {
 }
 
 export const sizeOf = (objects: JobObject[]): { w: number; h: number } | null => {
-  const pts = fromJobObjects(objects).flatMap((sh) => flatten(transformPath(sh.path, sh.matrix), 0.2));
+  const pts = fromJobObjects(objects).filter((sh) => sh.layer !== "ignore").flatMap((sh) => flatten(transformPath(sh.path, sh.matrix), 0.2));
   if (!pts.length) return null;
   return { w: Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x)), h: Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y)) };
 };

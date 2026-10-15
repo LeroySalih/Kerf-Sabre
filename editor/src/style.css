@@ -9,6 +9,7 @@
   --accent-ink: #ffffff;
   --cut: #dc2626;
   --score: #2563eb;
+  --ignore: #4b5563;
   --warn: #b91c1c;
   --side-w: 300px;
   --palette-w: 96px;
@@ -92,6 +93,7 @@ table.layers th { color: var(--muted); font-weight: 600; }
 .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
 .sw.cut { background: var(--cut); }
 .sw.score { background: var(--score); }
+.sw.ignore { background: var(--ignore); }
 
 /* ---- layer + material bar ---- */
 #layerbar { grid-area: layers; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 6px 10px; background: var(--panel); border-top: 1px solid var(--line); }
@@ -99,8 +101,10 @@ table.layers th { color: var(--muted); font-weight: 600; }
 .chip { display: inline-flex; align-items: center; gap: 6px; min-width: 96px; height: 34px; justify-content: center; font-weight: 600; border-width: 2px; }
 .chip.cut { border-color: var(--cut); }
 .chip.score { border-color: var(--score); }
+.chip.ignore { border-color: var(--ignore); }
 .chip.on.cut, .chip.on.cut:hover:not(:disabled) { background: var(--cut); color: #fff; }
 .chip.on.score, .chip.on.score:hover:not(:disabled) { background: var(--score); color: #fff; }
+.chip.on.ignore, .chip.on.ignore:hover:not(:disabled) { background: var(--ignore); color: #fff; }
 .chip .sw { margin: 0; border: 1px solid rgba(0, 0, 0, 0.25); }
 .chip.on .sw { border-color: #fff; }
 #layerbar .material { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }

@@ -54,12 +54,20 @@ def _bbox(paths: list[BedPath]) -> tuple[float, float, float, float]:
 PROBE_MARGIN_MM = 2.0
 
 
+def cuttable(job: dict[str, Any]) -> list[dict[str, Any]]:
+    """The shapes the laser will actually do: the Ignore layer is the pupil's own (guides, notes) and is skipped everywhere."""
+    objects = [o for o in job["objects"] if o["layer"] != "ignore"]
+    if not objects:
+        raise GcodeError("There is nothing to cut: every shape is on the Ignore layer.")
+    return objects
+
+
 def probe_head(job: dict[str, Any]) -> Point:
     """A head position that puts a current-position job's bounding box just inside the bed origin. For checking fit before a station is chosen."""
     origin = job["origin"]
     if origin["mode"] != "current-position":
         return (0.0, 0.0)
-    x0, y0, x1, y1 = _bbox([to_bed(o) for o in job["objects"]])
+    x0, y0, x1, y1 = _bbox([to_bed(o) for o in cuttable(job)])
     fx, fy = ANCHORS[origin["anchor"]]
     return (PROBE_MARGIN_MM + (x1 - x0) * fx, PROBE_MARGIN_MM + (y1 - y0) * fy)
 
@@ -68,7 +76,7 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
     """`head` is the laser's current position (bed mm); needed when the job's origin mode is current-position."""
     rp = resolve(preset, machine["id"])
     warnings: list[str] = []
-    paths = [to_bed(o) for o in job["objects"]]
+    paths = [to_bed(o) for o in cuttable(job)]
     polys = assign_depths(paths)
     part_area = sum(poly.area * (1 if p.depth % 2 == 0 else -1) for p in paths if (poly := polys.get(p.object_id)) is not None)
 

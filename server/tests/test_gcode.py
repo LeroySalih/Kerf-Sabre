@@ -233,3 +233,18 @@ def test_sharp_design_passes_the_fit_check_before_a_laser_is_chosen():
     # Placed exactly on the bed corner, kerf at a star's tips would poke past the edge; the pre-check leaves a margin.
     j = job([star_obj(70, 185, 60, 25)], {"mode": "current-position", "anchor": "bottom-left"})
     generate(j, preset(kerf=0.2), MACHINE, head=probe_head(j))
+
+
+def test_ignore_layer_is_left_out_of_the_gcode_the_size_and_the_fit_check():
+    guide = rect_obj("g", 0, 0, 900, 900, layer="ignore")  # far bigger than the bed
+    base = generate(job([rect_obj("a", 10, 10, 100, 60)]), preset(), MACHINE)
+    with_guide = generate(job([rect_obj("a", 10, 10, 100, 60), guide]), preset(), MACHINE)
+    assert with_guide.text == base.text
+    assert with_guide.estimate == base.estimate
+    j = job([rect_obj("a", 10, 10, 100, 60), guide], {"mode": "current-position", "anchor": "bottom-left"})
+    assert generate(j, preset(), MACHINE, head=probe_head(j)).estimate["extentMm"] == {"widthMm": 100.0, "heightMm": 60.0}
+
+
+def test_a_job_of_only_ignored_shapes_is_refused():
+    with pytest.raises(GcodeError, match="nothing to cut"):
+        generate(job([rect_obj("g", 0, 0, 10, 10, layer="ignore")]), preset(), MACHINE)

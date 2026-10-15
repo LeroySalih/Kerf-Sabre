@@ -59,11 +59,11 @@ export function applyMatrix(m: number[], p: Pt): Pt {
   return { x: m[0]! * p.x + m[2]! * p.y + m[4]!, y: m[1]! * p.x + m[3]! * p.y + m[5]! };
 }
 
-export interface Shape { pts: Pt[]; layer: "cut" | "score"; closed: boolean }
+export interface Shape { pts: Pt[]; layer: "cut" | "score" | "ignore"; closed: boolean }
 
 /** The design as outlines in bed mm, where it sits now (before any placement). */
 export function designShapes(objects: JobObject[]): Shape[] {
-  return fromJobObjects(objects).map((sh) => ({ pts: flatten(transformPath(sh.path, sh.matrix), 0.2), layer: sh.layer, closed: sh.path.closed }));
+  return fromJobObjects(objects).filter((sh) => sh.layer !== "ignore").map((sh) => ({ pts: flatten(transformPath(sh.path, sh.matrix), 0.2), layer: sh.layer, closed: sh.path.closed }));
 }
 
 export function boundsOf(pts: Pt[]): { minX: number; minY: number; maxX: number; maxY: number } {

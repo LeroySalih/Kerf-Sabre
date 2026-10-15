@@ -13,6 +13,7 @@ Python: FastAPI, SQLAlchemy (SQLite default, PostgreSQL via `KERF_DATABASE_URL`)
 - Never hold a DB session open while awaiting the Cutter (SQLite would lock); `services_run.start` does the work in two short transactions.
 - Pupil IDs only, never names (uploaded file names are discarded). Camera frames stay in memory.
 - Preset edits create new versions; jobs record the version used.
+- Layer `ignore`: the pupil's own shapes. `gcode.cuttable(job)` drops them before G-code, estimate, extent, wastage, kerf, the fit check and `probe_head`; a job with only ignored shapes raises `GcodeError("nothing to cut")`. They are stored and returned with the job.
 - Job `dimensions` (Editor annotations) are stored and returned with the job but never read by `gcode/`, validation, estimates or the Cutter messages.
 - Ticket queue (`services_queue.py`): approved jobs get an ever-increasing ticket and are served first in, first out by `rank` (moved only by a teacher or `defer`). A station may only frame/start the job that is next for it (`not_your_turn`); jobs pinned to another station and jobs framed (reserved) on another station are skipped; teachers may `skipQueue`. A refused start keeps its place.
 - Class login (`services_classes.py`): pupil ID + class code + PIN -> expiring token. PINs are scrypt-hashed, never logged or returned again; wrong class/ID/PIN give one identical 401; per-pupil lockout and per-IP throttle; IDs only, never names. `Token.expires_at` is checked in `security.lookup`.

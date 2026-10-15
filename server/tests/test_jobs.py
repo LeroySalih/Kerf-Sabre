@@ -18,7 +18,7 @@ def rect_obj(oid, x, y, w, h, layer="cut", closed=True):
 
 
 def job_doc(pupil="P001", status="draft", objects=None, **over):
-    d = {"schemaVersion": "0.2.15", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
+    d = {"schemaVersion": "0.2.16", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
          "preset": {"id": "ply-3mm", "version": 1}, "station": None, "origin": {"mode": "absolute"},
          "objects": objects or [rect_obj("a", 20, 20, 50, 30)]}
     d.update(over)
@@ -28,6 +28,20 @@ def job_doc(pupil="P001", status="draft", objects=None, **over):
 def post(client, tokens, who="pupil", **kw):
     r = client.post(f"{API}/jobs", json=job_doc(**kw), headers=auth(tokens[who]))
     return r
+
+
+class TestIgnoreLayer:
+    def test_ignored_shapes_are_saved_but_do_not_count_toward_the_size(self, client, tokens):
+        objs = [rect_obj("a", 20, 20, 50, 30), rect_obj("g", 0, 0, 900, 900, layer="ignore")]
+        r = post(client, tokens, status="submitted", objects=objs)
+        assert r.status_code == 201, r.text
+        assert r.json()["estimate"]["extentMm"] == {"widthMm": 50.0, "heightMm": 30.0}
+        saved = client.get(f"{API}/jobs/{r.json()['id']}", headers=auth(tokens["pupil"])).json()
+        assert [o["layer"] for o in saved["objects"]] == ["cut", "ignore"]
+
+    def test_only_ignored_shapes_cannot_be_sent(self, client, tokens):
+        r = post(client, tokens, status="submitted", objects=[rect_obj("g", 0, 0, 10, 10, layer="ignore")])
+        assert r.status_code == 422, r.text
 
 
 class TestSave:

@@ -78,7 +78,7 @@ let preview: { tool: Tool; a: Point; b: Point } | null = null;
 
 paper.setup(canvas);
 
-const COLOURS: Record<LayerType, string> = { score: "#2563eb", cut: "#dc2626" };
+const COLOURS: Record<LayerType, string> = { score: "#2563eb", cut: "#dc2626", ignore: "#4b5563" };
 const toScreen = (p: Point) => new paper.Point(bedToScreen(view, p).x, bedToScreen(view, p).y);
 
 function toPaperPath(path: Path): paper.Path {
@@ -689,7 +689,8 @@ function refreshLayerUI(): void {
   const count = (l: LayerType) => doc.state.objects.filter((o) => o.layer === l).length;
   const row = (l: LayerType, label: string, o: Operation) =>
     `<tr><td><i class="sw ${l}"></i>${label}</td><td>${o.speedMmPerS}</td><td>${o.powerPct}%</td><td>${o.passes}</td><td>${o.airAssist ? "on" : "off"}</td><td>${count(l)}</td></tr>`;
-  document.getElementById("layertable")!.innerHTML = row("cut", "Cut", r.cut) + row("score", "Score", r.score);
+  document.getElementById("layertable")!.innerHTML = row("cut", "Cut", r.cut) + row("score", "Score", r.score)
+    + `<tr><td><i class="sw ignore"></i>Ignore</td><td colspan="4">not cut</td><td>${count("ignore")}</td></tr>`;
 }
 
 // Material: pupils pick one and the settings follow, locked. Presets are placeholders until the Server provides them.
@@ -747,7 +748,7 @@ function importDXF(text: string, name: string): void {
   const tol = joinTol();
   let merges = 0, closed = 0;
   const items: { path: Path; layer: LayerType }[] = [];
-  for (const layer of ["cut", "score"] as LayerType[]) {
+  for (const layer of ["cut", "score", "ignore"] as LayerType[]) {
     const mine = paths.filter((_, i) => r.shapes[i]!.layer === layer);
     if (!mine.length) continue;
     const j = joinPaths(mine, tol);
@@ -1517,7 +1518,7 @@ function joinSelected(): void {
   const tol = joinTol();
   let merges = 0, closed = 0;
   const made: { path: Path; layer: LayerType }[] = [];
-  for (const layer of ["cut", "score"] as LayerType[]) {
+  for (const layer of ["cut", "score", "ignore"] as LayerType[]) {
     const mine = open.filter((o) => o.layer === layer);
     if (!mine.length) continue;
     const r = joinPaths(mine.map((o) => transformPath(o.path, o.matrix)), tol);

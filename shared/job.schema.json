@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.15"
+      "const": "0.2.16"
     },
     "id": {
       "type": "string",
@@ -326,7 +326,8 @@
         "layer": {
           "enum": [
             "score",
-            "cut"
+            "cut",
+            "ignore"
           ]
         },
         "closed": {

@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.16 - ignore layer (additive)
+- `job.schema.json`: `objects[].layer` also accepts `ignore` (drawn in dark grey in the Editor). An Ignore shape is kept in the file but is never cut or scored: the Server leaves it out of the G-code, the estimate, the design size, the fit check and the material use, and a job with only Ignore shapes is refused ("nothing to cut"). The Editor leaves it out of DXF/SVG export and does not require it to be on the bed. Nothing changes for the Cutter, which only receives G-code.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.16`.
+
 ## 0.2.15 - design size in the queue (additive)
 - `job.schema.json`: `estimate.extentMm` (`widthMm`, `heightMm`): the size of the design itself (the box around everything cut or scored, before kerf compensation), not the bed.
 - `openapi.yaml`: `QueueEntry.extentMm` carries it, so a teacher approving a file, and a station's queue, can see how big each design is. The Server fills it in when it checks a job; older jobs have none.

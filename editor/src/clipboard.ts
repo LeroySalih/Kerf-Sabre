@@ -47,7 +47,7 @@ export function parseClip(text: string | null | undefined): ClipData | null {
     segs += path.segs.length;
     if (segs > MAX_SEGS || !path.segs.every(validSeg)) return null;
     if (!Array.isArray(c.matrix) || c.matrix.length !== 6 || !c.matrix.every(isNum)) return null;
-    if (c.layer !== "score" && c.layer !== "cut") return null;
+    if (c.layer !== "score" && c.layer !== "cut" && c.layer !== "ignore") return null;
     if (c.group !== undefined && !isNum(c.group)) return null;
     if (c.textId !== undefined && (!isNum(c.textId) || !texts[c.textId])) return null;
     const st = c.settings as { powerPct?: unknown; speedMmPerS?: unknown } | undefined;

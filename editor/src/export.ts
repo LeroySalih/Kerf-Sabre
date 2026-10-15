@@ -9,10 +9,14 @@ const placed = (o: DocObject): Path => transformPath(o.path, o.matrix);
 /** The shape as the laser cuts it: a closed Cut outline with tabs becomes open pieces with a gap at each tab. */
 const placedParts = (o: DocObject): Path[] => splitByTabs(placed(o), o.layer === "cut" ? o.tabs : undefined);
 
-const SVG_STROKE = { score: "#0000ff", cut: "#ff0000" } as const;
-const DXF_COLOUR = { score: 5, cut: 1 } as const; // ACI blue, red
+const SVG_STROKE = { score: "#0000ff", cut: "#ff0000", ignore: "#4b5563" } as const;
+const DXF_COLOUR = { score: 5, cut: 1, ignore: 8 } as const; // ACI blue, red, dark grey
 
-export function toSVG(objects: DocObject[]): string {
+/** The ignore layer is for the pupil only: it is left out of what goes to a laser. */
+const forLaser = (objects: DocObject[]): DocObject[] => objects.filter((o) => o.layer !== "ignore");
+
+export function toSVG(all: DocObject[]): string {
+  const objects = forLaser(all);
   const paths = objects.flatMap((o) => { const parts = placedParts(o); return parts.map((p, i) => ({ o, p, suffix: parts.length > 1 ? `-${i + 1}` : "" })); });
   const bs = objects.map((o) => boundsOf(placed(o))); // the whole outline, so tabs at the edge don't shrink the drawing
   const minX = Math.min(0, ...bs.map((b) => b.minX)), maxX = Math.max(0, ...bs.map((b) => b.maxX));
@@ -38,7 +42,8 @@ export function toSVG(objects: DocObject[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${num(w)}mm" height="${num(h)}mm" viewBox="${num(minX)} ${num(-maxY)} ${num(w)} ${num(h)}">\n${body.join("\n")}\n</svg>\n`;
 }
 
-export function toDXF(objects: DocObject[]): string {
+export function toDXF(all: DocObject[]): string {
+  const objects = forLaser(all);
   const out: string[] = [];
   const g = (code: number, value: string | number) => out.push(String(code), String(value));
   g(0, "SECTION"); g(2, "HEADER"); g(9, "$ACADVER"); g(1, "AC1009"); g(9, "$INSUNITS"); g(70, 4); g(0, "ENDSEC");

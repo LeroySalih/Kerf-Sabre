@@ -6,7 +6,8 @@ import type { SplineSpec } from "./spline";
 import type { TabSpec } from "./tabs";
 import type { TextSpec } from "./text";
 
-export type LayerType = "score" | "cut";
+/** Ignore: drawn but never cut or scored (guides, notes, reference shapes). It stays in the file; the Server and Cutter skip it. */
+export type LayerType = "score" | "cut" | "ignore";
 
 export interface DocObject {
   id: number;

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from .conftest import auth
 from .dxfmaker import make_dxf, rect
 
@@ -217,3 +219,22 @@ class TestDimensions:
         gb = client.get(f"{API}/jobs/{b}/gcode", headers=h).text.splitlines()
         assert ga[1:] == gb[1:]  # same program (only the job id comment differs)
         assert client.get(f"{API}/jobs/{b}", headers=h).json()["estimate"] == client.get(f"{API}/jobs/{a}", headers=h).json()["estimate"]
+
+
+class TestOlderEditors:
+    """An Editor a few versions behind (same 0.2 series) still saves; anything else about the document is still checked."""
+
+    def test_an_older_patch_version_is_accepted(self, client, tokens):
+        r = client.post(f"{API}/jobs", json=job_doc(schemaVersion="0.2.6"), headers=auth(tokens["pupil"]))
+        assert r.status_code == 201, r.text
+
+    @pytest.mark.parametrize("version", ["0.1.9", "1.0.0", "0.3.0", "banana", None])
+    def test_a_different_series_or_nonsense_is_still_refused(self, client, tokens, version):
+        r = client.post(f"{API}/jobs", json=job_doc(schemaVersion=version), headers=auth(tokens["pupil"]))
+        assert r.status_code == 422
+
+    def test_other_schema_errors_are_still_reported_with_their_paths(self, client, tokens):
+        d = job_doc(schemaVersion="0.2.6")
+        d["objects"][0]["layer"] = "engrave"
+        r = client.post(f"{API}/jobs", json=d, headers=auth(tokens["pupil"]))
+        assert r.status_code == 422 and any("layer" in x["path"] for x in r.json()["details"])

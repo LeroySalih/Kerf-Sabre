@@ -3,6 +3,7 @@
 import { infoDialog, openDialog } from "./dialog";
 import { openMyActivities } from "./activitiesui";
 import { closeStation, openStation } from "./stationui";
+import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts";
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
@@ -121,9 +122,25 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     } catch (e) { err.textContent = problem(e); }
   }
 
+  const currentJob = () => buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
+  /** The local copy the page was opened from (so it is removed once the design reaches the server). */
+  let openedLocal: string | null = null;
+
+  /** What went wrong, in words, with the server's own list of problems when it gave one. */
+  const explain = (e: unknown): string[] => [handle(e), ...(e instanceof ServerError && e.details ? e.details.slice(0, 5).map((d) => `${d.path || "the job"}: ${d.message}`) : [])];
+
+  /** The server did not take the design: keep it in this browser instead, and say so. Returns the lines for the dialog. */
+  function keepLocally(e: unknown): string[] {
+    let kept: LocalDraft | null = null;
+    try { kept = addLocal(currentJob(), explain(e).join(" "), undefined); } catch { /* nothing to keep */ }
+    return [...explain(e), kept
+      ? "Your design is safe: it is kept on this computer, in My files under 'On this computer'. Open it there, and save it to the server when the problem is fixed."
+      : "It could not be kept on this computer either (the browser's storage is full or blocked). Use Export DXF to keep your work."];
+  }
+
   /** Make sure there is a draft on the server holding the current design. Returns its id. */
   async function saveCurrent(): Promise<string> {
-    const job = buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
+    const job = currentJob();
     if (jobId) {
       try { await saveDraft(session!, jobId, job); markSaved(); return jobId; } catch (e) {
         if (!(e instanceof ServerError && (e.status === 409 || e.status === 404))) throw e; // the draft was sent or cancelled meanwhile: start a new one
@@ -132,6 +149,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     }
     const r = await sendJob(session!, job);
     jobId = r.id;
+    if (openedLocal) { removeLocal(openedLocal); openedLocal = null; } // it reached the server: the local copy is no longer needed
     markSaved();
     render();
     return r.id;
@@ -140,7 +158,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   async function save(): Promise<void> {
     const why = ctx.blocker();
     if (why && !ctx.objects().length) { ctx.notify(why); return; }
-    try { const id = await saveCurrent(); ctx.notify(`Saved as ${id}`); } catch (e) { await infoDialog("Not saved", [handle(e)]); }
+    try { const id = await saveCurrent(); ctx.notify(`Saved as ${id}`); } catch (e) { await infoDialog("Not saved to the server", keepLocally(e)); }
   }
 
   async function send(): Promise<void> {
@@ -168,8 +186,8 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       if (est?.percentUsed !== undefined) facts.push(`Uses ${est.percentUsed}% of the sheet${est.costSar != null ? `, about ${est.costSar} SAR` : ""}`);
       await infoDialog("Sent", [...facts, ...(r.warnings ?? []).map((w) => `Note: ${w}`)]);
     } catch (e) {
-      const extra = e instanceof ServerError && e.details ? e.details.slice(0, 5).map((d) => `${d.path}: ${d.message}`) : [];
-      await infoDialog("Not sent", [handle(e), ...extra, "Your design is still saved as a draft in My files."]);
+      if (jobId) await infoDialog("Not sent", [...explain(e), "Your design is still saved as a draft in My files."]); // it did reach the server as a draft
+      else await infoDialog("Not sent", keepLocally(e));
     } finally {
       button.disabled = false;
     }
@@ -195,7 +213,8 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     if (!session) return;
     let jobs: JobSummary[];
     try { jobs = await listJobs(session); } catch (e) { await infoDialog("Couldn't load your files", [handle(e)]); return; }
-    if (auto && !jobs.length) return; // nothing to show a new pupil yet
+    let local = listLocal(session.id);
+    if (auto && !jobs.length && !local.length) return; // nothing to show a new pupil yet
     let queued = new Map<string, QueueEntry>();
     try { queued = new Map((await listQueue(session)).filter((q) => q.jobId).map((q) => [q.jobId!, q])); } catch { /* the list still works without queue places */ }
     const dlg = document.createElement("dialog");
@@ -209,7 +228,41 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     dlg.append(close);
     const draw = () => {
       body.replaceChildren();
-      if (!jobs.length) body.append(Object.assign(document.createElement("p"), { textContent: "You haven't saved anything yet." }));
+      if (local.length) {
+        body.append(Object.assign(document.createElement("h3"), { textContent: "On this computer (not on the server yet)" }));
+        for (const d of local) {
+          const row = document.createElement("div");
+          row.className = "filerow";
+          const info = document.createElement("span");
+          info.textContent = `${new Date(d.savedAt).toLocaleString()} · ${d.job.objects.length} shape${d.job.objects.length === 1 ? "" : "s"} · ${d.job.preset.id} · kept because: ${d.reason || "the server did not take it"}`;
+          row.append(info);
+          const lbtn = (label: string, run: () => Promise<void> | void, cls = "") => {
+            const b = document.createElement("button");
+            b.textContent = label;
+            if (cls) b.className = cls;
+            b.addEventListener("click", async () => { b.disabled = true; try { await run(); } catch (e) { ctx.notify(handle(e)); } b.disabled = false; });
+            row.append(b);
+          };
+          lbtn("Open", () => {
+            if (!confirmDiscard("Open this file")) return;
+            ctx.load(fromJobObjects(d.job.objects), d.job.preset.id, (d.job.dimensions ?? []).map(fromJobDimension));
+            jobId = null; origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; openedLocal = d.id;
+            markSaved(); render(); ctx.notify("Opened the copy kept on this computer. Save to put it on the server."); dlg.close();
+          });
+          lbtn("Save to the server", async () => {
+            const r = await sendJob(session!, { ...d.job, status: "draft" });
+            removeLocal(d.id); if (openedLocal === d.id) openedLocal = null;
+            local = listLocal(session!.id);
+            ctx.notify(`Saved as ${r.id}`);
+            jobs = await listJobs(session!).catch(() => jobs);
+            draw();
+          }, "on");
+          lbtn("Delete", () => { if (confirm("Delete this copy from this computer? It is not on the server.")) { removeLocal(d.id); local = listLocal(session!.id); draw(); } }, "danger");
+          body.append(row);
+        }
+        body.append(Object.assign(document.createElement("h3"), { textContent: "On the server" }));
+      }
+      if (!jobs.length) body.append(Object.assign(document.createElement("p"), { textContent: "You haven't saved anything on the server yet." }));
       for (const j of jobs) {
         const row = document.createElement("div");
         row.className = "filerow";

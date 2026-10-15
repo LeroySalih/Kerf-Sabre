@@ -245,7 +245,7 @@ class TestCutterDownload:
         r = self.package(client, a["admin"])
         assert r.status_code == 201, r.text
         body = r.json()
-        assert body["token"].startswith("ks_") and body["kind"] == "pretend" and body["downloadPath"].endswith("/kerf-cutter-pretend.zip") and body["fileName"] == "kerf-cutter-pretend.zip"
+        assert body["token"].startswith("ks_") and body["kind"] == "practice" and body["downloadPath"].endswith("/kerf-cutter-practice.zip") and body["fileName"] == "kerf-cutter-practice.zip"
         z = client.get(body["downloadPath"])  # no Authorization header: the link is the permission
         assert z.status_code == 200 and z.headers["content-type"] == "application/zip"
         names = zipfile.ZipFile(io.BytesIO(z.content)).namelist()
@@ -253,6 +253,14 @@ class TestCutterDownload:
         assert body["token"].encode() not in z.content  # the download holds no secret
         with client.websocket_connect(f"{API}/ws/cutter?token={body['token']}") as ws:  # the token connects as that laser
             ws.send_json({"type": "hello", "station": "alpha-laser", "cutterVersion": "t", "grblSettings": {}})
+
+    def test_the_real_cutter_is_refused_until_it_is_built(self, client, world):
+        a = world["alpha"]
+        assert client.get(f"{API}/cutter/kinds", headers=a["admin"]).json()["real"]["available"] is False
+        assert client.get(f"{API}/cutter/kinds", headers=a["teacher"]).status_code == 403
+        r = client.post(f"{API}/cutter/package", json={"station": "alpha-laser", "kind": "real"}, headers=a["admin"])
+        assert r.status_code == 409 and r.json()["code"] == "cutter_not_built"
+        assert client.post(f"{API}/cutter/package", json={"station": "alpha-laser", "kind": "bogus"}, headers=a["admin"]).status_code == 422
 
     def test_only_admins_and_only_their_own_lasers(self, client, world):
         a = world["alpha"]
@@ -263,8 +271,8 @@ class TestCutterDownload:
 
     def test_links_expire_and_cannot_be_guessed(self, client, world, app):
         body = self.package(client, world["alpha"]["admin"]).json()
-        assert client.get(f"{API}/downloads/cutter/nope/kerf-cutter-pretend.zip").status_code == 404
-        assert client.get(body["downloadPath"].replace("pretend.zip", "other.zip")).status_code == 404
+        assert client.get(f"{API}/downloads/cutter/nope/kerf-cutter-practice.zip").status_code == 404
+        assert client.get(body["downloadPath"].replace("practice.zip", "other.zip")).status_code == 404
         link = body["downloadPath"].split("/")[-2]
         app.state.download_links[link] = 0  # an hour later
         assert client.get(body["downloadPath"]).status_code == 404
@@ -307,8 +315,34 @@ def test_a_placeholder_machine_in_an_older_database_gets_the_real_profile(tmp_pa
         app = create_app(Settings.from_env(data_dir=tmp_path / "d", cutter_zip=built))
         with TestClient(app) as c:
             admin = {"Authorization": "Bearer " + issue_token(app.state.db, "admin", "A1")}
-            r = c.post(f"{API}/cutter/package", json={"station": "station-1"}, headers=admin).json()
+            assert c.get(f"{API}/cutter/kinds", headers=admin).json() == {"practice": {"available": True, "fileName": "kerf-cutter-practice.zip"}, "real": {"available": True, "fileName": "kerf-cutter.zip"}}
+            r = c.post(f"{API}/cutter/package", json={"station": "station-1", "kind": "real"}, headers=admin).json()
             assert r["kind"] == "real" and r["fileName"] == "kerf-cutter.zip"
             z = c.get(r["downloadPath"])
             assert z.status_code == 200 and "kerf-cutter/run_cutter.bat" in zipfile.ZipFile(io.BytesIO(z.content)).namelist()
-            assert c.get(r["downloadPath"].replace("kerf-cutter.zip", "kerf-cutter-pretend.zip")).status_code == 404
+            p = c.post(f"{API}/cutter/package", json={"station": "station-1", "kind": "practice"}, headers=admin).json()  # both kinds stay on offer
+            assert p["kind"] == "practice" and c.get(p["downloadPath"]).status_code == 200
+
+
+class TestRemovingAStation:
+    def test_an_admin_removes_their_own_laser_and_its_tokens_stop_working(self, client, world):
+        a, b = world["alpha"], world["beta"]
+        assert client.delete(f"{API}/machines/alpha-laser", headers=a["teacher"]).status_code == 403
+        assert client.delete(f"{API}/machines/beta-laser", headers=a["admin"]).status_code == 404  # another school's laser looks absent
+        assert client.delete(f"{API}/machines/nothing-here", headers=a["admin"]).status_code == 404
+        assert client.delete(f"{API}/machines/alpha-laser", headers=a["admin"]).status_code == 204
+        assert client.get(f"{API}/machines/alpha-laser", headers=a["admin"]).status_code == 404
+        assert [m["id"] for m in client.get(f"{API}/machines", headers=a["pupil"]).json()] == []
+        assert client.get(f"{API}/machines/beta-laser", headers=b["teacher"]).status_code == 200
+        with pytest.raises(WebSocketDisconnect):  # its station token is revoked
+            with client.websocket_connect(f"{API}/ws/cutter?token={a['station_token']}"):
+                pass
+        assert client.put(f"{API}/machines/alpha-laser", json=client.get(f"{API}/machines/beta-laser", headers=b["teacher"]).json() | {"id": "alpha-laser"}, headers=a["admin"]).status_code == 200  # the ID can be reused
+
+    def test_not_while_the_cutter_is_connected(self, client, world):
+        a = world["alpha"]
+        with client.websocket_connect(f"{API}/ws/cutter?token={a['station_token']}") as ws:
+            ws.send_json({"type": "hello", "station": "alpha-laser", "cutterVersion": "t", "grblSettings": {}})
+            ws.send_json({"type": "status", "station": "alpha-laser", "state": "Idle", "mpos": [0, 0, 0]})
+            r = client.delete(f"{API}/machines/alpha-laser", headers=a["admin"])
+            assert r.status_code == 409 and r.json()["code"] == "station_online"

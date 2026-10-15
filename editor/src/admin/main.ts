@@ -37,7 +37,7 @@ function signInView(error = ""): void {
   const url = el("input", { type: "text", placeholder: "Leave blank unless told otherwise" });
   (url as HTMLInputElement).value = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
   const form = el("form", { class: "ad-card ad-signin" }, el("h1", {}, "BISAK Kerf Admin"),
-    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and lasers. Sign in with your teacher or admin token."),
+    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with your teacher or admin token."),
     el("label", {}, "Token", token), el("details", {}, el("summary", {}, "Server address"), url), err, el("button", { type: "submit", class: "on" }, "Sign in"),
     el("a", { href: "/" }, "Looking for the Editor?"));
   form.addEventListener("submit", (ev) => {

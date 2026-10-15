@@ -31,7 +31,12 @@ def make_package(request: Request, body: dict[str, Any] = Body(...), who: Princi
     station = body.get("station")
     if not isinstance(station, str):
         raise ApiError(422, "invalid", "Say which laser this Cutter is for.")
+    kind = body.get("kind", "practice")
+    if kind not in ("practice", "real"):
+        raise ApiError(422, "invalid", "kind must be 'practice' or 'real'.")
     known(s, who, station)
+    if package.available(cfg)[kind] is None:
+        raise ApiError(409, "cutter_not_built", "The real Cutter has not been built on this server yet. Run python3 cutter/build_cutter.py on the server, or use the practice Cutter.")
     token = ss.add_staff(request.app.state.db, who.school, "station", station, "cutter download")
     links: dict[str, float] = request.app.state.download_links
     now = time.time()
@@ -39,16 +44,22 @@ def make_package(request: Request, body: dict[str, Any] = Body(...), who: Princi
         del links[k]
     link = secrets.token_urlsafe(24)
     links[link] = now + LINK_SECONDS
-    kind, name = package.kind_of(cfg)
+    name = package.file_name(kind)
     return {"station": station, "token": token, "kind": kind, "downloadPath": f"/api/v1/downloads/cutter/{link}/{name}",
             "fileName": name, "expiresAt": iso(utcnow().replace(microsecond=0) + timedelta(seconds=LINK_SECONDS))}
+
+
+@router.get("/cutter/kinds")
+def kinds(who: Principal = Depends(require("admin")), cfg: Settings = Depends(get_settings)):
+    """Which Cutter downloads this server can offer: the practice Cutter always, the real one once it has been built."""
+    return {k: {"available": name is not None, "fileName": name or package.file_name(k)} for k, name in package.available(cfg).items()}
 
 
 @router.get("/downloads/cutter/{link}/{name}", include_in_schema=False)
 def download(request: Request, link: str, name: str, cfg: Settings = Depends(get_settings)):
     """A browser link cannot send a token, so the link itself is the (short-lived, unguessable) permission."""
     exp = request.app.state.download_links.get(link)
-    kind, file_name, data = package.choose(cfg)
-    if exp is None or exp < time.time() or name != file_name:
+    data = package.read(cfg, name) if exp is not None and exp >= time.time() else None
+    if data is None:
         raise ApiError(404, "not_found", "That download link has expired. Make a new one on the Admin site.")
-    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{file_name}"', "Cache-Control": "no-store"})
+    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})

@@ -165,21 +165,31 @@ export const placeJob = (s: Session, id: string, station: string, matrix: number
 export interface MarksRequest { centerX: number; centerY: number; sizeMm: number; spacingMm: number; count: 1 | 4; layer: "score" | "cut"; presetId: string }
 /** A job of known squares to cut (approved and pinned to this laser), for calibrating its camera. Teacher only. */
 export const createCalibrationMarks = (s: Session, station: string, body: MarksRequest, f?: Fetch) => request<{ jobId: string; squares: { square: number; corners: [number, number][] }[] }>(s, "POST", `/stations/${encodeURIComponent(station)}/calibration-marks`, body, f);
-export interface CutterPackage { station: string; token: string; kind: "pretend" | "real"; downloadPath: string; fileName: string; expiresAt: string }
+export type CutterKind = "practice" | "real";
+export interface CutterPackage { station: string; token: string; kind: CutterKind; downloadPath: string; fileName: string; expiresAt: string }
 /** A fresh token for one laser's Cutter and a short-lived download link for the Cutter software. School admins only. */
-export const makeCutterPackage = (s: Session, station: string, f?: Fetch) => request<CutterPackage>(s, "POST", "/cutter/package", { station }, f);
+export const makeCutterPackage = (s: Session, station: string, kind: CutterKind = "practice", f?: Fetch) => request<CutterPackage>(s, "POST", "/cutter/package", { station, kind }, f);
+/** Which Cutter downloads the server can offer: the practice one always, the real one once it has been built there. School admins only. */
+export const cutterKinds = (s: Session, f?: Fetch) => request<Record<CutterKind, { available: boolean; fileName: string }>>(s, "GET", "/cutter/kinds", undefined, f);
+/** The whole machine profile (shared/machine-profile.schema.json), so an edit keeps the fields the form does not show. */
+export const getMachineDoc = (s: Session, id: string, f?: Fetch) => request<Record<string, unknown>>(s, "GET", `/machines/${encodeURIComponent(id)}`, undefined, f);
+/** Add a laser (a new ID) or replace one's profile. Teachers and school admins. */
+export const putMachine = (s: Session, doc: { id: string }, f?: Fetch) => request<Record<string, unknown>>(s, "PUT", `/machines/${encodeURIComponent(doc.id)}`, doc, f);
+/** Remove a laser, its camera calibration and its tokens. School admins; refused while its Cutter is connected or files are waiting for it. */
+export const deleteMachine = (s: Session, id: string, f?: Fetch) => request<null>(s, "DELETE", `/machines/${encodeURIComponent(id)}`, undefined, f);
 
 /**
  * The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server.
- * The real Cutter is a Windows folder started by run_cutter.bat; the pretend one is a Python script that runs anywhere.
+ * The real Cutter is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
  */
-export function cutterCommand(url: string, token: string, station: string, kind: "pretend" | "real" = "real", shell: "windows" | "unix" = "windows"): string {
+export function cutterCommand(url: string, token: string, station: string, kind: CutterKind = "real", shell: "windows" | "unix" = "windows"): string {
   const q = (v: string) => (/^[A-Za-z0-9_.:/@-]+$/.test(v) ? v : `"${v.replace(/(["\\$`])/g, "\\$1")}"`);
   const args = `--url ${q(normaliseBase(url))} --token ${q(token)} --station ${q(station)}`;
   if (kind === "real") return `run_cutter.bat ${args}`;
   return `${shell === "windows" ? "python" : "python3"} fake_cutter.py ${args}`;
 }
 export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }
+export const listMachines = (s: Session, f?: Fetch) => request<MachineInfo[]>(s, "GET", "/machines", undefined, f);
 export const getMachine = (s: Session, id: string, f?: Fetch) => request<MachineInfo>(s, "GET", `/machines/${encodeURIComponent(id)}`, undefined, f);
 
 /** The latest camera picture as an object URL (the caller revokes it), or null when there is none. */

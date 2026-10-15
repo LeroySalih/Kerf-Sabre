@@ -78,12 +78,12 @@ describe("cutterCommand", () => {
     expect(cutterCommand("http://192.168.1.20:8000/", "ks_abc-DEF_123", "station-1")).toBe("run_cutter.bat --url http://192.168.1.20:8000 --token ks_abc-DEF_123 --station station-1");
     expect(cutterCommand("https://kerf.school/api/v1", "ks_x", "bsk-laser-2", "real", "windows")).toBe("run_cutter.bat --url https://kerf.school --token ks_x --station bsk-laser-2");
   });
-  it("the pretend Cutter is a Python script: python on Windows, python3 elsewhere", () => {
-    expect(cutterCommand("http://h:8000", "ks_x", "station-1", "pretend", "windows")).toBe("python fake_cutter.py --url http://h:8000 --token ks_x --station station-1");
-    expect(cutterCommand("http://h:8000", "ks_x", "station-1", "pretend", "unix")).toBe("python3 fake_cutter.py --url http://h:8000 --token ks_x --station station-1");
+  it("the practice Cutter is a Python script: python on Windows, python3 elsewhere", () => {
+    expect(cutterCommand("http://h:8000", "ks_x", "station-1", "practice", "windows")).toBe("python fake_cutter.py --url http://h:8000 --token ks_x --station station-1");
+    expect(cutterCommand("http://h:8000", "ks_x", "station-1", "practice", "unix")).toBe("python3 fake_cutter.py --url http://h:8000 --token ks_x --station station-1");
   });
   it("quotes anything with odd characters so it cannot break out of the command", () => {
-    const c = cutterCommand("http://h:8000", "ks_a b;rm -rf $HOME", "s\"1", "pretend", "unix");
+    const c = cutterCommand("http://h:8000", "ks_a b;rm -rf $HOME", "s\"1", "practice", "unix");
     expect(c).toContain('--token "ks_a b;rm -rf \\$HOME"');
     expect(c).toContain('--station "s\\"1"');
   });

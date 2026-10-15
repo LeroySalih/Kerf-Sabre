@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.13
+  version: 0.2.14
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -504,8 +504,14 @@ paths:
           content:
             application/json:
               schema: {$ref: "./machine-profile.schema.json"}
+    delete:
+      summary: School admin. Remove a laser, its camera calibration and its station tokens
+      responses:
+        "204": {description: Removed}
+        "404": {description: Not one of the school's lasers}
+        "409": {description: "station_online (its Cutter is connected) or station_in_use (files are queued for it or being cut)"}
     put:
-      summary: Replace profile (teacher only), e.g. from spike results
+      summary: Create or replace a profile (teacher or school admin), e.g. from spike results. A new ID adds a laser to the school.
       requestBody:
         required: true
         content:
@@ -861,10 +867,18 @@ paths:
               required: [station]
               properties:
                 station: {type: string, description: One of the school's lasers}
+                kind: {enum: [practice, real], default: practice, description: "practice = the pretend Cutter (cuts nothing); real = the Windows Cutter that drives a laser"}
       responses:
         "201":
-          description: "{station, token (shown once), kind: pretend|real, downloadPath, fileName, expiresAt}"
+          description: "{station, token (shown once), kind: practice|real, downloadPath, fileName, expiresAt}"
         "404": {description: Not one of the school's lasers}
+        "409": {description: "cutter_not_built: kind real was asked for but the real Cutter has not been built on this server"}
+  /cutter/kinds:
+    get:
+      summary: School admin. Which Cutter downloads this server can offer
+      responses:
+        "200":
+          description: "{practice: {available, fileName}, real: {available, fileName}}. The practice Cutter is always available; the real one once it has been built."
   /stations/{stationId}/calibration-marks:
     post:
       summary: Teacher. Make an approved job of known squares to cut, for calibrating the camera (works when the bed is larger than the camera sees)

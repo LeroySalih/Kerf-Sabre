@@ -69,6 +69,25 @@ def put_machine(s: Session, school: str, machine_id: str, doc: dict[str, Any]) -
     return doc
 
 
+def delete_machine(s: Session, school: str, machine_id: str) -> int:
+    """Remove a school's laser, its camera calibration and its station tokens. Refuses while files are waiting for it or being cut.
+    Returns how many station tokens were revoked."""
+    from .models import Job, Token
+
+    row = s.get(MachineRow, machine_id)
+    if row is None or row.school_id != school:
+        raise ApiError(404, "not_found", f"There is no laser '{machine_id}'.")
+    busy = s.scalar(select(func.count()).select_from(Job).where(Job.station == machine_id, Job.status.in_(("queued", "assigned", "running"))))
+    if busy:
+        raise ApiError(409, "station_in_use", f"{machine_id} still has {busy} file{'s' if busy != 1 else ''} waiting for it or being cut. Cancel them or send them to another laser first.")
+    revoked = 0
+    for t in s.scalars(select(Token).where(Token.school_id == school, Token.subject_id == machine_id, Token.role == "station", Token.revoked.is_(False))):
+        t.revoked = True
+        revoked += 1
+    s.delete(row)
+    return revoked
+
+
 # ---------------------------------------------------------------- camera calibration
 
 def _num(v: Any) -> float:

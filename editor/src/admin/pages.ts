@@ -1,14 +1,15 @@
 // The pages of the admin site. Each page draws itself into a host element and may return a function that stops its refreshing.
 import { openClasses, showPins } from "../classesui";
 import { openClassWork } from "../activitiesui";
-import { infoDialog, openDialog } from "../dialog";
+import { infoDialog, openDialog, type DialogValue } from "../dialog";
+import { profileFromForm, stationFields } from "../machineform";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
-  addStaff, classActivities, classPupils, controlStation, cutterCommand, makeCutterPackage, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
+  addStaff, classActivities, classPupils, controlStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
   listJobsByStatus, removePupil, resetPin, revokeStaff, updateClass,
-  type Activity, type JobSummary, type Session, type StationInfo,
+  type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
 export interface Ctx { session: Session; school: string; go: (key: string) => void }
@@ -20,6 +21,7 @@ const th = (...names: string[]) => el("tr", {}, ...names.map((n) => el("th", {},
 const table = (head: string[], rows: HTMLElement[]) => el("table", { class: "ad-table" }, th(...head), ...rows);
 const cell = (...k: (string | Node)[]) => el("td", {}, ...k);
 const actions = (...k: Node[]) => el("td", { class: "actions" }, el("div", {}, ...k));
+const bullets = (items: string[]) => items.map((t) => el("p", { class: "ad-li" }, "• " + t.replace(/<([^>]+)>/g, "$1")));
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** Run an action; a failure is told to the person, and the page redraws either way. */
@@ -68,9 +70,9 @@ const overview: Page = {
         el("div", { class: "ad-card", tabindex: "0", role: "link" }, el("div", { class: `num${alert ? " alert" : ""}` }, String(n)), label);
       const cards = el("div", { class: "ad-cards" },
         card(waiting.length, "files waiting for approval", "queue", waiting.length > 0), card(queue.length, "in the queue or cutting", "queue"),
-        card(`${online}/${stations.length}`, "lasers online", "lasers"), card(classes.length, "classes", "classes"),
+        card(`${online}/${stations.length}`, "stations online", "stations"), card(classes.length, "classes", "classes"),
         card(classes.reduce((n, c) => n + c.pupilCount, 0), "pupils", "pupils"));
-      [...cards.children].forEach((c, i) => { const to = ["queue", "queue", "lasers", "classes", "pupils"][i]!; c.addEventListener("click", () => ctx.go(to)); });
+      [...cards.children].forEach((c, i) => { const to = ["queue", "queue", "stations", "classes", "pupils"][i]!; c.addEventListener("click", () => ctx.go(to)); });
       host.replaceChildren(cards, ...(waiting.length ? [el("p", {}, btn(`Review ${plural(waiting.length, "file")}`, () => ctx.go("queue"), "on"))] : []));
     }, 5000);
   },
@@ -163,77 +165,102 @@ const queue: Page = {
   mount: (host, ctx) => mountQueue(host, ctx.session),
 };
 
-// ---------------------------------------------------------------- lasers
+// ---------------------------------------------------------------- stations (the lasers, and the Cutter software that runs on each laser's PC)
 
-const lasers: Page = {
-  key: "lasers", title: "Lasers", lead: "The school's laser cutters, whether they are connected, and each camera's calibration (so pupils can line designs up on the camera picture).",
+/** Add a station (no `cur`) or change one. Opens the form, then saves the profile. Resolves true if something was saved. */
+async function stationForm(s: Session, cur?: Record<string, unknown>): Promise<boolean> {
+  let typed: Record<string, DialogValue> | null = null;
+  for (;;) {
+    const fields = stationFields(cur as never).map((f) => (typed && f.key in typed ? { ...f, value: typed[f.key]! } : f));
+    const v = await openDialog(cur ? `Edit ${String(cur.id)}` : "Add a station", fields, { ok: "Save", intro: cur ? "The Cutter reads the laser's real settings when it connects." : "A station is one laser and the PC that runs it. You can get its Cutter software once it is saved." });
+    if (!v) return false;
+    try {
+      await putMachine(s, profileFromForm(v, cur));
+      return true;
+    } catch (e) {
+      await infoDialog("That didn't work", [msg(e)]);
+      typed = v; // a mistake does not mean typing it all again
+    }
+  }
+}
+
+/** The download and the command that starts the Cutter on one station's PC. School admins only. */
+async function cutterSoftware(s: Session, station: string): Promise<void> {
+  let kinds;
+  try { kinds = await cutterKinds(s); } catch (e) { await infoDialog("That didn't work", [msg(e)]); return; }
+  const { dlg, show } = modal("kdialog");
+  const kind = el("select", { "aria-label": "Which Cutter" },
+    new Option("Practice Cutter: behaves like a laser, cuts nothing", "practice"),
+    new Option(kinds.real.available ? "Real Cutter: runs a laser from a Windows PC" : "Real Cutter (not built on this server yet)", "real")) as HTMLSelectElement;
+  (kind.options[1] as HTMLOptionElement).disabled = !kinds.real.available;
+  const url = el("input", { type: "text", value: s.baseUrl || location.origin, "aria-label": "Server address", style: "min-width:22em" }) as HTMLInputElement;
+  const out = el("div");
+  const row = (label: string, cmd: string) => el("div", { class: "ad-cmd" }, el("div", { class: "hint" }, label), el("div", { class: "ad-token" }, cmd), btn("Copy", () => void navigator.clipboard?.writeText(cmd)));
+  const go = btn("Get the download and command", () => void (async () => {
+    try {
+      const p = await makeCutterPackage(s, station, kind.value as CutterKind);
+      const base = (url.value.trim() || location.origin).replace(/\/+$/, "");
+      const real = p.kind === "real";
+      out.replaceChildren(
+        el("h3", {}, `1. Download (${real ? "real" : "practice"} Cutter for ${p.station})`),
+        el("p", {}, el("a", { class: "btnlink", href: `${base}${p.downloadPath}`, download: p.fileName }, `Download ${p.fileName}`), el("span", { class: "hint" }, `  Works for an hour (until ${new Date(p.expiresAt).toLocaleTimeString()}). The file holds no token.`)),
+        el("h3", {}, "2. On the PC"),
+        ...bullets(real
+          ? ["Unzip it anywhere (the Desktop is fine) and close LightBurn, LaserGRBL and any Creality software: only one program can use the laser's USB port.", "Open a Command Prompt in the unzipped <kerf-cutter> folder."]
+          : ["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>",
+             "Mac with Python from python.org: if the command stops with CERTIFICATE_VERIFY_FAILED, run this once (or double-click it in Finder; use your Python's version number), then run the command again: </Applications/Python\\ 3.12/Install\\ Certificates.command>"]),
+        el("h3", {}, "3. Run this command"),
+        ...(real ? [row("Windows (first time; it is remembered after that, so later you just double-click run_cutter.bat)", cutterCommand(base, p.token, p.station, "real"))]
+                 : [row("Windows", cutterCommand(base, p.token, p.station, "practice", "windows")), row("Mac or Linux", cutterCommand(base, p.token, p.station, "practice", "unix"))]),
+        el("p", { class: "hint" }, `The token is shown only now and lets whoever has it connect as ${p.station}: keep it private. If it gets out, revoke ${p.station} on the Staff page and make a new one. Each time you press the button a new token is made; the old ones keep working until revoked.`),
+        el("p", { class: "hint" }, "Then open the Editor on that PC and sign in with the same token. The station shows as online here."));
+    } catch (e) { await infoDialog("That didn't work", [msg(e)]); }
+  })(), "on");
+  dlg.append(el("h2", {}, `Cutter software for ${station}`),
+    el("p", { class: "hint" }, "Use the address the PC types to reach this server, e.g. https://kerf.example.org or http://192.168.1.20:8000. \"localhost\" only works if the server runs on that same PC."),
+    el("div", { class: "ad-bar" }, el("label", {}, "Cutter ", kind), el("label", {}, "Server address ", url), go), out,
+    el("div", { class: "krow" }, btn("Close", () => dlg.close())));
+  await show();
+}
+
+const stations: Page = {
+  key: "stations", title: "Stations", lead: "The school's laser stations: add, change or remove one, see whether its Cutter is connected, and get the Cutter software with the command that starts it on that station's PC.",
   mount(host, ctx) {
     const s = ctx.session;
-    return refreshing(host, async () => {
+    const isAdmin = s.role === "admin";
+    let redraw: () => void = () => {};
+    const draw = async () => {
       const list = await listStations(s);
-      if (!list.length) return host.replaceChildren(empty("No lasers are registered for this school yet."));
-      const calibrated = new Map<string, boolean>(list.map((st) => [st.id, !!st.calibrated]));
+      const machines = new Map((await listMachines(s)).map((m) => [m.id, m]));
+      const add = btn("Add a station", () => void (async () => { if (await stationForm(s)) redraw(); })(), "on");
       const card = (st: StationInfo) => {
+        const m = machines.get(st.id);
         const pct = st.progress && st.progress.totalLines > 0 ? Math.round((100 * st.progress.line) / st.progress.totalLines) : null;
         const send = (c: "stop" | "pause" | "resume") => void attempt(() => controlStation(s, st.id, c), () => {});
         return el("div", { class: "ad-card" }, el("h3", {}, st.id, " ", el("span", { class: `ad-tag ${st.online ? "ok" : "warn"}` }, st.online ? (st.state ?? "online") : "offline")),
+          el("div", { class: "hint" }, [m?.name, m ? `${m.bed.widthMm} x ${m.bed.heightMm} mm bed` : ""].filter(Boolean).join(" · ")),
           el("div", { class: "hint" }, st.online ? `Cutter ${st.cutterVersion ?? "?"}` : `Last seen ${st.lastSeen ? new Date(st.lastSeen).toLocaleString() : "never"}`),
           ...(st.currentJobId ? [el("p", {}, `Cutting ${st.currentJobId}${pct !== null ? ` · ${pct}%` : ""}`)] : []),
-          el("p", {}, el("span", { class: `ad-tag ${calibrated.get(st.id) ? "ok" : "warn"}` }, calibrated.get(st.id) ? "camera calibrated" : "camera not calibrated")),
+          el("p", {}, el("span", { class: `ad-tag ${st.calibrated ? "ok" : "warn"}` }, st.calibrated ? "camera calibrated" : "camera not calibrated")),
           el("div", { class: "row" },
-            ...(st.online ? [btn("Pause", () => send("pause")), btn("Resume", () => send("resume")), btn("Stop", () => { if (confirm(`Stop ${st.id}?`)) send("stop"); }, "danger")] : []),
-            ),
-          ...(calibrated.get(st.id) ? [] : [el("p", { class: "hint" }, "To calibrate: at that laser PC, on its Station page, press \"Calibrate camera\" and enter a teacher token.")]));
+            ...(st.online ? [btn("Pause", () => send("pause")), btn("Resume", () => send("resume")), btn("Stop", () => { if (confirm(`Stop ${st.id}?`)) send("stop"); }, "danger")] : [])),
+          el("div", { class: "row" },
+            btn("Edit", () => void (async () => {
+              let cur;
+              try { cur = await getMachineDoc(s, st.id); } catch (e) { await infoDialog("That didn't work", [msg(e)]); return; }
+              if (await stationForm(s, cur)) redraw();
+            })()),
+            ...(isAdmin ? [btn("Cutter software", () => void cutterSoftware(s, st.id), "on"),
+              btn("Delete", () => { if (confirm(`Delete ${st.id}? Its camera calibration and its Cutter tokens are removed too. This cannot be undone.`)) void attempt(() => deleteMachine(s, st.id), redraw); }, "danger")] : [])),
+          ...(st.calibrated ? [] : [el("p", { class: "hint" }, "To calibrate: at that station's PC, on its Station page, press \"Calibrate camera\" and enter a teacher token.")]));
       };
-      host.replaceChildren(el("div", { class: "ad-stations" }, ...list.map(card)));
-    }, 3000);
-  },
-};
-
-// ---------------------------------------------------------------- cutter software (school admins)
-
-const cutter: Page = {
-  key: "cutter", title: "Cutter software", lead: "Get the program that runs on a laser PC and connects it to this server, with a command that already has that laser's token in it.",
-  mount(host, ctx) {
-    const s = ctx.session;
-    const draw = async () => {
-      const lasers = await listStations(s);
-      const sel = el("select", { "aria-label": "Laser" }, ...lasers.map((l) => new Option(l.id, l.id))) as HTMLSelectElement;
-      const url = el("input", { type: "text", value: s.baseUrl || location.origin, "aria-label": "Server address", style: "min-width:22em" }) as HTMLInputElement;
-      const out = el("div");
-      const go = btn("Get the download and command", () => void (async () => {
-        if (!sel.value) return;
-        try {
-          const p = await makeCutterPackage(s, sel.value);
-          const link = `${(url.value.trim() || location.origin).replace(/\/+$/, "")}${p.downloadPath}`;
-          const row = (label: string, cmd: string) => el("div", { class: "ad-cmd" }, el("div", { class: "hint" }, label), el("div", { class: "ad-token" }, cmd), btn("Copy", () => void navigator.clipboard?.writeText(cmd)));
-          const real = p.kind === "real";
-          out.replaceChildren(
-            el("div", { class: "ad-card" },
-              el("p", { class: real ? "ad-ok" : "ad-warn" }, real ? "The Cutter for Windows laser PCs. Nothing to install: it is a folder with its own Python." : "This is the PRETEND Cutter: it connects like a laser and sends a test camera picture, but cuts nothing and never touches a laser. The real Cutter has not been built on this server yet (run python3 cutter/build_cutter.py, then press the button again)."),
-              el("h2", {}, `1. Download (for ${p.station})`),
-              el("p", {}, el("a", { class: "btnlink", href: link, download: p.fileName }, `Download ${p.fileName}`), el("span", { class: "hint" }, `  This link works for an hour (until ${new Date(p.expiresAt).toLocaleTimeString()}). The file holds no token.`)),
-              el("h2", {}, "2. On the laser PC"),
-              ...bullets(real
-                ? ["Unzip it anywhere (the Desktop is fine) and close LightBurn, LaserGRBL and any Creality software: only one program can use the laser's USB port.", "Open a Command Prompt in the unzipped <kerf-cutter> folder."]
-                : ["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>",
-                   "Mac with Python from python.org: if the command stops with CERTIFICATE_VERIFY_FAILED, run this once (or double-click it in Finder; use your Python's version number), then run the command again: </Applications/Python\\ 3.12/Install\\ Certificates.command>"]),
-              el("h2", {}, "3. Run this command"),
-              ...(real ? [row("Windows (first time; it is remembered after that, so later you just double-click run_cutter.bat)", cutterCommand(url.value, p.token, p.station, "real"))]
-                       : [row("Windows", cutterCommand(url.value, p.token, p.station, "pretend", "windows")), row("Mac or Linux", cutterCommand(url.value, p.token, p.station, "pretend", "unix"))]),
-              el("p", { class: "hint" }, `The token is shown only now (it is not stored in the clear) and lets whoever has it connect as ${p.station}: keep it private. If it gets out, revoke ${p.station} on the Staff page and make a new one. Each time you press the button above a new token is made; the old ones keep working until revoked.`),
-              el("p", { class: "hint" }, "Then open the Editor on that PC, sign in with the same token, and the Station page appears. The laser shows as Connected on the Lasers page.")));
-        } catch (e) { await infoDialog("That didn't work", [msg(e)]); }
-      })(), "on");
-      host.replaceChildren(
-        lasers.length ? el("div", { class: "ad-bar" }, el("label", {}, "Laser ", sel), el("label", {}, "Server address as the laser PC sees it ", url), go) : empty("No lasers are registered for this school yet."),
-        ...(lasers.length ? [el("p", { class: "hint" }, "Use the address the laser PC types to reach this server, e.g. http://192.168.1.20:8000 or your school's server name. \"localhost\" only works if the server runs on that same PC."), out] : []));
+      host.replaceChildren(el("div", { class: "ad-bar" }, add),
+        list.length ? el("div", { class: "ad-stations" }, ...list.map(card)) : empty("No stations yet. Press \"Add a station\"."));
     };
-    void draw().catch((e) => fail(host, e));
+    redraw = () => void draw().catch((e) => fail(host, e));
+    return refreshing(host, draw, 3000);
   },
 };
-
-const bullets = (items: string[]) => items.map((t) => el("p", { class: "ad-li" }, "• " + t.replace(/<([^>]+)>/g, "$1")));
 
 // ---------------------------------------------------------------- staff (school admins)
 
@@ -292,6 +319,6 @@ const schools: Page = {
 
 export function pagesFor(role: string): Page[] {
   if (role === "platform") return [schools];
-  const base = [overview, classes, pupils, activities, queue, lasers];
-  return role === "admin" ? [...base, cutter, staff] : base;
+  const base = [overview, classes, pupils, activities, queue, stations];
+  return role === "admin" ? [...base, staff] : base;
 }

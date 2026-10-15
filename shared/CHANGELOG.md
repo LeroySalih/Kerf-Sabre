@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.14 - stations on the Admin site (additive)
+- `openapi.yaml`: `DELETE /machines/{machineId}` (school admin) removes a laser, its camera calibration and its station tokens; refused with `station_online` while its Cutter is connected and `station_in_use` while files are queued for it or being cut. `PUT /machines/{machineId}` with a new ID already added a laser; that is now documented. `GET /cutter/kinds` (school admin) says which Cutter downloads are on offer. `POST /cutter/package` takes `kind` (`practice` default, or `real`; `real` answers `409 cutter_not_built` until it has been built) and answers `kind: practice|real`.
+- **Rename (Admin site only):** the response `kind` value `pretend` is now `practice`, and the practice download is `kerf-cutter-practice.zip`.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.14`.
+
 ## 0.2.13 - dotted lines (additive)
 - New optional `dashMm` (mm, `0` or at least `0.1`; default `0` = solid line): the length of each dash and of each gap along a path, so a Score or Cut line can be dotted. Laser on for `dashMm`, off for `dashMm`, starting on at the path's start and restarting on every pass. It is set per shape in the job's `objects[].settings`, or as the material default in a preset's `cut` / `score` operation and `laserOverrides` patches. A per-shape value beats the material's. Tabs on a Cut outline stay uncut; the dashes only switch the laser off in more places.
 - Server: the G-code emitter splits the path at each dash boundary and moves the gaps with `S0` (same as tabs). The Editor has no control for it yet.

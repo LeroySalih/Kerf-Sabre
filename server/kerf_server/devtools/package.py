@@ -8,11 +8,11 @@ import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PRETEND_NAME = "kerf-cutter-pretend.zip"
+PRACTICE_NAME = "kerf-cutter-practice.zip"
 REAL_NAME = "kerf-cutter.zip"
 
-README = """BISAK Kerf Cutter: PRETEND version
-==================================
+README = """BISAK Kerf Cutter: PRACTICE version
+===================================
 
 This is NOT the real Cutter. It behaves like a laser for testing (it connects to the Kerf Server, reports a camera
 picture and "cuts" jobs) but it never touches a laser or a serial port. The real Cutter is not finished yet.
@@ -61,14 +61,18 @@ def real_zip(settings) -> Path | None:
     return p if p.is_file() else None
 
 
-def choose(settings) -> tuple[str, str, bytes]:
-    """(kind, file name, bytes) of what to offer for download."""
-    real = real_zip(settings)
-    if real is not None:
-        return "real", REAL_NAME, real.read_bytes()
-    return "pretend", PRETEND_NAME, build_zip()
+def available(settings) -> dict[str, str | None]:
+    """Which kinds can be offered: kind -> file name, or None when it cannot (the real Cutter has not been built here)."""
+    return {"practice": PRACTICE_NAME, "real": REAL_NAME if real_zip(settings) is not None else None}
 
 
-def kind_of(settings) -> tuple[str, str]:
-    """(kind, file name) without reading the file."""
-    return ("real", REAL_NAME) if real_zip(settings) is not None else ("pretend", PRETEND_NAME)
+def file_name(kind: str) -> str:
+    return REAL_NAME if kind == "real" else PRACTICE_NAME
+
+
+def read(settings, name: str) -> bytes | None:
+    """The bytes of the download called `name`, or None if there is no such download."""
+    if name == PRACTICE_NAME:
+        return build_zip()
+    real = real_zip(settings) if name == REAL_NAME else None
+    return real.read_bytes() if real is not None else None

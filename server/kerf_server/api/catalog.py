@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from .. import services_presets as sp
@@ -58,3 +58,15 @@ def get_machine(machine_id: str, who: Principal = Depends(require("pupil", "stat
 def put_machine(machine_id: str, doc: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     validate(cfg.shared_dir, "machine", doc)
     return sp.put_machine(s, who.school, machine_id, doc)
+
+
+@router.delete("/machines/{machine_id}", status_code=204)
+def delete_machine(machine_id: str, request: Request, who: Principal = Depends(require("admin")), s: Session = Depends(get_session)):
+    """School admins remove a laser. Refused (409) while its Cutter is connected or files are waiting for it."""
+    live = request.app.state.hub.stations.get(machine_id)
+    if live is not None and live.online and sp.get_machine(s, who.school, machine_id) is not None:
+        raise ApiError(409, "station_online", f"The Cutter on {machine_id} is still connected. Stop it on that PC first.")
+    n = sp.delete_machine(s, who.school, machine_id)
+    request.app.state.hub.server_log(machine_id, "INFO", f"station removed by {who.id}; {n} token(s) revoked")
+    request.app.state.hub.stations.pop(machine_id, None)
+    return Response(status_code=204)

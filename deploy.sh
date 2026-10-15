@@ -13,13 +13,11 @@ fi
 
 git pull
 
-# The Windows Cutter that the Admin site offers for download (best effort: needs python3 and the internet; the first build downloads about 70 MB, later ones are quick).
+# The Windows Cutter that the Admin site offers for download (best effort: needs the internet; the first build downloads about 70 MB, later ones are quick).
+# It is built inside a throwaway Python container, so the VPS needs no pip or venv of its own (Debian/Ubuntu's python3 often has neither).
 # If it cannot be built, the Admin site offers the pretend Cutter instead and everything else works.
-if command -v python3 >/dev/null 2>&1; then
-  python3 cutter/build_cutter.py || echo "Could not build the Cutter download (offline, or no pip?). The Admin site will offer the pretend Cutter."
-else
-  echo "python3 not found, so the Cutter download was not built (the Admin site will offer the pretend Cutter)."
-fi
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work python:3.12-slim python cutter/build_cutter.py \
+  || echo "Could not build the Cutter download (offline?). The Admin site will offer the pretend Cutter."
 
 cd server/deploy
 docker compose -f docker-compose.cloudflare.yml up -d --build --remove-orphans

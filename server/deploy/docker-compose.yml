@@ -5,9 +5,11 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      KERF_CUTTER_ZIP: /cutter-build/kerf-cutter.zip   # the Windows Cutter that the Admin site offers (built by ../../deploy.sh); the pretend Cutter if it is missing
       KERF_FORWARDED_ALLOW_IPS: "*"   # only caddy can reach this container
     volumes:
       - kerf-data:/data
+      - ../../cutter/build:/cutter-build:ro
     expose: ["8000"]
   caddy:
     image: caddy:2

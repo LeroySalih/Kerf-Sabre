@@ -17,3 +17,5 @@ server/.venv/
 spike/build-lite/
 # Portable Cutter build output
 cutter/build/
+# Server data backups made by backup.sh
+backups/

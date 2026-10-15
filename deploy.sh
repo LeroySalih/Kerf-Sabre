@@ -1,8 +1,16 @@
 #!/usr/bin/env sh
-# Deploy the Kerf Server on the VPS: pull the latest main, then rebuild and restart behind the Cloudflare Tunnel.
-# Run from anywhere:   ./deploy.sh
+# Deploy the Kerf Server on the VPS: back up the data, pull the latest main, then rebuild and restart behind the Cloudflare Tunnel.
+# Run from anywhere:   ./deploy.sh        (KERF_SKIP_BACKUP=1 ./deploy.sh skips the backup; see backup.sh for where it goes and how to restore)
 set -eu
 cd "$(dirname "$0")"
+
+# Back up first: a new version may upgrade the database on its first start. If the backup fails, nothing is changed.
+if [ -z "${KERF_SKIP_BACKUP:-}" ]; then
+  ./backup.sh
+else
+  echo "Skipping the backup (KERF_SKIP_BACKUP is set)."
+fi
+
 git pull
 
 # The Windows Cutter that the Admin site offers for download (best effort: needs python3 and the internet; the first build downloads about 70 MB, later ones are quick).

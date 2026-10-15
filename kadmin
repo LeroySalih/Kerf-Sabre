@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 # Run kerf-admin inside the running server container (VPS, Cloudflare Tunnel setup). Example:   ./kadmin list-tokens
+# Files on this machine are not visible inside the container, so feed them in:   ./kadmin add-pupils --class 9B-DT - < ids.csv > pins.csv
 # (A shell alias set inside a script would vanish when it ends, so this is a command instead.)
 cd "$(dirname "$0")/server/deploy" || exit 1
-exec docker compose -f docker-compose.cloudflare.yml exec kerf kerf-admin "$@"
+T=""; [ -t 0 ] || T="-T"   # input is piped or redirected: no terminal for docker
+exec docker compose -f docker-compose.cloudflare.yml exec $T kerf kerf-admin "$@"

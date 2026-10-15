@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     t.add_argument("--label", help="a note for you, e.g. 'Y9 set 2' (not a name)")
     t.add_argument("--school", default=DEFAULT_SCHOOL, help=f"the school it belongs to (default {DEFAULT_SCHOOL}; ignored for the platform role)")
     ip = sub.add_parser("import-pupils", help="issue a token for every pupil ID in a CSV (column 'pupilId' or one ID per line)")
-    ip.add_argument("csv")
+    ip.add_argument("csv", help="CSV path, or '-' for standard input")
     ip.add_argument("--out", help="write pupilId,token to this file instead of the screen")
     cc = sub.add_parser("create-class", help="create a class that pupils log in through")
     cc.add_argument("--code", required=True, help="e.g. 9B-DT")
@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     cc.add_argument("--school", default=DEFAULT_SCHOOL)
     ap_ = sub.add_parser("add-pupils", help="add pupil IDs to a class and print a PIN for each new one")
     ap_.add_argument("--class", dest="class_code", required=True)
-    ap_.add_argument("file", help="CSV with a 'pupilId' column, or one ID per line")
+    ap_.add_argument("file", help="CSV with a 'pupilId' column, or one ID per line; '-' reads them from standard input")
     ap_.add_argument("--out", help="write pupilId,pin to this file instead of the screen")
     rp = sub.add_parser("reset-pin", help="new PIN for a pupil (clears a lockout and ends their sessions)")
     rp.add_argument("--id", required=True)
@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "create-token":
         print(issue_token(db, args.role, args.id, args.label, args.school))
     elif args.cmd == "import-pupils":
-        with open(args.csv, newline="") as f:
+        with (sys.stdin if args.csv == "-" else open(args.csv, newline="")) as f:
             rows = [r for r in csv.reader(f) if r]
         if rows and rows[0] and rows[0][0].strip().lower() in ("pupilid", "pupil_id", "id"):
             rows = rows[1:]
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             c = sc.create_class(s_, args.code, args.label, school=args.school)
             print(f"Created class {c.code}.")
     elif args.cmd == "add-pupils":
-        with open(args.file, newline="") as f:
+        with (sys.stdin if args.file == "-" else open(args.file, newline="")) as f:
             rows = [r for r in csv.reader(f) if r]
         if rows and rows[0] and rows[0][0].strip().lower() in ("pupilid", "pupil_id", "id"):
             rows = rows[1:]

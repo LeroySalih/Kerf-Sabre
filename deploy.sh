@@ -19,5 +19,7 @@ Manage tokens with ./kadmin (it runs kerf-admin inside the server container):
   ./kadmin create-token --role teacher --id T001
   ./kadmin create-token --role station --id station-1
   ./kadmin revoke --id T001
-  ./kadmin create-class --code 9B-DT ; ./kadmin add-pupils --class 9B-DT ids.csv --out pins.csv
+  ./kadmin create-class --code 9B-DT
+  ./kadmin add-pupils --class 9B-DT - < ids.csv > pins.csv   # one random PIN per new pupil, shown once; hand out, then delete pins.csv
+  ./kadmin reset-pin --id P001
 MSG

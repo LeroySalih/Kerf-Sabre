@@ -216,7 +216,8 @@ const cutter: Page = {
               el("h2", {}, "2. On the laser PC"),
               ...bullets(real
                 ? ["Unzip it anywhere (the Desktop is fine) and close LightBurn, LaserGRBL and any Creality software: only one program can use the laser's USB port.", "Open a Command Prompt in the unzipped <kerf-cutter> folder."]
-                : ["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>"]),
+                : ["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>",
+                   "Mac with Python from python.org: if the command stops with CERTIFICATE_VERIFY_FAILED, run this once (or double-click it in Finder; use your Python's version number), then run the command again: </Applications/Python\\ 3.12/Install\\ Certificates.command>"]),
               el("h2", {}, "3. Run this command"),
               ...(real ? [row("Windows (first time; it is remembered after that, so later you just double-click run_cutter.bat)", cutterCommand(url.value, p.token, p.station, "real"))]
                        : [row("Windows", cutterCommand(url.value, p.token, p.station, "pretend", "windows")), row("Mac or Linux", cutterCommand(url.value, p.token, p.station, "pretend", "unix"))]),

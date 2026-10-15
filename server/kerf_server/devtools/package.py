@@ -19,6 +19,11 @@ picture and "cuts" jobs) but it never touches a laser or a serial port. The real
 
 What you need: Python 3.11 or newer, then once:   python -m pip install websockets
 
+Mac with Python from python.org: if it stops with "CERTIFICATE_VERIFY_FAILED ... unable to get local issuer
+certificate", run this once (or double-click it in Finder; use your Python's version number), then try again:
+
+   /Applications/Python\\ 3.12/Install\\ Certificates.command
+
 Run it with the command the Admin site gave you (Cutter software page). It looks like:
 
    python fake_cutter.py --url http://SERVER:8000 --token ks_... --station station-1

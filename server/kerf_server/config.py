@@ -33,6 +33,8 @@ class Settings:
     editor_dist: Path | None = None
     #: The portable Cutter zip made by cutter/build_cutter.py. None: use cutter/build/kerf-cutter.zip next to the repo's shared/ folder if it exists.
     cutter_zip: Path | None = None
+    #: A pupil's new send replaces their earlier files that are still waiting (they go to the back of the queue). Turn off to let a pupil have several waiting at once.
+    replace_old_sends: bool = True
     #: Submitted jobs wait for a teacher. Turn off to send them straight to the station queue.
     require_approval: bool = True
     #: A job must have been framed on a station (laser off) shortly before it can run there.
@@ -68,6 +70,7 @@ class Settings:
             database_url=e.get("KERF_DATABASE_URL", ""),
             editor_dist=Path(dist) if dist else None,
             cutter_zip=Path(e["KERF_CUTTER_ZIP"]) if e.get("KERF_CUTTER_ZIP") else None,
+            replace_old_sends=_bool(e.get("KERF_REPLACE_OLD_SENDS"), True),
             require_approval=_bool(e.get("KERF_REQUIRE_APPROVAL"), True),
             require_frame=_bool(e.get("KERF_REQUIRE_FRAME"), True),
             frame_valid_minutes=int(e.get("KERF_FRAME_VALID_MINUTES", "30")),

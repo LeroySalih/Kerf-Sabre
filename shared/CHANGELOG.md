@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.16 - a new send replaces the old one (additive)
+- Behaviour: when a pupil submits a file, their earlier files that are still waiting (`submitted` or `approved`) are cancelled with the reason "Replaced by a newer file (job-...)". The new file takes a new ticket at the back of the queue: the old place is not kept. A file already on a laser (`assigned`, `running`) and drafts are never touched, and a send that fails validation cancels nothing. An activity hand-in that pointed at the replaced file now points at the new one.
+- `openapi.yaml`: `JobReceipt.replaced` lists what a submit replaced (`id`, `ticket`).
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.16`.
+
 ## 0.2.15 - design size in the queue (additive)
 - `job.schema.json`: `estimate.extentMm` (`widthMm`, `heightMm`): the size of the design itself (the box around everything cut or scored, before kerf compensation), not the bed.
 - `openapi.yaml`: `QueueEntry.extentMm` carries it, so a teacher approving a file, and a station's queue, can see how big each design is. The Server fills it in when it checks a job; older jobs have none.

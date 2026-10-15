@@ -165,11 +165,17 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   async function send(): Promise<void> {
     const why = ctx.blocker();
     if (why) { ctx.notify(why); return; }
+    // a new send replaces the pupil's earlier file that is still waiting, and goes to the back of the queue
+    let waiting: JobSummary[] = [];
+    try { waiting = (await listJobs(session!)).filter((j) => ["submitted", "approved"].includes(j.status)); } catch { /* the warning is only a courtesy */ }
+    const replaceNote = waiting.length
+      ? ` You already have ${waiting.length === 1 ? "a file" : `${waiting.length} files`} waiting${waiting.some((j) => j.ticket != null) ? ` (ticket ${waiting.map((j) => j.ticket).filter((t) => t != null).join(", ")})` : ""}: sending this replaces ${waiting.length === 1 ? "it" : "them"}, and you go to the back of the queue.`
+      : "";
     const v = await openDialog("Send for cutting", [
       { key: "place", label: "Place it", type: "select", value: origin.mode === "absolute" ? "bed" : "head", options: [{ value: "head", label: "Where the laser head is at the station" }, { value: "bed", label: "Exactly where it is on this bed" }],
         hint: "At the station you line your material up with the laser head, so 'where the laser head is' is usually what you want." },
       { key: "anchor", label: "Laser head goes at its", type: "select", value: origin.mode === "current-position" ? origin.anchor : "bottom-left", options: ANCHORS.map((a) => ({ value: a.value, label: a.label })) },
-    ], { ok: "Send", intro: `You are ${session!.id}. Your design is saved, then cleaned and checked on the server. A teacher sees it in the queue, approves it and chooses which laser cuts it.` });
+    ], { ok: "Send", intro: `You are ${session!.id}. Your design is saved, then cleaned and checked on the server. A teacher sees it in the queue, approves it and chooses which laser cuts it.${replaceNote}` });
     if (!v) return;
     origin = v.place === "bed" ? { mode: "absolute" } : { mode: "current-position", anchor: v.anchor as Anchor };
     const button = $("srv-send") as HTMLButtonElement;
@@ -183,6 +189,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       const facts = [`File number ${r.id}`, STATUS_TEXT[r.status] ?? r.status];
       const q = queueText(r.ticket, r.position);
       if (q) facts.push(q);
+      if (r.replaced?.length) facts.push(`This replaced your earlier file${r.replaced.length > 1 ? "s" : ""} ${r.replaced.map((x) => x.id + (x.ticket != null ? ` (ticket ${x.ticket})` : "")).join(", ")}, so you start from the back of the queue.`);
       if (est?.extentMm) facts.push(`Design size ${sizeText(est.extentMm)}`);
       if (est?.durationS) facts.push(`About ${describeDuration(est.durationS)} to cut`);
       if (est?.percentUsed !== undefined) facts.push(`Uses ${est.percentUsed}% of the sheet${est.costSar != null ? `, about ${est.costSar} SAR` : ""}`);

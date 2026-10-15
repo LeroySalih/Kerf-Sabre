@@ -4,7 +4,7 @@ import pytest
 
 from .conftest import auth
 from .fakecutter import FakeCutter
-from .test_jobs import post, rect_obj
+from .test_jobs import job_doc, post, rect_obj
 from .test_stations import approved_job, st, wait_for
 
 API = "/api/v1"
@@ -202,3 +202,85 @@ class TestServedInOrder:
             client.post(f"{API}/jobs/{a}/frame", json={"station": "station-1"}, headers=sh)
             assert client.post(f"{API}/jobs/{a}/assign", json={"station": "station-1", "materialConfirmed": True}, headers=sh).status_code == 409
         assert [e["jobId"] for e in queue(client, tokens["teacher"])] == [a, b]
+
+
+class TestANewSendReplacesTheOldOne:
+    """The same pupil sending again replaces their earlier waiting files, and goes to the back of the queue."""
+
+    @pytest.fixture()
+    def app(self, tmp_path):
+        """Overrides the shared fixture for these tests only: send-replaces-old is ON here (the production default; the other tests turn it off)."""
+        from kerf_server.app import create_app
+        from kerf_server.config import Settings
+
+        return create_app(Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=True))
+
+    def send(self, client, tokens, who="pupil", approve=True, **kw):
+        jid = post(client, tokens, who=who, **kw).json()["id"]
+        r = client.post(f"{API}/jobs/{jid}/submit", headers=auth(tokens[who]))
+        assert r.status_code == 200, r.text
+        if approve and r.json()["status"] == "submitted":
+            assert client.post(f"{API}/jobs/{jid}/approve", headers=auth(tokens["teacher"])).status_code == 200
+        return jid, r.json()
+
+    def job(self, client, tokens, jid):
+        return client.get(f"{API}/jobs/{jid}", headers=auth(tokens["teacher"])).json()
+
+    def test_the_old_waiting_file_is_cancelled_and_the_new_one_is_at_the_back(self, client, tokens):
+        first, _ = self.send(client, tokens)
+        other, _ = self.send(client, tokens, who="pupil2", pupil="P002")
+        second, receipt = self.send(client, tokens, approve=False)
+        assert receipt["replaced"] == [{"id": first, "ticket": 1}]
+        old = self.job(client, tokens, first)
+        assert old["status"] == "cancelled" and second in old["statusReason"]
+        client.post(f"{API}/jobs/{second}/approve", headers=auth(tokens["teacher"]))
+        q = client.get(f"{API}/queue", headers=auth(tokens["teacher"])).json()
+        assert [(e["jobId"], e["position"]) for e in q] == [(other, 1), (second, 2)]  # the old place (1st) is gone: behind the other pupil now
+        assert next(e for e in q if e["jobId"] == second)["ticket"] == 3
+        events = client.get(f"{API}/jobs/{first}/events", headers=auth(tokens["teacher"])).json()
+        assert any(e["kind"] == "replaced" and e["detail"] == {"by": second} for e in events)
+
+    def test_only_this_pupils_waiting_files_are_replaced(self, client, tokens):
+        mine, _ = self.send(client, tokens)
+        theirs, _ = self.send(client, tokens, who="pupil2", pupil="P002")
+        draft = post(client, tokens).json()["id"]  # a draft is not a send
+        new, receipt = self.send(client, tokens)
+        assert [r["id"] for r in receipt["replaced"]] == [mine]
+        assert self.job(client, tokens, theirs)["status"] == "approved" and self.job(client, tokens, draft)["status"] == "draft"
+
+    def test_a_file_already_on_a_laser_is_never_replaced(self, client, tokens):
+        first, _ = self.send(client, tokens)
+        sh = auth(tokens["station"])
+        with FakeCutter(client, tokens["station"], auto_finish=None):  # the job stays "running": the cutter never says it is finished
+            wait_for(lambda: st(client, tokens)["online"])
+            assert client.post(f"{API}/jobs/{first}/frame", json={"station": "station-1"}, headers=sh).status_code == 202
+            a = client.post(f"{API}/jobs/{first}/assign", json={"station": "station-1", "materialConfirmed": True, "allowUntested": True}, headers=auth(tokens["teacher"]))
+            assert a.status_code == 200, a.text
+            second, receipt = self.send(client, tokens)
+            assert receipt.get("replaced") in (None, [])
+            assert self.job(client, tokens, first)["status"] in ("assigned", "running")
+
+    def test_a_send_that_fails_validation_cancels_nothing(self, client, tokens):
+        first, _ = self.send(client, tokens)
+        too_big = post(client, tokens, objects=[rect_obj("a", 20, 20, 900, 30)]).json()["id"]  # wider than any bed
+        assert client.post(f"{API}/jobs/{too_big}/submit", headers=auth(tokens["pupil"])).status_code >= 400
+        assert self.job(client, tokens, first)["status"] == "approved"
+
+    def test_with_approval_switched_off_the_new_file_replaces_too(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from kerf_server.app import create_app
+        from kerf_server.config import Settings
+        from kerf_server.security import issue_token
+
+        app = create_app(Settings.from_env(data_dir=tmp_path / "d", require_approval=False))
+        with TestClient(app) as c:
+            tk = {"pupil": issue_token(app.state.db, "pupil", "P001"), "teacher": issue_token(app.state.db, "teacher", "T001")}
+            ids = []
+            for _ in range(2):
+                jid = c.post(f"{API}/jobs", json=job_doc(), headers=auth(tk["pupil"])).json()["id"]
+                r = c.post(f"{API}/jobs/{jid}/submit", headers=auth(tk["pupil"])).json()
+                assert r["status"] == "approved"
+                ids.append(jid)
+            assert c.get(f"{API}/jobs/{ids[0]}", headers=auth(tk["teacher"])).json()["status"] == "cancelled"
+            assert [e["jobId"] for e in c.get(f"{API}/queue", headers=auth(tk["teacher"])).json()] == [ids[1]]

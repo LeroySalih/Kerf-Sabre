@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.15
+  version: 0.2.16
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -1179,6 +1179,14 @@ components:
         estimate: {type: object}
         ticket: {type: [integer, "null"], description: "Ticket number, once the job is approved and in the queue"}
         position: {type: [integer, "null"], description: "Place in the queue now (1 = next), while waiting"}
+        replaced:
+          type: array
+          description: "On submit: this pupil's earlier files that were still waiting and were replaced by this one (cancelled; the new file goes to the back of the queue)"
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              ticket: {type: [integer, "null"]}
     QueueEntry:
       type: object
       required: [ticket, jobId, status, position, own]

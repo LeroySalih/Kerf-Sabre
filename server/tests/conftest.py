@@ -12,7 +12,8 @@ from kerf_server.security import issue_token
 
 @pytest.fixture()
 def settings(tmp_path: Path) -> Settings:
-    return Settings.from_env(data_dir=tmp_path / "data")
+    # most tests put several files from the same pupil in the queue; TestANewSendReplacesTheOldOne turns replacement on
+    return Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False)
 
 
 @pytest.fixture()

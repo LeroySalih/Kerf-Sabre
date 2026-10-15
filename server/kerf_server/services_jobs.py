@@ -14,9 +14,9 @@ from .config import Settings
 from .db import iso, utcnow
 from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
-from .models import GcodeRow, Job, JobEvent
+from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.15"
+SCHEMA_VERSION = "0.2.16"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -60,6 +60,9 @@ def receipt(j: Job, position: int | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {"id": j.id, "status": j.status, "warnings": j.warnings or [], "ticket": j.ticket, "position": position}
     if j.estimate:
         out["estimate"] = j.estimate
+    replaced = getattr(j, "_replaced", None)
+    if replaced:
+        out["replaced"] = replaced
     return out
 
 
@@ -208,6 +211,8 @@ def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
     if p is not None:  # pick up preset edits made since the draft was saved
         j.preset_version = p["version"]
     validate_for_cutting(s, j, cfg)
+    if cfg.replace_old_sends:
+        j._replaced = replace_waiting(s, who, j)  # type: ignore[attr-defined]
     j.status = "submitted"
     event(s, j.id, who.id, "submitted")
     # Approval is skipped when switched off for the whole server, or for this pupil's class (e.g. Year 10 yes, Year 7 no).
@@ -219,6 +224,23 @@ def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
         queue.enqueue(s, j)
         event(s, j.id, "server", "approved", {"auto": True})
     return j
+
+
+def replace_waiting(s: Session, who, new: Job) -> list[dict[str, Any]]:
+    """A new send replaces this pupil's earlier sends that are still waiting (submitted or approved). The new file goes to the back of the queue:
+    the pupil does not keep the old place. A file already on a laser (assigned, running) is never touched, and neither are drafts. Returns what was
+    replaced, for the receipt. Called only once the new file has passed validation, so a failed send never cancels anything."""
+    old_jobs = list(s.scalars(select(Job).where(Job.pupil_id == new.pupil_id, Job.school_id == new.school_id, Job.id != new.id,
+                                                Job.status.in_(("submitted", "approved")), Job.source != "calibration")))
+    replaced = []
+    for old in old_jobs:
+        replaced.append({"id": old.id, "ticket": old.ticket})
+        old.status, old.status_reason = "cancelled", f"Replaced by a newer file ({new.id})"
+        old.framed_station = old.framed_at = old.framed_bounds = None
+        event(s, old.id, who.id, "replaced", {"by": new.id})
+        for w in s.scalars(select(ActivityWork).where(ActivityWork.job_id == old.id)):  # the hand-in follows the newest file
+            w.job_id = new.id
+    return replaced
 
 
 def approve(s: Session, who, j: Job, station: str | None) -> Job:

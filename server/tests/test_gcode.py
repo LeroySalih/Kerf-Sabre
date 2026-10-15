@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from kerf_server.gcode import GcodeError, generate
+from kerf_server.gcode import GcodeError, generate, probe_head
 from kerf_server.gcode.motion import parse
 
 SHARED = Path(__file__).resolve().parents[2] / "shared"
@@ -220,3 +220,16 @@ def test_dashed_circle_keeps_arcs_and_tabs_stay_off():
     t = rect_obj("t", 10, 10, 40, 20, tabs=[{"atLengthMm": 20, "widthMm": 10}], settings={"dashMm": 5})
     on, off = _on_off(generate(job([t]), preset(), MACHINE).text)
     assert on + off == pytest.approx(120, abs=0.01) and off >= 60 + 1  # tab span adds off length where it overlaps a dash
+
+
+def star_obj(cx, cy, big, small):
+    pts = [[cx + (big if i % 2 == 0 else small) * math.cos(math.pi / 2 + i * math.pi / 5),
+            cy + (big if i % 2 == 0 else small) * math.sin(math.pi / 2 + i * math.pi / 5)] for i in range(10)]
+    return {"id": "s", "layer": "cut", "closed": True, "start": pts[0],
+            "segments": [{"type": "line", "to": p} for p in pts[1:] + [pts[0]]], "matrix": [1, 0, 0, 1, 0, 0]}
+
+
+def test_sharp_design_passes_the_fit_check_before_a_laser_is_chosen():
+    # Placed exactly on the bed corner, kerf at a star's tips would poke past the edge; the pre-check leaves a margin.
+    j = job([star_obj(70, 185, 60, 25)], {"mode": "current-position", "anchor": "bottom-left"})
+    generate(j, preset(kerf=0.2), MACHINE, head=probe_head(j))

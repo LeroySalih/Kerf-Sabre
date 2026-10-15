@@ -49,14 +49,19 @@ def _bbox(paths: list[BedPath]) -> tuple[float, float, float, float]:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+# The check puts the design a little in from the bed corner: exactly on it, kerf compensation at sharp corners (a star's
+# tips) pokes a fraction of a millimetre past the edge and a design that really fits would be refused.
+PROBE_MARGIN_MM = 2.0
+
+
 def probe_head(job: dict[str, Any]) -> Point:
-    """A head position that puts a current-position job's bounding box at the bed origin. For checking fit before a station is chosen."""
+    """A head position that puts a current-position job's bounding box just inside the bed origin. For checking fit before a station is chosen."""
     origin = job["origin"]
     if origin["mode"] != "current-position":
         return (0.0, 0.0)
     x0, y0, x1, y1 = _bbox([to_bed(o) for o in job["objects"]])
     fx, fy = ANCHORS[origin["anchor"]]
-    return ((x1 - x0) * fx, (y1 - y0) * fy)
+    return (PROBE_MARGIN_MM + (x1 - x0) * fx, PROBE_MARGIN_MM + (y1 - y0) * fy)
 
 
 def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any], *, head: Point | None = None) -> Result:

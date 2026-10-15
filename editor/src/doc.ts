@@ -52,16 +52,33 @@ export interface DocState {
   nextDim: number;
 }
 
+/** A whole document with its undo history, parked while another file tab is showing. */
+export interface DocSnapshot { state: DocState; undo: DocState[]; redo: DocState[] }
+
+export const emptyState = (): DocState => ({ objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1, materialId: DEFAULT_MATERIAL_ID, dimensions: [], nextDim: 1 });
+
 export class Doc {
-  state: DocState = { objects: [], nextId: 1, nextGroup: 1, texts: {}, nextText: 1, materialId: DEFAULT_MATERIAL_ID, dimensions: [], nextDim: 1 };
+  state: DocState = emptyState();
   private undoStack: DocState[] = [];
   private redoStack: DocState[] = [];
 
   /** Forget everything, including undo history (a new pupil must not be able to undo into the last one's design). */
   reset(): void {
-    this.state = new Doc().state;
+    this.state = emptyState();
     this.undoStack = [];
     this.redoStack = [];
+  }
+
+  /** The document and its undo history, handed over as they are (the Doc should be given something else straight after). */
+  snapshot(): DocSnapshot {
+    return { state: this.state, undo: this.undoStack, redo: this.redoStack };
+  }
+
+  /** Show a parked document, with its own undo history. */
+  restore(s: DocSnapshot): void {
+    this.state = s.state;
+    this.undoStack = s.undo;
+    this.redoStack = s.redo;
   }
 
   /** Call before a mutation to make it undoable. */

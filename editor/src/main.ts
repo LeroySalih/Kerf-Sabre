@@ -31,7 +31,9 @@ import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, no
 import { loadMachineProfiles } from "./machine";
 import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
 import type { BedSize } from "./bounds";
-import { initServerUi } from "./serverui";
+import { initServerUi, type ServerUiHandle } from "./serverui";
+import { Workspace, blankMeta, matches as matchesMeta, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
+import { emptyState } from "./doc";
 import { cleanPoints, splinePath } from "./spline";
 import { offsetPath, type OffsetCorner, type OffsetSide } from "./offset";
 import { boxDimensions, dimGeometry, dimLabel, linearAxis, pickDimension, radialFromPath, type DimAxis, type Dimension, type LinearDim } from "./dimensions";
@@ -48,6 +50,10 @@ const BED_KEY = "kerf.bed";
 let bed: BedSize = (() => { try { return parseBed(localStorage.getItem(BED_KEY)); } catch { return null; } })() ?? commonBed(laserBeds);
 let view: View;
 const doc = new Doc();
+// File tabs (see workspace.ts): the tab showing lives in `doc`; the others are parked snapshots.
+const ws = new Workspace();
+let server: ServerUiHandle | null = null;
+let tabTimer: ReturnType<typeof setTimeout> | undefined;
 let selected = new Set<number>();
 type Tool = "select" | "nodes" | "tab" | "rect" | "rrect" | "ellipse" | "circle" | "line" | "polygon" | "star" | "pen" | "trim" | "radius" | "measure" | "text" | "dim" | "dimr" | "spline" | "offset";
 let tool: Tool = "select";
@@ -563,6 +569,7 @@ function draw(): void {
   drawRulers();
   paper.view.update();
   updatePositionFields();
+  scheduleTabs();
 }
 
 function fit(): void {
@@ -1707,14 +1714,154 @@ function roundAllSelected(): void {
 }
 on("round-all", roundAllSelected);
 
-const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog(), "box-net": () => void boxNetDialog(), "finger-box": () => void fingerBoxDialog() };
+const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog(), "box-net": () => void boxNetDialog(), "finger-box": () => void fingerBoxDialog(), "tab-dup": () => duplicateTab(), "tab-move": () => void moveToTabDialog() };
 on("act-linear", () => menuActions["linear-repeat"]!());
 on("act-circular", () => menuActions["circular-array"]!());
 toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
   b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
 );
 
-initServerUi({
+// ---- file tabs ----
+const tabsEl = document.getElementById("filetabs") as HTMLElement;
+const metaNow = () => server?.getFile() ?? blankMeta();
+const tabDirty = (t: FileTab): boolean => (t.id === ws.activeId ? server?.isDirty() ?? false : tabIsDirty(t.snap.state, t.meta.savedKey));
+
+/** Put what is on the page into the active tab, ready to show another one. */
+function parkActive(): void {
+  const t = ws.active();
+  t.snap = doc.snapshot();
+  t.meta = metaNow();
+}
+
+function showTab(t: FileTab): void {
+  ws.activeId = t.id;
+  doc.restore(t.snap);
+  server?.setFile(t.meta);
+  selected = new Set(); selectedDims = new Set(); dimDraft = null; nodeSel = null; nodeDrag = null; measureLine = null;
+  fillMaterials(); refreshLayerUI(); fit();
+  renderTabs(true);
+}
+
+function switchTab(id: number): void {
+  if (id === ws.activeId) return;
+  const t = ws.get(id);
+  if (!t) return;
+  parkActive();
+  showTab(t);
+}
+
+/** An empty file in a new tab, on the same material. */
+function newTab(): void {
+  parkActive();
+  syncNames();
+  showTab(ws.add("Untitled", { state: { ...emptyState(), materialId: doc.state.materialId }, undo: [], redo: [] }, blankMeta()));
+}
+
+/** Tabs named after their file on the server, unless the pupil renamed them. */
+function syncNames(): void {
+  for (const t of ws.tabs) {
+    if (t.renamed) continue;
+    const m = t.id === ws.activeId ? metaNow() : t.meta;
+    const want = m.jobId ?? (m.sourceId ? `Copy of ${m.sourceId}` : null);
+    if (want && t.name !== want) t.name = uniqueName(ws.tabs.filter((x) => x !== t).map((x) => x.name), want);
+  }
+}
+
+function closeTab(id: number): void {
+  const t = ws.get(id);
+  if (!t) return;
+  if (tabDirty(t) && !confirm(`"${t.name}" has changes that are not saved. Close it anyway?`)) return;
+  const next = ws.close(id);
+  if (next) showTab(next); else renderTabs(true);
+}
+
+function duplicateTab(): void {
+  parkActive();
+  syncNames();
+  const t = ws.duplicate(ws.active());
+  showTab(t);
+  notify(`Made "${t.name}": a second file with the same shapes. Save it to keep it.`);
+}
+
+async function renameTab(id: number): Promise<void> {
+  const t = ws.get(id);
+  if (!t) return;
+  const v = await openDialog("Rename tab", [{ key: "name", label: "Name", type: "text", value: t.name }], { intro: "Only for telling your tabs apart: it is not saved with the file.", ok: "Rename" });
+  const name = v ? String(v.name).trim().slice(0, 40) : "";
+  if (!name) return;
+  t.name = uniqueName(ws.tabs.filter((x) => x !== t).map((x) => x.name), name);
+  t.renamed = true;
+  renderTabs(true);
+}
+
+/** Move or copy the selected shapes into a new tab or another open tab, e.g. to split a big import into separate files. */
+async function moveToTabDialog(): Promise<void> {
+  const ids = doc.expand(selected);
+  if (!ids.length) { notify("Select the shapes to move first."); return; }
+  syncNames();
+  const others = ws.tabs.filter((t) => t.id !== ws.activeId);
+  const v = await openDialog("Move shapes to another tab", [
+    { key: "target", label: "To", type: "select", value: "new", options: [{ value: "new", label: "A new tab" }, ...others.map((t) => ({ value: String(t.id), label: t.name }))] },
+    { key: "mode", label: "Shapes", type: "select", value: "move", options: [{ value: "move", label: "Move (remove from this tab)" }, { value: "copy", label: "Copy (keep them here too)" }] },
+  ], { intro: `${ids.length} shape${ids.length === 1 ? "" : "s"} selected. They keep their place on the bed, layer and groups. Each tab is its own file, so this is a way to split one big drawing into files of their own.`, ok: "Go" });
+  if (!v) return;
+  const data = doc.copyOut(ids);
+  let name: string;
+  if (v.target === "new") {
+    name = ws.add(`${ws.active().name} part`, snapshotOf(data, doc.state.materialId), blankMeta()).name;
+  } else {
+    const t = ws.get(Number(v.target));
+    if (!t || t.id === ws.activeId) return;
+    pasteIntoSnapshot(t.snap, data);
+    name = t.name;
+  }
+  if (v.mode === "move") edit(() => { doc.remove(ids); selected.clear(); });
+  renderTabs(true);
+  notify(`${v.mode === "move" ? "Moved" : "Copied"} ${ids.length} shape${ids.length === 1 ? "" : "s"} to "${name}".`);
+}
+
+let tabsSig = "";
+/** Redraw the tab strip (skipped when nothing about it changed, unless forced). */
+function renderTabs(force = false): void {
+  syncNames();
+  const sig = JSON.stringify([ws.activeId, ws.tabs.map((t) => [t.id, t.name, tabDirty(t)])]);
+  if (!force && sig === tabsSig) return;
+  tabsSig = sig;
+  const strip = document.getElementById("filetabs-list")!;
+  strip.replaceChildren(...ws.tabs.map((t) => {
+    const item = document.createElement("div");
+    item.className = "ftab" + (t.id === ws.activeId ? " on" : "");
+    item.setAttribute("role", "tab");
+    item.setAttribute("aria-selected", String(t.id === ws.activeId));
+    const main = document.createElement("button");
+    main.className = "ftab-name";
+    main.textContent = t.name + (tabDirty(t) ? " \u25cf" : "");
+    main.title = `${t.name}${(t.id === ws.activeId ? metaNow() : t.meta).jobId ? ` (saved as ${(t.id === ws.activeId ? metaNow() : t.meta).jobId})` : ""}. Double-click to rename.`;
+    main.addEventListener("click", () => switchTab(t.id));
+    main.addEventListener("dblclick", () => void renameTab(t.id));
+    const x = document.createElement("button");
+    x.className = "ftab-x";
+    x.textContent = "\u00d7";
+    x.title = `Close ${t.name}`;
+    x.setAttribute("aria-label", `Close ${t.name}`);
+    x.addEventListener("click", () => closeTab(t.id));
+    item.append(main, x);
+    return item;
+  }));
+  const here = ws.tabs.length;
+  (document.getElementById("tab-dup") as HTMLButtonElement).disabled = false;
+  document.getElementById("tab-count")!.textContent = here > 1 ? `${here} files open` : "";
+}
+
+function scheduleTabs(): void {
+  if (tabTimer !== undefined) return;
+  tabTimer = setTimeout(() => { tabTimer = undefined; renderTabs(); }, 300);
+}
+
+on("tab-new", () => newTab());
+on("tab-dup", () => duplicateTab());
+on("tab-move", () => void moveToTabDialog());
+server = initServerUi({
   objects: () => doc.state.objects,
   dimensions: () => doc.state.dimensions,
   materialId: () => doc.state.materialId,
@@ -1741,7 +1888,23 @@ initServerUi({
     refreshLayerUI();
     fit();
   },
-  clear: () => { doc.reset(); selected = new Set(); selectedDims = new Set(); dimDraft = null; fillMaterials(); refreshLayerUI(); draw(); },
+  clear: () => { doc.reset(); ws.reset(); selected = new Set(); selectedDims = new Set(); dimDraft = null; server?.setFile(blankMeta()); fillMaterials(); refreshLayerUI(); draw(); renderTabs(true); },
+  tabs: {
+    show: (ref: FileRef) => {
+      const live = metaNow(); // the tab showing now keeps its live state in the panel
+      const hit = ws.tabs.find((x) => matchesMeta(x.id === ws.activeId ? live : x.meta, ref));
+      if (!hit) return false;
+      switchTab(hit.id);
+      return true;
+    },
+    openBlank: () => {
+      const m = metaNow();
+      if (!doc.state.objects.length && !m.jobId && !m.sourceId && !m.openedLocal) return; // an empty, unsaved tab is reused
+      newTab();
+    },
+    othersDirty: () => ws.tabs.some((t) => t.id !== ws.activeId && tabDirty(t)),
+    changed: () => scheduleTabs(),
+  },
   presetsChanged: () => { fillMaterials(); refreshLayerUI(); },
 });
 

@@ -75,6 +75,9 @@
             <button role="menuitem" data-menu="kerf-test">Kerf test&hellip;</button>
             <hr />
             <button role="menuitem" data-menu="box-net" title="Flat pattern for a five-sided box, with fold scores and optional glue flanges">Box net&hellip;</button>
+            <button role="menuitem" data-menu="tab-dup" title="A second, separate file with the same shapes">Duplicate tab</button>
+            <button role="menuitem" data-menu="tab-move" title="Move or copy the selected shapes to another tab">Move selection to tab&hellip;</button>
+            <hr />
             <button role="menuitem" data-menu="finger-box" title="Panels for a box with interlocking finger joints, open-topped or with a lid">Finger-joint box&hellip;</button>
           </div>
         </div>
@@ -82,6 +85,14 @@
         <span id="warn" role="status"></span>
         <label title="The size of the sheet you are designing on. A teacher chooses which laser cuts it">Bed <select id="bed"></select></label>
       </header>
+
+      <div id="filetabs" aria-label="Open files">
+        <div id="filetabs-list" role="tablist"></div>
+        <button id="tab-new" title="A new empty file in its own tab">+ New</button>
+        <button id="tab-dup" title="Duplicate this tab: a second, separate file with the same shapes">Duplicate tab</button>
+        <button id="tab-move" title="Move (or copy) the selected shapes to a new tab or another open tab, to split a big drawing into separate files">Move shapes to tab&hellip;</button>
+        <span id="tab-count" class="hint"></span>
+      </div>
 
       <nav id="palette" aria-label="Tools">
         <button data-tool="select" class="on" title="Select. Drag a box: left to right must enclose a shape, right to left may touch it" aria-label="Select"><svg class="ico"><use href="#i-select"/></svg></button>

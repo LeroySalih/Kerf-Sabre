@@ -8,6 +8,7 @@ import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
+import { DEFAULT_ORIGIN, fileKey, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
 import {
   STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, loginWithPin, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
@@ -24,30 +25,50 @@ export interface ServerUiContext {
   presetsChanged: () => void;
   /** Replace the page with these shapes (and material), as one undoable step. */
   load: (shapes: LoadedShape[], materialId: string | null, dimensions: Dimension[]) => void;
-  /** Empty the page (used on sign-out so the next pupil never sees it). */
+  /** Empty the page (used on sign-out so the next pupil never sees it). Closes every file tab too. */
   clear: () => void;
+  /** The file tabs. Opening a file that is already open in a tab switches to it instead of opening it twice. */
+  tabs: {
+    /** Switch to the tab holding this file, if there is one. */
+    show: (ref: FileRef) => boolean;
+    /** Get a blank page for a file about to be loaded: a new tab, or the current one if it is empty and unsaved. */
+    openBlank: () => void;
+    /** Is there anything unsaved in a tab that is not showing? */
+    othersDirty: () => boolean;
+    /** The server panel's view of the file changed (saved, sent, opened): refresh the tab labels. */
+    changed: () => void;
+  };
 }
 
 const $ = (id: string) => document.getElementById(id)!;
 const problem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-const DEFAULT_ORIGIN: Origin = { mode: "current-position", anchor: "bottom-left" };
 
-export function initServerUi(ctx: ServerUiContext): { session: () => Session | null } {
+export interface ServerUiHandle {
+  session: () => Session | null;
+  /** The file in the tab that is showing, and a way to give the panel another tab's file. */
+  getFile: () => FileMeta;
+  setFile: (m: FileMeta) => void;
+  isDirty: () => boolean;
+}
+
+export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   let session = loadSession();
   let offline = false;
   /** The draft on the server that Save updates; null until the first Save (or after the design was sent). */
   let jobId: string | null = null;
   let origin: Origin = DEFAULT_ORIGIN;
   let savedKey = "";
+  /** The sent file the page was opened as a copy of (so opening it again finds this tab). */
+  let sourceId: string | null = null;
   /** The class activity new saves are for (null: none). */
   let activity: { id: string; title: string } | null = null;
   const defaultBase = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
 
   /** A fingerprint of the page, to tell whether there is anything unsaved. */
-  const key = () => JSON.stringify([ctx.materialId(), ctx.objects().map((o) => [o.path, o.matrix, o.layer, o.tabs, o.settings]), ctx.dimensions()]);
+  const key = () => fileKey({ materialId: ctx.materialId(), objects: ctx.objects(), dimensions: ctx.dimensions() });
   const dirty = () => ctx.objects().length > 0 && key() !== savedKey;
   const markSaved = () => { savedKey = key(); };
-  const confirmDiscard = (what: string) => !dirty() || confirm(`You have changes that are not saved. ${what} anyway?`);
+  const confirmDiscard = (what: string) => !(dirty() || ctx.tabs.othersDirty()) || confirm(`You have changes that are not saved. ${what} anyway?`);
 
   const render = () => {
     const signedIn = !!session;
@@ -61,6 +82,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     act.replaceChildren(...(activity ? [document.createTextNode(`Activity: ${activity.title} `), Object.assign(document.createElement("button"), { textContent: "×", title: "Stop saving files for this activity", onclick: () => { activity = null; render(); } })] : []));
     ($("srv-admin") as HTMLAnchorElement).hidden = session?.role !== "teacher" && session?.role !== "admin";
     $("srv-file").textContent = signedIn && jobId ? `Editing ${jobId}` : "";
+    ctx.tabs.changed();
   };
 
   const dropSession = () => {
@@ -203,10 +225,13 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   }
 
   function open(j: JobSummary, close: () => void): void {
-    if (!confirmDiscard("Open this file")) return;
+    if (ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) { ctx.notify(`${j.id} is already open: switched to its tab.`); close(); return; } // never two versions of one file
+    ctx.tabs.openBlank();
     ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
     origin = j.origin ?? DEFAULT_ORIGIN;
     jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
+    sourceId = j.status === "draft" ? null : j.id;
+    openedLocal = null;
     activity = null;
     if (j.activityId && session?.role === "pupil") {
       activity = { id: j.activityId, title: "…" };
@@ -253,9 +278,10 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
             row.append(b);
           };
           lbtn("Open", () => {
-            if (!confirmDiscard("Open this file")) return;
+            if (ctx.tabs.show({ localId: d.id })) { ctx.notify("That copy is already open: switched to its tab."); dlg.close(); return; }
+            ctx.tabs.openBlank();
             ctx.load(fromJobObjects(d.job.objects), d.job.preset.id, (d.job.dimensions ?? []).map(fromJobDimension));
-            jobId = null; origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; openedLocal = d.id;
+            jobId = null; sourceId = null; origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; openedLocal = d.id;
             markSaved(); render(); ctx.notify("Opened the copy kept on this computer. Save to put it on the server."); dlg.close();
           });
           lbtn("Save to the server", async () => {
@@ -331,14 +357,18 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
     void openMyActivities(s, {
       current: () => activity?.id ?? null,
       work: async (a: MyActivity) => {
-        if (activity?.id !== a.id && !confirmDiscard("Switch activity")) return;
         activity = { id: a.id, title: a.title };
         if (a.jobId) {
           const j = await getJob(s, a.jobId);
-          ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
-          origin = j.origin ?? DEFAULT_ORIGIN;
-          jobId = j.status === "draft" ? j.id : null;
-          markSaved();
+          if (!ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) {
+            ctx.tabs.openBlank();
+            ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
+            origin = j.origin ?? DEFAULT_ORIGIN;
+            jobId = j.status === "draft" ? j.id : null;
+            sourceId = j.status === "draft" ? null : j.id;
+            openedLocal = null;
+            markSaved();
+          }
         } else if (!ctx.objects().length) {
           ctx.load([], a.presetId ?? null, []);
           jobId = null;
@@ -356,7 +386,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
   });
   setMode(false);
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
-  window.addEventListener("beforeunload", (ev) => { if (session && dirty()) ev.preventDefault(); });
+  window.addEventListener("beforeunload", (ev) => { if (session && (dirty() || ctx.tabs.othersDirty())) ev.preventDefault(); });
   render();
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
@@ -364,5 +394,10 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       if (e instanceof ServerError && e.status === 401) dropSession();
     });
   }
-  return { session: () => session };
+  return {
+    session: () => session,
+    getFile: () => ({ jobId, origin, savedKey, openedLocal, sourceId }),
+    setFile: (m) => { jobId = m.jobId; origin = m.origin; savedKey = m.savedKey; openedLocal = m.openedLocal; sourceId = m.sourceId; render(); },
+    isDirty: dirty,
+  };
 }

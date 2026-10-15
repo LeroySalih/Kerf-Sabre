@@ -24,8 +24,8 @@ body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var
   display: grid;
   height: 100%;
   grid-template-columns: var(--palette-w) minmax(0, 1fr) var(--side-w);
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  grid-template-areas: "top top top" "palette stage side" "layers layers layers" "foot foot foot";
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "top top top" "ftabs ftabs ftabs" "palette stage side" "layers layers layers" "foot foot foot";
 }
 
 button, select, input { font: inherit; color: inherit; }
@@ -239,3 +239,15 @@ td.cell.st-todo { background: #f9fafb; }
 .al-choices { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
 .al-choices button { height: auto; min-height: 44px; padding: 10px 14px; text-align: left; font-size: 15px; white-space: normal; }
 .kdialog .kgrid label span.hint { display: block; margin-top: 2px; }
+
+/* ---- file tabs ---- */
+#filetabs { grid-area: ftabs; display: flex; align-items: center; gap: 6px; padding: 4px 10px 0; background: var(--panel-2, #e5e7eb); border-bottom: 1px solid var(--line); min-width: 0; }
+#filetabs-list { display: flex; align-items: flex-end; gap: 2px; min-width: 0; overflow-x: auto; flex: 0 1 auto; }
+#filetabs > button { margin-bottom: 4px; }
+#tab-count { margin-left: auto; margin-bottom: 4px; }
+.ftab { display: inline-flex; align-items: center; background: var(--panel); border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0; white-space: nowrap; }
+.ftab.on { background: #fff; font-weight: 600; box-shadow: inset 0 3px 0 var(--accent, #f97316); }
+.ftab button { border: none; background: transparent; padding: 6px 6px; cursor: pointer; font: inherit; color: inherit; }
+.ftab .ftab-name { padding-left: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.ftab .ftab-x { padding: 6px 8px; color: var(--muted); }
+.ftab .ftab-x:hover { color: #dc2626; }

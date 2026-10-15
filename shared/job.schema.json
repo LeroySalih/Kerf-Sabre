@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.14"
+      "const": "0.2.15"
     },
     "id": {
       "type": "string",
@@ -128,6 +128,16 @@
         "partAreaMm2": {
           "type": "number",
           "minimum": 0
+        },
+        "extentMm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["widthMm", "heightMm"],
+          "properties": {
+            "widthMm": { "type": "number", "minimum": 0 },
+            "heightMm": { "type": "number", "minimum": 0 }
+          },
+          "description": "Size of the design (the box around everything that is cut or scored), not the bed. Before kerf compensation."
         },
         "sheetAreaUsedMm2": {
           "type": "number",

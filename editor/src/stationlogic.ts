@@ -2,7 +2,7 @@
 import { flatten, transformPath } from "./geometry";
 import type { JobObject } from "./job";
 import { fromJobObjects } from "./job";
-import type { QueueEntry, StationInfo } from "./server";
+import type { Extent, QueueEntry, StationInfo } from "./server";
 
 export interface StepState {
   /** What the pupil should do next, in a sentence. */
@@ -55,3 +55,10 @@ export const sizeOf = (objects: JobObject[]): { w: number; h: number } | null =>
   if (!pts.length) return null;
   return { w: Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x)), h: Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y)) };
 };
+
+/** "120 x 85 mm" for a design's size, or "" when the server has not measured it. */
+export function sizeText(e: Extent | null | undefined): string {
+  if (!e || !(e.widthMm >= 0) || !(e.heightMm >= 0)) return "";
+  const r = (n: number) => String(Math.round(n * 10) / 10);
+  return `${r(e.widthMm)} \u00d7 ${r(e.heightMm)} mm`;
+}

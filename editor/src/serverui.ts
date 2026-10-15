@@ -1,6 +1,7 @@
 // Pupil sign-in and their files on the server: Save, Send for cutting, My files (open / send / cancel).
 // All talking is in server.ts; the job document is built and read back in job.ts.
 import { infoDialog, openDialog } from "./dialog";
+import { sizeText } from "./stationlogic";
 import { openMyActivities } from "./activitiesui";
 import { closeStation, openStation } from "./stationui";
 import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts";
@@ -168,7 +169,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       { key: "place", label: "Place it", type: "select", value: origin.mode === "absolute" ? "bed" : "head", options: [{ value: "head", label: "Where the laser head is at the station" }, { value: "bed", label: "Exactly where it is on this bed" }],
         hint: "At the station you line your material up with the laser head, so 'where the laser head is' is usually what you want." },
       { key: "anchor", label: "Laser head goes at its", type: "select", value: origin.mode === "current-position" ? origin.anchor : "bottom-left", options: ANCHORS.map((a) => ({ value: a.value, label: a.label })) },
-    ], { ok: "Send", intro: `You are ${session!.id}. Your design is saved, then cleaned and checked on the server.` });
+    ], { ok: "Send", intro: `You are ${session!.id}. Your design is saved, then cleaned and checked on the server. A teacher sees it in the queue, approves it and chooses which laser cuts it.` });
     if (!v) return;
     origin = v.place === "bed" ? { mode: "absolute" } : { mode: "current-position", anchor: v.anchor as Anchor };
     const button = $("srv-send") as HTMLButtonElement;
@@ -182,6 +183,7 @@ export function initServerUi(ctx: ServerUiContext): { session: () => Session | n
       const facts = [`File number ${r.id}`, STATUS_TEXT[r.status] ?? r.status];
       const q = queueText(r.ticket, r.position);
       if (q) facts.push(q);
+      if (est?.extentMm) facts.push(`Design size ${sizeText(est.extentMm)}`);
       if (est?.durationS) facts.push(`About ${describeDuration(est.durationS)} to cut`);
       if (est?.percentUsed !== undefined) facts.push(`Uses ${est.percentUsed}% of the sheet${est.costSar != null ? `, about ${est.costSar} SAR` : ""}`);
       await infoDialog("Sent", [...facts, ...(r.warnings ?? []).map((w) => `Note: ${w}`)]);

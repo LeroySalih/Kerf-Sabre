@@ -111,6 +111,7 @@ def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | 
         "pupilId": j.pupil_id if show else None, "own": own, "presetId": j.preset_id, "station": j.station,
         "framedOn": j.framed_station if j.status == "approved" else None,
         "estimatedS": (j.estimate or {}).get("durationS"), "aheadS": ahead_s, "approvedAt": iso(j.approved_at),
+        "extentMm": (j.estimate or {}).get("extentMm"),
     }
     if nxt is not None:
         e["next"] = j.id == nxt.id

@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.15 - design size in the queue (additive)
+- `job.schema.json`: `estimate.extentMm` (`widthMm`, `heightMm`): the size of the design itself (the box around everything cut or scored, before kerf compensation), not the bed.
+- `openapi.yaml`: `QueueEntry.extentMm` carries it, so a teacher approving a file, and a station's queue, can see how big each design is. The Server fills it in when it checks a job; older jobs have none.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.15`.
+
 ## 0.2.14 - stations on the Admin site (additive)
 - `openapi.yaml`: `DELETE /machines/{machineId}` (school admin) removes a laser, its camera calibration and its station tokens; refused with `station_online` while its Cutter is connected and `station_in_use` while files are queued for it or being cut. `PUT /machines/{machineId}` with a new ID already added a laser; that is now documented. `GET /cutter/kinds` (school admin) says which Cutter downloads are on offer. `POST /cutter/package` takes `kind` (`practice` default, or `real`; `real` answers `409 cutter_not_built` until it has been built) and answers `kind: practice|real`.
 - **Rename (Admin site only):** the response `kind` value `pretend` is now `practice`, and the practice download is `kerf-cutter-practice.zip`.

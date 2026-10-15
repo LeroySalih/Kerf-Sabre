@@ -173,6 +173,11 @@ def test_estimate_scales_with_speed():
     assert generate(job([rect_obj("a", 10, 10, 100, 100)]), preset(), MACHINE).estimate["partAreaMm2"] == pytest.approx(10000, abs=1)
 
 
+def test_estimate_reports_the_design_size_not_the_bed():
+    r = generate(job([rect_obj("a", 10, 10, 100, 60)]), preset(), MACHINE)
+    assert r.estimate["extentMm"] == {"widthMm": 100.0, "heightMm": 60.0}
+
+
 def test_scaled_matrix_flattens_arcs():
     o = circle_obj("c", 0, 0, 10)
     o["matrix"] = [2, 0, 0, 1, 50, 50]  # ellipse

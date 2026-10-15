@@ -28,6 +28,14 @@ class TestOrder:
         assert [(e["ticket"], e["jobId"], e["position"]) for e in q] == [(1, b, 1), (2, a, 2)]
         assert client.get(f"{API}/jobs/{a}", headers=auth(tokens["pupil"])).json()["ticket"] == 2
 
+    def test_queue_entries_carry_the_design_size(self, client, tokens):
+        post(client, tokens, status="submitted")
+        a = approved_job(client, tokens)
+        e = queue(client, tokens["teacher"])[0]
+        assert e["jobId"] == a
+        ext = e["extentMm"]
+        assert ext["widthMm"] > 0 and ext["heightMm"] > 0
+
     def test_unapproved_jobs_are_not_in_the_queue(self, client, tokens):
         post(client, tokens, status="submitted")
         post(client, tokens)

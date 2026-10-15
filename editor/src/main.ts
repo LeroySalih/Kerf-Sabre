@@ -28,7 +28,9 @@ import { filletAll, filletVertices, nearestCorner, roundedRectangle, type Corner
 import { mountIcons } from "./icons";
 import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs";
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
-import { loadMachineProfiles, type MachineProfile } from "./machine";
+import { loadMachineProfiles } from "./machine";
+import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
+import type { BedSize } from "./bounds";
 import { initServerUi } from "./serverui";
 import { cleanPoints, splinePath } from "./spline";
 import { offsetPath, type OffsetCorner, type OffsetSide } from "./offset";
@@ -36,11 +38,14 @@ import { boxDimensions, dimGeometry, dimLabel, linearAxis, pickDimension, radial
 
 mountIcons();
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-const select = document.getElementById("machine") as HTMLSelectElement;
+const bedSelect = document.getElementById("bed") as HTMLSelectElement;
 const cursorEl = document.getElementById("cursor") as HTMLElement;
 
 const profiles = loadMachineProfiles();
-let machine: MachineProfile = profiles[0]!;
+const laserBeds = profiles.map((p) => p.bed);
+const BED_KEY = "kerf.bed";
+/** The bed the pupil designs on. Which laser cuts the file is decided later by a teacher. */
+let bed: BedSize = (() => { try { return parseBed(localStorage.getItem(BED_KEY)); } catch { return null; } })() ?? commonBed(laserBeds);
 let view: View;
 const doc = new Doc();
 let selected = new Set<number>();
@@ -453,17 +458,17 @@ function drawRulers(): void {
 
 function draw(): void {
   paper.project.clear();
-  const { widthMm, heightMm } = machine.bed;
+  const { widthMm, heightMm } = bed;
   const a = bedToScreen(view, { x: 0, y: 0 });
   const b = bedToScreen(view, { x: widthMm, y: heightMm });
-  const bed = new paper.Path.Rectangle(new paper.Point(a.x, b.y), new paper.Point(b.x, a.y));
-  bed.strokeColor = new paper.Color("#1f2937");
-  bed.fillColor = new paper.Color("#f3f4f6");
+  const bedRect = new paper.Path.Rectangle(new paper.Point(a.x, b.y), new paper.Point(b.x, a.y));
+  bedRect.strokeColor = new paper.Color("#1f2937");
+  bedRect.fillColor = new paper.Color("#f3f4f6");
   new paper.Path.Circle(new paper.Point(a.x, a.y), 4).fillColor = new paper.Color("#f97316");
 
   if (showGrid) drawGrid(widthMm, heightMm);
 
-  const oob = new Set(outOfBounds(doc.state.objects, machine.bed));
+  const oob = new Set(outOfBounds(doc.state.objects, bed));
   document.getElementById("warn")!.textContent = oob.size
     ? `${oob.size} object${oob.size > 1 ? "s" : ""} outside the bed: fix before submitting`
     : "";
@@ -561,7 +566,7 @@ function draw(): void {
 }
 
 function fit(): void {
-  view = fitView(machine.bed.widthMm, machine.bed.heightMm, paper.view.viewSize.width, paper.view.viewSize.height);
+  view = fitView(bed.widthMm, bed.heightMm, paper.view.viewSize.width, paper.view.viewSize.height);
   draw();
 }
 
@@ -572,10 +577,34 @@ function edit(fn: () => void): void {
 }
 
 // ---- toolbar ----
-for (const p of profiles) select.add(new Option(p.name, p.id));
-select.addEventListener("change", () => {
-  machine = profiles.find((p) => p.id === select.value) ?? machine;
+// Bed size: every laser's size is offered, with a size that fits all of them first, and a custom size.
+const bedOptions = bedChoices(laserBeds);
+function refreshBedSelect(): void {
+  const match = bedOptions.find((c) => Math.abs(c.bed.widthMm - bed.widthMm) < 0.01 && Math.abs(c.bed.heightMm - bed.heightMm) < 0.01);
+  bedSelect.replaceChildren(...bedOptions.map((c) => new Option(c.label, c.value)), new Option(match ? "Custom size\u2026" : `Custom (${bedText(bed)})\u2026`, "custom"));
+  bedSelect.value = match ? match.value : "custom";
+}
+function setBed(next: BedSize): void {
+  bed = next;
+  try { localStorage.setItem(BED_KEY, JSON.stringify(next)); } catch { /* remembering is a convenience */ }
+  refreshBedSelect();
   fit();
+}
+async function customBedDialog(): Promise<void> {
+  const v = await openDialog("Bed size", [
+    { key: "widthMm", label: "Width (mm)", type: "number", value: bed.widthMm, min: 50, max: 2000 },
+    { key: "heightMm", label: "Height (mm)", type: "number", value: bed.heightMm, min: 50, max: 2000 },
+  ], { intro: "The size of the sheet you are designing on. Your teacher chooses which laser cuts it, so keep it within what the school's lasers can cut.", ok: "Set size" });
+  refreshBedSelect();
+  if (!v) return;
+  const error = validateBed(Number(v.widthMm), Number(v.heightMm));
+  if (error) { notify(error); return; }
+  setBed({ widthMm: Number(v.widthMm), heightMm: Number(v.heightMm) });
+}
+refreshBedSelect();
+bedSelect.addEventListener("change", () => {
+  const choice = bedOptions.find((c) => c.value === bedSelect.value);
+  if (choice) setBed(choice.bed); else void customBedDialog();
 });
 function setTool(next: Tool): void {
   tool = next;
@@ -649,12 +678,12 @@ function refreshLayerUI(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-layer]").forEach((b) => b.classList.toggle("on", b.dataset.layer === shown));
 
   const preset = findPreset(doc.state.materialId) ?? presetStore[0]!;
-  const r = resolvePreset(preset, machine.id);
+  const r = resolvePreset(preset, null);
   const op = (o: Operation) => `${o.powerPct}% \u00b7 ${o.speedMmPerS} mm/s \u00b7 \u00d7${o.passes} \u00b7 air ${o.airAssist ? "on" : "off"}`;
   document.getElementById("mat-kerf")!.textContent = `Kerf ${r.kerfMm} mm`;
   document.getElementById("mat-cut")!.innerHTML = `<i class="sw cut"></i>Cut ${op(r.cut)}`;
   document.getElementById("mat-score")!.innerHTML = `<i class="sw score"></i>Score ${op(r.score)}`;
-  document.getElementById("mat-flag")!.textContent = r.untested ? `Not tested on ${machine.name}: a teacher must run a test grid first` : "";
+  document.getElementById("mat-flag")!.textContent = "";
   (document.getElementById("material") as HTMLSelectElement).value = preset.id;
 
   const count = (l: LayerType) => doc.state.objects.filter((o) => o.layer === l).length;
@@ -784,7 +813,7 @@ function alignSelected(kind: AlignKind): void {
   const toBed = (document.getElementById("align-to") as HTMLSelectElement).value === "bed";
   if (!units.length) return;
   if (!toBed && units.length < 2) { notify("Select two or more shapes, or choose Align to bed."); return; }
-  const ref = toBed ? { minX: 0, minY: 0, maxX: machine.bed.widthMm, maxY: machine.bed.heightMm } : unionBounds(units);
+  const ref = toBed ? { minX: 0, minY: 0, maxX: bed.widthMm, maxY: bed.heightMm } : unionBounds(units);
   moveUnits(units, alignDeltas(units, kind, ref));
 }
 
@@ -1350,7 +1379,7 @@ function insertGenerated(items: TestItem[], what: string): void {
 }
 
 async function materialTestGridDialog(): Promise<void> {
-  const r = resolvePreset(findPreset(doc.state.materialId) ?? presetStore[0]!, machine.id);
+  const r = resolvePreset(findPreset(doc.state.materialId) ?? presetStore[0]!, null);
   const v = await openDialog("Material test grid", [
     { key: "mode", label: "Cells", type: "select", value: "cut", options: [{ value: "cut", label: "Cut through" }, { value: "score", label: "Score only" }] },
     { key: "cellMm", label: "Cell size (mm)", type: "number", value: 10, min: 2 },
@@ -1690,7 +1719,8 @@ initServerUi({
   materialId: () => doc.state.materialId,
   blocker: () =>
     !doc.state.objects.length ? "Draw or import something first."
-    : !canSubmit(doc.state.objects, machine.bed) ? "Part of the design is off the bed (shown red). Move it onto the bed first."
+    : !canSubmit(doc.state.objects, bed) ? "Part of the design is off the bed (shown red). Move it onto the bed first."
+    : !fitsAnyLaser(doc.state.objects, laserBeds, outOfBounds) ? "This design is bigger than any of the school's lasers can cut. Make it smaller."
     : null,
   notify,
   load: (shapes, materialId, dims) => {

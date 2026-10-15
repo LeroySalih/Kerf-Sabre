@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.14
+  version: 0.2.15
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -1196,6 +1196,10 @@ components:
         estimatedS: {type: [number, "null"]}
         aheadS: {type: [number, "null"], description: Estimated cutting time of the jobs ahead in the queue}
         approvedAt: {type: [string, "null"], format: date-time}
+        extentMm:
+          type: [object, "null"]
+          description: Size of the design (the box around everything cut or scored), not the bed, so a teacher can pick a laser it fits
+          properties: {widthMm: {type: number}, heightMm: {type: number}}
     DxfJobReceipt:
       allOf:
         - {$ref: "#/components/schemas/JobReceipt"}

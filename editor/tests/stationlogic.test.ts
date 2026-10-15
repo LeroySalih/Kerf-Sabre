@@ -63,3 +63,16 @@ describe("outline preview", () => {
     expect(previewSvg(job())).not.toMatch(/<script|onerror/i);
   });
 });
+
+import { sizeText } from "../src/stationlogic";
+describe("sizeText", () => {
+  it("shows the design's size in mm", () => {
+    expect(sizeText({ widthMm: 120, heightMm: 85.04 })).toBe("120 × 85 mm");
+    expect(sizeText({ widthMm: 99.96, heightMm: 12.3 })).toBe("100 × 12.3 mm");
+  });
+  it("is empty when the server has not measured it", () => {
+    expect(sizeText(null)).toBe("");
+    expect(sizeText(undefined)).toBe("");
+    expect(sizeText({ widthMm: NaN, heightMm: 5 })).toBe("");
+  });
+});

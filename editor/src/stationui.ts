@@ -11,7 +11,7 @@ import {
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
-import { formatClock, previewSvg, progressPct, sizeOf, stepState } from "./stationlogic";
+import { formatClock, previewSvg, progressPct, sizeOf, sizeText, stepState } from "./stationlogic";
 
 const POLL_MS = 2000;
 
@@ -244,12 +244,19 @@ function queueList(queue: QueueEntry[], stationId: string): Node {
     const label = e.status === "approved" ? (e.position === 1 ? "Next" : `${e.position}`) : e.status === "running" ? "Cutting" : "Starting";
     const where = e.station && e.station !== stationId ? ` (for ${e.station})` : e.framedOn && e.framedOn !== stationId ? ` (being set up on ${e.framedOn})` : "";
     ul.append(h("li", { class: e.next ? "next" : e.status !== "approved" ? "active" : "" },
-      h("b", {}, `#${e.ticket}`), ` ${e.pupilId ?? ""} `, h("span", { class: "tag" }, label), where, e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : ""));
+      h("b", {}, `#${e.ticket}`), ` ${e.pupilId ?? ""} `, h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : ""));
   }
   return ul;
 }
 
 // ---------------------------------------------------------------- Teacher: approvals and queue
+
+/** " · 120 x 85 mm": the design's size (not the bed), from the server, or worked out from the file's shapes for older files. */
+function waitingSize(j: JobSummary): string {
+  const ext = j.estimate?.extentMm ?? (() => { const s = sizeOf(j.objects); return s ? { widthMm: s.w, heightMm: s.h } : null; })();
+  const t = sizeText(ext);
+  return t ? ` · ${t}` : "";
+}
 
 /** The teacher's approvals and queue as a panel on a page (the admin site). Refreshes itself; returns a function that stops it. */
 export function mountQueue(container: HTMLElement, session: Session): () => void {
@@ -272,9 +279,9 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     const approvals = h("div", {}, h("h3", {}, `Waiting for approval (${waiting.length})`));
     if (!waiting.length) approvals.append(h("p", { class: "hint" }, "Nothing to approve. (Classes set to skip approval send files straight to the queue.)"));
     for (const j of waiting) {
-      const sel = h("select", { title: "Optionally cut on one laser only" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
+      const sel = h("select", { title: "Pupils do not choose a laser: pick the one that should cut this file, or leave it on Any laser for the next free one" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
       approvals.append(h("div", { class: "filerow" },
-        h("span", {}, `${j.id} · ${j.pupilId ?? ""} · ${j.preset.id}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
+        h("span", {}, `${j.id} · ${j.pupilId ?? ""} · ${j.preset.id}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
         button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
         button("Reject…", () => void (async () => {
           const v = await openDialog("Reject this file", [{ key: "reason", label: "Reason (the pupil sees this)", type: "text", value: "" }], { ok: "Reject" });
@@ -284,7 +291,7 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     const q = h("div", {}, h("h3", {}, `Queue (${queue.length})`));
     if (!queue.length) q.append(h("p", { class: "hint" }, "The queue is empty."));
     for (const e of queue) {
-      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${e.pupilId ?? ""} · ${e.presetId ?? ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
+      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${e.pupilId ?? ""} · ${e.presetId ?? ""}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
       if (e.status === "approved" && e.jobId) {
         const id = e.jobId;
         row.append(

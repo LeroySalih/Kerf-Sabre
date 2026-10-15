@@ -4,8 +4,11 @@ import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
 export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string }
-export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number } }
+export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
+/** The size of the design itself (not the bed), in mm. */
+export interface Extent { widthMm: number; heightMm: number }
 export interface QueueEntry {
+  extentMm?: Extent | null;
   ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; presetId?: string;
   station?: string | null; framedOn?: string | null; next?: boolean; estimatedS?: number | null; aheadS?: number | null; approvedAt?: string | null;
 }

@@ -77,6 +77,7 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
         paths = [_translate(p, dx, dy) for p in paths]
         polys = assign_depths(paths)
 
+    ex0, ey0, ex1, ey1 = _bbox(paths)  # the design itself, before kerf compensation
     paths, w = compensate(paths, polys, rp.kerf_mm)
     warnings += w
     if not paths:
@@ -111,6 +112,7 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
     est = {
         "durationS": round(duration(prog.motions), 1),
         "partAreaMm2": round(max(part_area, 0.0), 1),
+        "extentMm": {"widthMm": round(ex1 - ex0, 1), "heightMm": round(ey1 - ey0, 1)},
         "sheetAreaUsedMm2": round(used, 1),
         "percentUsed": round(min(100.0, 100 * used / sheet_area), 1) if sheet_area else 0.0,
         "costSar": round(float(sheet["costSar"]) * used / sheet_area, 2) if sheet.get("costSar") is not None and sheet_area else None,

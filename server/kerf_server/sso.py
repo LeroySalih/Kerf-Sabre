@@ -107,13 +107,13 @@ class Verifier:
             header = jwt.get_unverified_header(token)
         except jwt.PyJWTError:
             raise bad from None
-        if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
+        if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str) or str(header.get("typ", "")).lower() not in ("at+jwt", "application/at+jwt"):
             raise bad
         key = self._key_for(header["kid"])
         try:
             claims = jwt.decode(
                 token, key, algorithms=["RS256"], audience=self.cfg.sso_audience, issuer=self.cfg.sso_issuer,
-                leeway=LEEWAY_S, options={"require": ["exp", "iss", "aud", "sub"]},
+                leeway=LEEWAY_S, options={"require": ["exp", "nbf", "iss", "aud", "sub"]},
             )
         except jwt.PyJWTError as e:
             log.info("sign-in token refused: %s", type(e).__name__)

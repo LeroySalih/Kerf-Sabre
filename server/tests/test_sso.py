@@ -29,13 +29,13 @@ def make_key(kid: str):
 KEY, JWK = make_key("k1")
 
 
-def mint(sub="u-123", roles=("pupil",), key=KEY, kid="k1", alg="RS256", **over):
+def mint(sub="u-123", roles=("pupil",), key=KEY, kid="k1", alg="RS256", typ="at+jwt", **over):
     now = int(time.time())
     claims = {"iss": ISS, "sub": sub, "aud": "kerf-sabre", "iat": now, "nbf": now, "exp": now + 900, "jti": "x",
               "client_id": "kerf-editor", "scope": "", "roles": list(roles)}
     claims.update(over)
     claims = {k: v for k, v in claims.items() if v is not None}
-    return jwt.encode(claims, key, algorithm=alg, headers={"kid": kid, "typ": "at+jwt"})
+    return jwt.encode(claims, key, algorithm=alg, headers={"kid": kid, "typ": typ})
 
 
 class Jwks:
@@ -127,6 +127,12 @@ class TestRefusals:
                                       {"sub": "has space"}, {"sub": "x" * 65}, {"sub": ""}])
     def test_wrong_claims(self, sso_client, over):
         assert me(sso_client, mint(**over)).status_code == 401
+
+    def test_an_id_token_is_not_an_access_token(self, sso_client):
+        assert me(sso_client, mint(typ="JWT")).status_code == 401
+
+    def test_nbf_is_required(self, sso_client):
+        assert me(sso_client, mint(nbf=None)).status_code == 401
 
     def test_no_known_role_is_403(self, sso_client):
         assert me(sso_client, mint(roles=["parent"])).status_code == 403

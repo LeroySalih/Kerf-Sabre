@@ -1,6 +1,6 @@
 # Sign in to Kerf Sabre with planner-004 (DINO)
 
-Status: **Part B implemented** (Server `sso.py`, Editor/Admin `sso.ts`, shared 0.2.18); **Part A** is being implemented in planner-004. Unanswered B7 questions were given the defaults noted there: DINO user ID is the Kerf ID; a teacher still adds pupils to classes (using their DINO IDs); `technician` counts as `teacher`; DINO `admin` is a Kerf school admin.
+Status: **Part B implemented** (Server `sso.py`, Editor/Admin `sso.ts`, shared 0.2.18); **Part A** is implemented in planner-004 (commit `03f0081`, docs in its `docs/KERF-SSO.md`); a token signed by its real `jwt.ts` was verified by `sso.py`. Unanswered B7 questions were given the defaults noted there: DINO user ID is the Kerf ID; a teacher still adds pupils to classes (using their DINO IDs); `technician` counts as `teacher`; DINO `admin` is a Kerf school admin.
 
 Goal: a person who signs in to planner-004 (DINO) is signed in to the Kerf Editor, the Kerf Admin site and the Kerf Server queues, and those apps learn **who they are and what role they hold** from a signed JWT, with no extra Kerf password.
 

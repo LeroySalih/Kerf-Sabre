@@ -317,3 +317,45 @@ class TestTechnicianPicksAndRejects:
         from .test_jobs import post
         jid = post(sso_client, tk, status="submitted").json()["id"]
         assert sso_client.post(f"/api/v1/jobs/{jid}/reject", json={"reason": "x"}, headers=auth(mint(roles=["technician"]))).status_code == 409
+
+
+class TestDisplayNames:
+    """Option 2: a name taken from DINO's userinfo at sign-in is shown to staff of the same school, and only to them."""
+
+    @pytest.fixture()
+    def named(self, sso_app, jwks):
+        sso_app.state.sso.fetch_userinfo = lambda url, token: {"sub": "u-123", "roles": ["pupil"], "name": "Sam Jones", "email": "sam@example.org"}
+        return sso_app
+
+    def test_the_profile_call_stores_the_name_not_the_email(self, named):
+        with TestClient(named) as c:
+            r = c.post("/api/v1/auth/profile", headers=auth(mint(roles=["pupil"])))
+            assert r.json() == {"name": "Sam Jones"}
+            from kerf_server.models import Person
+            with named.state.db.session() as s:
+                rows = s.query(Person).all()
+                assert [(p.person_id, p.display_name) for p in rows] == [("u-123", "Sam Jones")]
+
+    def test_staff_see_the_name_in_the_queue_but_other_pupils_do_not(self, named):
+        from .test_stations import approved_job
+        with TestClient(named) as c:
+            tk = {"pupil": issue_token(named.state.db, "pupil", "P001"), "teacher": issue_token(named.state.db, "teacher", "T001")}
+            named.state.sso.fetch_userinfo = lambda url, token: {"name": "Sam Jones"}
+            assert c.post("/api/v1/auth/profile", headers=auth(mint(sub="P001", roles=["pupil"]))).json() == {"name": "Sam Jones"}
+            approved_job(c, tk)
+            staff = c.get("/api/v1/queue", headers=auth(mint(roles=["technician"]))).json()
+            assert staff[0]["pupilName"] == "Sam Jones"
+            other = issue_token(named.state.db, "pupil", "P999")
+            assert "pupilName" not in c.get("/api/v1/queue", headers=auth(other)).json()[0]
+
+    @pytest.mark.parametrize("bad", [None, "", "sam@example.org", 5, "   "])
+    def test_a_missing_or_email_like_name_is_ignored(self, sso_app, bad):
+        sso_app.state.sso.fetch_userinfo = lambda url, token: {"name": bad}
+        with TestClient(sso_app) as c:
+            assert c.post("/api/v1/auth/profile", headers=auth(mint(roles=["pupil"]))).json() == {"name": None}
+
+    def test_dino_being_down_is_not_an_error(self, sso_app):
+        def boom(url, token): raise OSError("down")
+        sso_app.state.sso.fetch_userinfo = boom
+        with TestClient(sso_app) as c:
+            assert c.post("/api/v1/auth/profile", headers=auth(mint(roles=["pupil"]))).status_code == 200

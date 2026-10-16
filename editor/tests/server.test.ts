@@ -64,3 +64,13 @@ describe("cutterCommand", () => {
     expect(c).toContain('--station "s\\"1"');
   });
 });
+
+import { pupilLabel } from "../src/server";
+describe("pupilLabel", () => {
+  it("shows the name DINO gave when there is one, else the ID", () => {
+    expect(pupilLabel("50304a54-2c10", "Sam Jones")).toBe("Sam Jones");
+    expect(pupilLabel("P0001", null)).toBe("P0001");
+    expect(pupilLabel("P0001", "  ")).toBe("P0001");
+    expect(pupilLabel(undefined, undefined)).toBe("");
+  });
+});

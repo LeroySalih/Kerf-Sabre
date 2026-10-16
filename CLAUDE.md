@@ -16,7 +16,7 @@ Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal scho
 - G-code is absolute: start with `G21` and `G90`. **Never use `G92`.**
 - Machine facts (bed size, origin, `$30`, air assist) come from machine profiles, never hard-coded.
 - Layer types: Score and Cut (no engraving), plus **Ignore** (dark grey): drawn and saved with the file but never cut, scored, exported to DXF/SVG, sized, fit-checked or put in G-code (`gcode.cuttable` on the server).
-- Logs carry pupil IDs, never names. No camera frames in logs.
+- Logs carry pupil IDs, never names. No camera frames in logs. Exception decided by the school (shared 0.2.21): a DINO display *name* (never an email) is stored in `people` and shown to staff of the same school only; it is never logged, never shown to other pupils, and deleted when the pupil is removed.
 - Each session edits only its own folder. `shared/` changes need a version bump and a `shared/CHANGELOG.md` entry; only one feature at a time may change `shared/`.
 - Production Cutter work is gated on spike results from all four station PCs. Editor and Server work is not.
 - Station PCs: no installers, no Claude Code. Deploy as portable folders (embeddable Python + bundled deps + `.bat`). Everything must be debuggable from logs.

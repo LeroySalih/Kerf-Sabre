@@ -16,7 +16,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.20"
+SCHEMA_VERSION = "0.2.21"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 

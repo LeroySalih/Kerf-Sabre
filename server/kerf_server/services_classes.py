@@ -16,6 +16,7 @@ from .config import Settings
 from .db import as_utc, utcnow
 from .errors import ApiError
 from .models import DEFAULT_SCHOOL, Pupil, SchoolClass, Token
+from . import services_people as people
 from .security import hash_token, new_token
 
 PIN_DIGITS = 5
@@ -151,6 +152,7 @@ def remove_pupil(s: Session, code: str, pupil_id: str, teacher_id: str | None = 
     if row is None or row.class_code != norm_code(code) or ((teacher_id is not None or school is not None) and not _may_manage(s, row, teacher_id, school)):
         raise ApiError(404, "not_found", "That pupil is not in this class.")
     revoke_sessions(s, pupil_id)
+    people.forget(s, pupil_id)
     s.delete(row)
 
 
@@ -158,8 +160,10 @@ def class_pupils(s: Session, code: str, teacher_id: str | None = None, school: s
     cls = get_class(s, code, teacher_id, school)
     now = utcnow()
     rows = s.scalars(select(Pupil).where(Pupil.class_code == cls.code).order_by(Pupil.pupil_id))
+    rows = list(rows)
+    named = people.names(s, cls.school_id, (p.pupil_id for p in rows))
     return [{"pupilId": p.pupil_id, "lastLogin": p.last_login and as_utc(p.last_login).isoformat().replace("+00:00", "Z"),
-             "locked": bool(p.locked_until and as_utc(p.locked_until) > now)} for p in rows]
+             "locked": bool(p.locked_until and as_utc(p.locked_until) > now), **({"displayName": named[p.pupil_id]} if p.pupil_id in named else {})} for p in rows]
 
 
 # ---------------------------------------------------------------- login

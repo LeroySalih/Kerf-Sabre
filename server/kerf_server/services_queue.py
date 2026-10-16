@@ -17,6 +17,7 @@ from .db import as_utc, iso, utcnow
 from .errors import ApiError
 from .models import Counter, Job
 from . import services_jobs as sj
+from . import services_people as people
 
 ACTIVE = ("assigned", "running")
 
@@ -93,17 +94,18 @@ def entries(s: Session, who, cfg: Settings, station_id: str | None = None) -> li
     active = list(s.scalars(select(Job).where(Job.status.in_(ACTIVE), Job.school_id == who.school).order_by(Job.ticket)))
     wait = waiting(s, who.school)
     nxt = head(s, who.school, station_id, cfg) if station_id else None
+    named = people.names(s, who.school, (j.pupil_id for j in [*active, *wait])) if who.staff() else {}
     out: list[dict[str, Any]] = []
     ahead_s = 0.0
     for j in active:
-        out.append(_entry(j, who, None, None, nxt))
+        out.append(_entry(j, who, None, None, nxt, named))
     for pos, j in enumerate(wait, 1):
-        out.append(_entry(j, who, pos, ahead_s, nxt))
+        out.append(_entry(j, who, pos, ahead_s, nxt, named))
         ahead_s += float((j.estimate or {}).get("durationS") or 0)
     return out
 
 
-def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | None) -> dict[str, Any]:
+def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | None, named: dict[str, str] | None = None) -> dict[str, Any]:
     own = who.role == "pupil" and j.pupil_id == who.id
     show = who.staff() or own
     e: dict[str, Any] = {
@@ -113,6 +115,8 @@ def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | 
         "estimatedS": (j.estimate or {}).get("durationS"), "aheadS": ahead_s, "approvedAt": iso(j.approved_at),
         "extentMm": (j.estimate or {}).get("extentMm"),
     }
+    if show and named and j.pupil_id in named:
+        e["pupilName"] = named[j.pupil_id]
     if nxt is not None:
         e["next"] = j.id == nxt.id
     return e

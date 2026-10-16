@@ -8,7 +8,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -53,7 +53,7 @@ const lookAtFile = (j: JobSummary) => {
   const { dlg, show } = modal("kdialog");
   const view = el("div", { class: "st-preview" });
   view.innerHTML = previewSvg(j.objects);
-  dlg.append(el("h2", {}, `${j.pupilId ?? "Pupil"}: ${j.id}`), view,
+  dlg.append(el("h2", {}, `${pupilLabel(j.pupilId, j.pupilName) || "Pupil"}: ${j.id}`), view,
     el("p", { class: "hint" }, `${j.preset.id} · ${j.status}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}`), el("div", { class: "krow" }, btn("Close", () => dlg.close())));
   void show();
 };
@@ -123,8 +123,8 @@ const pupils: Page = {
       const redraw = () => void draw().catch((e) => fail(host, e));
       const rows: HTMLElement[] = [];
       for (const { c, rows: ps } of all) for (const p of ps) {
-        rows.push(el("tr", {}, cell(el("b", {}, p.pupilId)), cell(c.code), cell(p.lastLogin ? new Date(p.lastLogin).toLocaleString() : "never"),
-          actions(btn("Remove", () => { if (confirm(`Remove ${p.pupilId} from ${c.code}? They will be signed out.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
+        rows.push(el("tr", {}, cell(el("b", {}, pupilLabel(p.pupilId, p.displayName))), cell(c.code), cell(p.lastLogin ? new Date(p.lastLogin).toLocaleString() : "never"),
+          actions(btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${c.code}? They will be signed out.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
       }
       host.replaceChildren(...(rows.length ? [table(["Pupil ID", "Class", "Last signed in", ""], rows)] : [empty(cls.length ? "No pupils yet. Open a class and add pupils' DINO IDs." : "No classes yet.")]),
         ...(cls.length ? [el("p", { class: "hint" }, "To add pupils, open the class on the Classes page.")] : []));

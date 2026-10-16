@@ -4,7 +4,7 @@ import { btn, el, modal, msg, shortDate } from "./dom";
 import { presetStore, presetLabel } from "./presets";
 import {
   ACTIVITY_STATUS_TEXT, archiveActivity, classActivities, classProgress, copyActivities, createActivity, listClasses, giveFeedback, myActivities, myActivity, orderActivities,
-  pupilFiles, pupilWork, updateActivity,
+  pupilFiles, pupilLabel, pupilWork, updateActivity,
   type Activity, type ActivityInput, type ActivityStatus, type FeedbackItem, type JobSummary, type MyActivity, type Session,
 } from "./server";
 import { previewSvg } from "./stationlogic";
@@ -191,7 +191,7 @@ export async function openClassWork(session: Session, code: string, cb: TeacherC
     const table = el("table", { class: "progress" });
     table.append(el("tr", {}, el("th", {}, "Pupil"), ...p.activities.map((a) => el("th", { title: a.title }, a.title.length > 16 ? a.title.slice(0, 15) + "…" : a.title))));
     for (const pu of p.pupils) {
-      table.append(el("tr", {}, el("th", {}, pu.pupilId), ...p.activities.map((a) => {
+      table.append(el("tr", {}, el("th", { title: pu.pupilId }, pupilLabel(pu.pupilId, pu.displayName)), ...p.activities.map((a) => {
         const w = pu.work[a.id] ?? { status: "todo" as ActivityStatus, feedbackCount: 0 };
         const cell = el("td", { class: `cell st-${w.status}`, title: `${ACTIVITY_STATUS_TEXT[w.status]}${w.feedbackCount ? ` · ${w.feedbackCount} feedback` : ""}` }, w.status === "todo" ? "" : ACTIVITY_STATUS_TEXT[w.status][0]! + (w.feedbackCount ? `·${w.feedbackCount}` : ""));
         cell.addEventListener("click", () => void openPupilWork(session, code, a, pu.pupilId, cb).then(() => draw()));

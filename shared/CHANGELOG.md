@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.21 - staff see pupils' names (additive)
+- **Privacy rule change (decided by the school):** Kerf now keeps a display *name* for a signed-in person, taken from DINO's `userinfo` (`name`, `profile` scope) when they sign in. Never an email. It is shown to **staff of the same school only** (teacher, admin, technician), never to other pupils, never in logs, and deleted when the pupil is removed from a class. Everything else still uses IDs.
+- `openapi.yaml`: new `POST /auth/profile` (any DINO sign-in; the server asks DINO itself with the caller's token and stores the name; `{name}` or `{name: null}`, never an error if DINO cannot be reached). Optional `pupilName` on `QueueEntry` and on job lists for staff, `displayName` on class pupils and the progress grid.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.21`.
+
 ## 0.2.20 - a technician rejects a queued file with a note (additive)
 - `openapi.yaml`: `POST /jobs/{jobId}/reject` also accepts a technician, for a file that is `approved` (waiting in the queue); `409` for one still waiting for approval. The job's `statusReason` is `Rejected at the laser: <note>`. Taking a file ahead of the queue is the existing `skipQueue` flag, which a technician may now use.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.20`.

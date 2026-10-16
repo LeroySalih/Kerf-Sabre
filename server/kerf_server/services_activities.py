@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from . import services_people as people
 from . import services_presets as sp
 from .db import as_utc, iso, utcnow
 from .errors import ApiError
@@ -180,6 +181,7 @@ def progress(s: Session, who, code: str) -> dict[str, Any]:
     cls = owned_class(s, who, code)
     acts = list(s.scalars(select(Activity).where(Activity.class_code == cls.code, Activity.archived.is_(False)).order_by(Activity.position, Activity.created_at)))
     pupils = list(s.scalars(select(Pupil.pupil_id).where(Pupil.class_code == cls.code).order_by(Pupil.pupil_id)))
+    named = people.names(s, cls.school_id, pupils)
     work = {(w.pupil_id, w.activity_id): w for w in s.scalars(select(ActivityWork).where(ActivityWork.activity_id.in_([a.id for a in acts]))) } if acts else {}
     fb: dict[tuple[str, str], int] = {}
     if acts:
@@ -187,7 +189,7 @@ def progress(s: Session, who, code: str) -> dict[str, Any]:
             fb[(pid, aid)] = n
     return {
         "activities": [{"id": a.id, "title": a.title, "published": a.published, "dueAt": iso(a.due_at)} for a in acts],
-        "pupils": [{"pupilId": p, "work": {a.id: {"status": (work[(p, a.id)].status if (p, a.id) in work else "todo"), "jobId": work[(p, a.id)].job_id if (p, a.id) in work else None,
+        "pupils": [{"pupilId": p, **({"displayName": named[p]} if p in named else {}), "work": {a.id: {"status": (work[(p, a.id)].status if (p, a.id) in work else "todo"), "jobId": work[(p, a.id)].job_id if (p, a.id) in work else None,
                                                   "submittedAt": iso(work[(p, a.id)].submitted_at) if (p, a.id) in work else None, "feedbackCount": fb.get((p, a.id), 0)} for a in acts}} for p in pupils],
     }
 

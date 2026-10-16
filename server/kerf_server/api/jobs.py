@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import services_jobs as sj
+from .. import services_people as people
 from .. import services_queue as queue
 from .. import services_presets as sp
 from ..config import Settings
@@ -41,7 +42,9 @@ def list_jobs(
         q = q.where(Job.status.in_([x.strip() for x in status.split(",") if x.strip()]))
     if station:
         q = q.where((Job.station == station) | Job.station.is_(None))
-    return [sj.to_doc(j) for j in s.scalars(q)]
+    jobs = list(s.scalars(q))
+    named = people.names(s, who.school, (j.pupil_id for j in jobs)) if who.staff() else {}
+    return [{**sj.to_doc(j), **({"pupilName": named[j.pupil_id]} if j.pupil_id in named else {})} for j in jobs]
 
 
 @router.post("/jobs", status_code=201)

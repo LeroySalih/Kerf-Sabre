@@ -9,7 +9,7 @@ export interface Receipt { ticket?: number | null; position?: number | null; id:
 export interface Extent { widthMm: number; heightMm: number }
 export interface QueueEntry {
   extentMm?: Extent | null;
-  ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; presetId?: string;
+  ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; /** Staff only: the name DINO gave at sign-in. */ pupilName?: string | null; presetId?: string;
   station?: string | null; framedOn?: string | null; next?: boolean; estimatedS?: number | null; aheadS?: number | null; approvedAt?: string | null;
 }
 export interface StationInfo {
@@ -17,7 +17,7 @@ export interface StationInfo {
   s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; calibrated?: boolean; lastSeen?: string | null;
   progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
 }
-export interface JobSummary { activityId?: string | null; pupilId?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface JobSummary { activityId?: string | null; pupilId?: string; pupilName?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {
@@ -75,7 +75,7 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
 }
 
 export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean }
-export interface ClassPupil { pupilId: string; lastLogin: string | null; locked: boolean }
+export interface ClassPupil { pupilId: string; displayName?: string; lastLogin: string | null; locked: boolean }
 export interface AddedPupils { created: { pupilId: string; pin: string }[]; existing: string[]; conflicts: string[] }
 export const listClasses = (s: Session, f?: Fetch) => request<ClassInfo[]>(s, "GET", "/classes", undefined, f);
 export const createClass = (s: Session, code: string, label: string, requireApproval = true, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { code, label, requireApproval }, f);
@@ -96,7 +96,7 @@ export const ACTIVITY_STATUS_TEXT: Record<ActivityStatus, string> = { todo: "Not
 export interface FeedbackItem { id: number; teacherId: string; text: string; outcome: "comment" | "revise" | "complete"; jobId?: string | null; createdAt: string }
 export interface Activity { id: string; classCode: string; title: string; instructions?: string; position: number; presetId?: string | null; dueAt?: string | null; published: boolean; counts?: Record<string, number> }
 export interface MyActivity extends Activity { status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedbackCount?: number; feedback?: FeedbackItem[] }
-export interface ClassProgress { activities: { id: string; title: string; published: boolean; dueAt?: string | null }[]; pupils: { pupilId: string; work: Record<string, { status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedbackCount: number }> }[] }
+export interface ClassProgress { activities: { id: string; title: string; published: boolean; dueAt?: string | null }[]; pupils: { pupilId: string; displayName?: string; work: Record<string, { status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedbackCount: number }> }[] }
 export interface PupilWork { activityId: string; pupilId: string; status: ActivityStatus; jobId?: string | null; submittedAt?: string | null; feedback: FeedbackItem[]; files?: { id: string; status: string; createdAt: string; presetId: string }[] }
 export type ActivityInput = { title?: string; instructions?: string; presetId?: string | null; dueAt?: string | null; published?: boolean };
 const cls = (code: string) => `/classes/${encodeURIComponent(code)}`;
@@ -206,3 +206,9 @@ export function queueText(ticket: number | null | undefined, position: number | 
   const wait = aheadS ? `, about ${describeDuration(aheadS)} of cutting before yours` : "";
   return position === 1 ? `Ticket ${ticket}, you are next` : `Ticket ${ticket}, ${ordinal(position)} in the queue${wait}`;
 }
+
+/** What to call a pupil on screen: the name DINO gave at sign-in (staff only), else the ID. */
+export const pupilLabel = (id?: string | null, name?: string | null): string => (name?.trim() || id || "");
+
+/** Ask the server to remember this person's display name (it asks DINO itself). Best effort: the ID is shown if it fails. */
+export const sendProfile = (s: Session, f?: Fetch): Promise<unknown> => request<{ name: string | null }>(s, "POST", "/auth/profile", undefined, f).catch(() => null);

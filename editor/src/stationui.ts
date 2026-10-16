@@ -7,7 +7,7 @@ import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
 import { findPreset, presetLabel } from "./presets";
 import {
-  STATUS_TEXT, ServerError, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, pupilLabel, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -129,6 +129,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       h("span", { class: "spacer" }),
       ...(st?.cameraAvailable ? [button(st.calibrated ? "Recalibrate camera" : "Calibrate camera", () => void calibrate(), st.calibrated ? "" : "on")] : []),
       ...(opts.onOtherStation ? [button("Other stations", () => opts.onOtherStation!())] : []),
+      ...(session.role === "admin" || session.role === "teacher" ? [h("a", { class: "btnlink", href: "/" }, "Editor")] : []),
       ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []),
       button("Sign out", onSignOut));
     const main = h("div", { class: "st-main" });
@@ -191,7 +192,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     const bar = h("div", { class: "st-bar" }, h("div", { class: "st-fill", style: `width:${pct}%` }));
     const paused = st.state === "Hold";
     const out: Node[] = [
-      h("h2", {}, e ? `Cutting: ticket ${e.ticket}${e.pupilId ? ` · ${e.pupilId}` : ""}` : "Cutting"),
+      h("h2", {}, e ? `Cutting: ticket ${e.ticket}${e.pupilId ? ` · ${pupilLabel(e.pupilId, e.pupilName)}` : ""}` : "Cutting"),
       bar,
       h("p", {}, `${pct}%${p?.actualS !== undefined ? ` · ${formatClock(p.actualS)} of about ${formatClock(est)}` : ""}${paused ? " · PAUSED" : ""}`),
       h("div", { class: "st-actions" },
@@ -221,7 +222,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     const material = preset ? `${presetLabel(preset)}` : next.presetId ?? "the chosen material";
     const size = job ? sizeOf(job.objects) : null;
     const jumping = next.jobId !== headEntry()?.jobId;
-    out.push(h("h2", {}, `${jumping ? "Selected" : "Next"}: ticket ${next.ticket}${next.pupilId ? ` · ${next.pupilId}` : ""}`));
+    out.push(h("h2", {}, `${jumping ? "Selected" : "Next"}: ticket ${next.ticket}${next.pupilId ? ` · ${pupilLabel(next.pupilId, next.pupilName)}` : ""}`));
     if (jumping) out.push(h("p", { class: "st-note" }, `This is not the next file in the queue${headEntry() ? ` (ticket ${headEntry()!.ticket} is)` : ""}. Cutting it now takes it ahead of the others.`, button("Back to the next file", () => { picked = null; confirmed = false; void refresh(); }, "link")));
     const info = h("div", { class: "st-info" });
     if (job) { const pv = h("div", { class: "st-preview" }); pv.innerHTML = previewSvg(job.objects); info.append(pv); }
@@ -289,7 +290,7 @@ function queueList(queue: QueueEntry[], stationId: string, pick?: { selected: st
     const where = e.station && e.station !== stationId ? ` (for ${e.station})` : e.framedOn && e.framedOn !== stationId ? ` (being set up on ${e.framedOn})` : "";
     const clickable = !!pick && pick.canPick(e);
     const li = h("li", { class: [e.next ? "next" : e.status !== "approved" ? "active" : "", clickable ? "pickable" : "", pick && e.jobId && e.jobId === pick.selected ? "picked" : ""].filter(Boolean).join(" ") },
-      h("b", {}, `#${e.ticket}`), ` ${e.pupilId ?? ""} `, h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : "");
+      h("b", {}, `#${e.ticket}`), ` ${pupilLabel(e.pupilId, e.pupilName)} `, h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : "");
     if (clickable) {
       li.tabIndex = 0; li.setAttribute("role", "button"); li.title = "Show this file";
       li.addEventListener("click", () => pick!.onPick(e));
@@ -332,7 +333,7 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     for (const j of waiting) {
       const sel = h("select", { title: "Pupils do not choose a laser: pick the one that should cut this file, or leave it on Any laser for the next free one" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
       approvals.append(h("div", { class: "filerow" },
-        h("span", {}, `${j.id} · ${j.pupilId ?? ""} · ${j.preset.id}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
+        h("span", {}, `${j.id} · ${pupilLabel(j.pupilId, j.pupilName)} · ${j.preset.id}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
         button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
         button("Reject…", () => void (async () => {
           const v = await openDialog("Reject this file", [{ key: "reason", label: "Reason (the pupil sees this)", type: "text", value: "" }], { ok: "Reject" });
@@ -342,7 +343,7 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     const q = h("div", {}, h("h3", {}, `Queue (${queue.length})`));
     if (!queue.length) q.append(h("p", { class: "hint" }, "The queue is empty."));
     for (const e of queue) {
-      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${e.pupilId ?? ""} · ${e.presetId ?? ""}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
+      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${pupilLabel(e.pupilId, e.pupilName)} · ${e.presetId ?? ""}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
       if (e.status === "approved" && e.jobId) {
         const id = e.jobId;
         row.append(

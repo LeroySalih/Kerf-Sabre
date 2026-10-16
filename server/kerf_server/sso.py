@@ -39,6 +39,12 @@ def _http_get_json(url: str) -> dict[str, Any]:
         return json.loads(r.read().decode())
 
 
+def _http_get_json_auth(url: str, token: str) -> dict[str, Any]:
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "kerf-server", "Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=5) as r:  # noqa: S310 (operator-configured https URL)
+        return json.loads(r.read().decode())
+
+
 def pick_role(roles: Any) -> str | None:
     """admin > teacher > technician > pupil. None when the token holds no role Kerf knows."""
     if not isinstance(roles, list):
@@ -59,6 +65,7 @@ class Verifier:
     def __init__(self, cfg: Settings, fetch: Callable[[str], dict[str, Any]] | None = None, clock: Callable[[], float] = time.monotonic):
         self.cfg = cfg
         self.fetch = fetch or _http_get_json
+        self.fetch_userinfo: Callable[[str, str], dict[str, Any]] = _http_get_json_auth
         self.clock = clock
         self._keys: dict[str, Any] = {}
         self._fetched_at: float | None = None
@@ -130,6 +137,16 @@ class Verifier:
         if role is None:
             raise ApiError(403, "forbidden", "Your DINO account does not have a role that can use Kerf.")
         return role, sub
+
+    def userinfo_name(self, token: str) -> str | None:
+        """The signed-in person's display name from DINO's userinfo (needs the `profile` scope), or None. Never logged."""
+        url = f"{self.cfg.sso_issuer}/oauth/userinfo"
+        try:
+            doc = self.fetch_userinfo(url, token)
+        except Exception as e:  # DINO down, scope not granted, bad JSON: the ID is shown instead
+            log.info("could not read the profile from planner-004: %s", type(e).__name__)
+            return None
+        return doc.get("name") if isinstance(doc, dict) else None
 
     def principal(self, token: str):
         from .security import Principal

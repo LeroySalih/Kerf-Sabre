@@ -3,7 +3,7 @@ import { openClassWork, type TeacherCallbacks } from "./activitiesui";
 import { btn, el, msg } from "./dom";
 import { infoDialog, openDialog } from "./dialog";
 import {
-  addPupils, classPupils, createClass, listClasses, parseIds, removePupil,
+  addPupils, classPupils, createClass, listClasses, parseIds, pupilLabel, removePupil,
   type ClassInfo, type ClassPupil, type Session,
 } from "./server";
 
@@ -56,8 +56,8 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
     if (!open.pupils.length) list.append(el("p", { class: "hint" }, "No pupils yet."));
     for (const p of open.pupils) {
       list.append(el("div", { class: "filerow" },
-        el("span", {}, `${p.pupilId} · ${p.lastLogin ? `last signed in ${new Date(p.lastLogin).toLocaleString()}` : "never signed in"}`),
-        btn("Remove", () => { if (confirm(`Remove ${p.pupilId} from ${code}? They will be signed out.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")));
+        el("span", {}, `${pupilLabel(p.pupilId, p.displayName)} · ${p.lastLogin ? `last signed in ${new Date(p.lastLogin).toLocaleString()}` : "never signed in"}`),
+        btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${code}? They will be signed out.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")));
     }
     body.replaceChildren(list, el("div", { class: "krow" }, btn("‹ All classes", () => void run(async () => { open = null; })), btn("Activities and progress…", () => void openClassWork(session, code, hooks)), btn("Add pupils…", () => void (async () => {
       const ids = await askIds(code);

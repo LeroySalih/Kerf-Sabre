@@ -1,7 +1,7 @@
 // Sign in with DINO (planner-004): Authorization Code + PKCE (S256) from the browser. See docs/AUTH-PLANNER-004.md.
 // The access token (a short-lived JWT) lives in memory only; the rotating refresh token lives in sessionStorage, so it
 // goes when the tab closes. Nothing here stores a name or email. The server checks every token; this only gets and renews them.
-import { normaliseBase, request, type Session } from "./server";
+import { normaliseBase, request, sendProfile, type Session } from "./server";
 
 export interface SsoConfig {
   issuer: string; authorizeUrl: string; tokenUrl: string; revokeUrl: string; userinfoUrl?: string;
@@ -99,7 +99,9 @@ export async function finishSignIn(app: App, search: string, loc: { origin: stri
 
 async function sessionFor(_app: App, baseUrl: string, tokens: Tokens, f: Fetch): Promise<Session> {
   const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl, token: tokens.accessToken }, "GET", "/auth/me", undefined, f);
-  return { baseUrl, token: tokens.accessToken, role: me.role, id: me.id, school: me.school, sso: true };
+  const s: Session = { baseUrl, token: tokens.accessToken, role: me.role, id: me.id, school: me.school, sso: true };
+  void sendProfile(s, f); // so staff see a name, not an ID (the server asks DINO; nothing is kept in this browser)
+  return s;
 }
 
 /** After a page reload: trade this tab's refresh token for a fresh session. Null if there is none (or DINO says no). */

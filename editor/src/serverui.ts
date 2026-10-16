@@ -130,7 +130,14 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   /** The laser a technician or admin chose (the Admin site links to `/?station=<id>`; it survives the trip to DINO and back in this tab). */
   const wantedStation = (): string | null => { try { return sessionStorage.getItem("kerf.station"); } catch { return null; } };
   const wantStation = (id: string | null): void => { try { if (id) sessionStorage.setItem("kerf.station", id); else sessionStorage.removeItem("kerf.station"); } catch { /* fine */ } };
-  try { const q = new URLSearchParams(location.search).get("station"); if (q) { wantStation(q); history.replaceState(null, "", location.pathname); } } catch { /* fine */ }
+  // The laser lives in the address (`/?station=station-1`) while the Station page is open, so a reload keeps it and the plain Editor address
+  // ("/") never inherits it. It is kept in sessionStorage only for the trip to DINO and back (that return address has `code=`).
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("station")) wantStation(q.get("station"));
+    else if (!q.get("code") && !q.get("error")) wantStation(null);
+  } catch { /* fine */ }
+  const showStationInAddress = (id: string | null): void => { try { history.replaceState(null, "", id ? `/?station=${encodeURIComponent(id)}` : location.pathname); } catch { /* fine */ } };
 
   /** A technician always gets the Station page (and picks the laser); an admin or teacher gets it when they follow a station link; everyone else gets the design Editor. */
   function enterRole(): void {
@@ -144,9 +151,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       $("gate").hidden = true;
       const s = session;
       const choose = () => { wantStation(null); openStationPicker(s, (pick) => { wantStation(pick); enterRole(); }, signOut); };
-      if (id) openStation(s, signOut, { stationId: id, onOtherStation: choose });
-      else choose();
-    } else closeStation();
+      if (id) { showStationInAddress(id); openStation(s, signOut, { stationId: id, onOtherStation: choose }); }
+      else { showStationInAddress(null); choose(); }
+    } else { showStationInAddress(null); closeStation(); }
   }
 
   /** Everything after a successful sign-in, however it happened. */

@@ -13,7 +13,8 @@ from ..deps import get_session, get_settings
 from ..errors import ApiError
 from ..models import Token
 from ..sso import auth_config
-from ..security import Principal, bearer, current_principal, hash_token
+from .. import services_people as ps
+from ..security import SSO_ROLES, Principal, bearer, current_principal, hash_token
 
 router = APIRouter(tags=["auth"])
 
@@ -37,6 +38,17 @@ def login(request: Request, body: dict[str, Any] = Body(...), s: Session = Depen
             raise ApiError(422, "invalid", "Enter your class code, pupil ID and PIN.")
     ip = request.client.host if request.client else "unknown"
     return sc.login(s, cfg, request.app.state.throttle, ip, body["classCode"], body["pupilId"], body["pin"])
+
+
+@router.post("/auth/profile")
+def profile(request: Request, p: Principal = Depends(current_principal), s: Session = Depends(get_session)) -> dict[str, str | None]:
+    """Remember this DINO person's display name so staff see it instead of an ID. Asks DINO (userinfo, with the caller's own token); the
+    name is stored for staff of their school only, never logged and never an email. A failure is not an error: the ID is shown instead."""
+    sso = getattr(request.app.state, "sso", None)
+    if sso is None or p.role not in SSO_ROLES:
+        return {"name": None}
+    name = ps.remember(s, p.id, p.school, sso.userinfo_name(bearer(request) or ""))
+    return {"name": name}
 
 
 @router.post("/auth/logout", status_code=204)

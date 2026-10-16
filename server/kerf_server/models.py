@@ -200,3 +200,14 @@ class Feedback(Base):
     outcome: Mapped[str] = mapped_column(String(12), default="comment")  # comment | revise | complete
     job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)  # the file it was about
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Person(Base):
+    """What a signed-in person is called, for staff to read ("Sam Jones" instead of a DINO ID). Fetched from DINO's userinfo when they sign in
+    (`POST /auth/profile`), shown only to staff of the same school, never logged, and deleted when the pupil is removed. Never an email."""
+
+    __tablename__ = "people"
+    person_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(128))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

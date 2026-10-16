@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.20
+  version: 0.2.21
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -114,6 +114,11 @@ paths:
   /school:
     get:
       summary: Admin or teacher. My school
+      responses:
+        "200": {description: OK}
+  /auth/profile:
+    post:
+      summary: Remember the caller's display name from DINO (userinfo) so staff of the school see it instead of an ID. Never an email; never logged. The answer has name null when DINO cannot say.
       responses:
         "200": {description: OK}
   /staff:

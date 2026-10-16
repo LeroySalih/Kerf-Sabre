@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.18 - sign in with planner-004 (additive)
+- `openapi.yaml`: bearer tokens may also be a planner-004 (DINO) JWT for pupils, teachers and admins (never stations or the platform). New public `GET /auth/config` (`mode` = `pins`, `planner` or `both`, plus the OAuth endpoints and client IDs the Editor and Admin need for Authorization Code + PKCE). `POST /auth/login` answers `404 sso_only` when the server only accepts planner-004 sign-in. `Me` now lists every role and carries `school`.
+- Pupil IDs stay IDs only: a planner-004 sign-in uses the DINO user ID (`sub`) as the person's ID; names and emails are never stored or logged. Design: `docs/AUTH-PLANNER-004.md`.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.18`.
+
 ## 0.2.17 - a new send replaces the old one (additive)
 - Behaviour: when a pupil submits a file, their earlier files that are still waiting (`submitted` or `approved`) are cancelled with the reason "Replaced by a newer file (job-...)". The new file takes a new ticket at the back of the queue: the old place is not kept. A file already on a laser (`assigned`, `running`) and drafts are never touched, and a send that fails validation cancels nothing. An activity hand-in that pointed at the replaced file now points at the new one.
 - `openapi.yaml`: `JobReceipt.replaced` lists what a submit replaced (`id`, `ticket`).

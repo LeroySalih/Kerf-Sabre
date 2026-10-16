@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.17
+  version: 0.2.18
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -70,6 +70,21 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+        "404":
+          description: "`sso_only`: this server only accepts planner-004 sign-in (auth mode `planner`); use the sign-in at `GET /auth/config`"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /auth/config:
+    get:
+      summary: How to sign in on this server (public, no token). Says whether class login (PIN), planner-004 sign-in, or both are on.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AuthConfig"}
   /auth/logout:
     post:
       summary: End this session (revokes the token that was used)
@@ -1025,7 +1040,11 @@ paths:
         "101": {description: Switching protocols}
 components:
   securitySchemes:
-    bearerAuth: {type: http, scheme: bearer}
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "An opaque Kerf token (class login, staff, station) or, for pupils, teachers and admins, a planner-004 (DINO) JWT when the server's auth mode allows it. See GET /auth/config."
+
   schemas:
     Error:
       type: object
@@ -1152,12 +1171,29 @@ components:
         pupilId: {type: string}
         lastLogin: {type: [string, "null"], format: date-time}
         locked: {type: boolean}
+    AuthConfig:
+      type: object
+      required: [mode]
+      properties:
+        mode: {enum: [pins, planner, both], description: "pins = class login only; planner = planner-004 sign-in only; both = either"}
+        sso:
+          type: [object, "null"]
+          description: "Present unless mode is pins. The Editor and Admin start an Authorization Code + PKCE (S256) sign-in against `authorizeUrl`; no client secret."
+          properties:
+            issuer: {type: string}
+            authorizeUrl: {type: string}
+            tokenUrl: {type: string}
+            revokeUrl: {type: string}
+            userinfoUrl: {type: string}
+            clientIds: {type: object, properties: {editor: {type: string}, admin: {type: string}}}
+            scopes: {type: array, items: {type: string}}
     Me:
       type: object
       required: [role, id]
       properties:
-        role: {enum: [pupil, teacher, station]}
-        id: {type: string, description: "Pupil ID, teacher ID or station id. Never a name."}
+        role: {enum: [pupil, teacher, admin, station, platform]}
+        id: {type: string, description: "Pupil ID, teacher ID or station id. Never a name. For a planner-004 sign-in this is the DINO user ID (`sub`)."}
+        school: {type: [string, "null"]}
     LogLevel:
       type: string
       enum: [DEBUG, INFO, WARNING, ERROR]

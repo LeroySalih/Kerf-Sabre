@@ -1,0 +1,234 @@
+"""Sign in with planner-004 (DINO): JWT verification, role mapping, auth modes. No network: a local key and a fake JWKS."""
+from __future__ import annotations
+
+import json
+import time
+
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi.testclient import TestClient
+from jwt.algorithms import RSAAlgorithm
+
+from kerf_server.app import create_app
+from kerf_server.config import Settings
+from kerf_server.sso import Verifier, pick_role
+
+from .conftest import auth
+
+ISS = "https://dino.example.org"
+
+
+def make_key(kid: str):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(RSAAlgorithm.to_jwk(key.public_key()))
+    jwk.update(kid=kid, use="sig", alg="RS256")
+    return key, jwk
+
+
+KEY, JWK = make_key("k1")
+
+
+def mint(sub="u-123", roles=("pupil",), key=KEY, kid="k1", alg="RS256", **over):
+    now = int(time.time())
+    claims = {"iss": ISS, "sub": sub, "aud": "kerf-sabre", "iat": now, "nbf": now, "exp": now + 900, "jti": "x",
+              "client_id": "kerf-editor", "scope": "", "roles": list(roles)}
+    claims.update(over)
+    claims = {k: v for k, v in claims.items() if v is not None}
+    return jwt.encode(claims, key, algorithm=alg, headers={"kid": kid, "typ": "at+jwt"})
+
+
+class Jwks:
+    """A fake /oauth/jwks that counts fetches and can be changed or broken."""
+
+    def __init__(self, *jwks):
+        self.keys, self.calls, self.down = list(jwks), 0, False
+
+    def __call__(self, url):
+        self.calls += 1
+        assert url == f"{ISS}/oauth/jwks"
+        if self.down:
+            raise OSError("planner-004 is down")
+        return {"keys": self.keys}
+
+
+@pytest.fixture()
+def jwks():
+    return Jwks(JWK)
+
+
+@pytest.fixture()
+def sso_app(tmp_path, jwks):
+    cfg = Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="both", sso_issuer=ISS)
+    app = create_app(cfg)
+    app.state.sso = Verifier(cfg, fetch=jwks)
+    return app
+
+
+@pytest.fixture()
+def sso_client(sso_app):
+    with TestClient(sso_app) as c:
+        yield c
+
+
+def me(client, token):
+    return client.get("/api/v1/auth/me", headers=auth(token))
+
+
+class TestRoles:
+    @pytest.mark.parametrize("roles,want", [(["pupil"], "pupil"), (["teacher"], "teacher"), (["Teacher", "pupil"], "teacher"),
+                                            (["admin", "teacher"], "admin"), (["technician"], "teacher"), (["pupil", "admin"], "admin")])
+    def test_pick_role(self, roles, want):
+        assert pick_role(roles) == want
+
+    def test_technician_can_be_turned_off(self):
+        assert pick_role(["technician"], technician_is_teacher=False) is None
+
+    @pytest.mark.parametrize("roles", [[], ["station"], ["platform"], "admin", None, [1], ["parent"]])
+    def test_unknown_roles_get_nothing(self, roles):
+        assert pick_role(roles) is None
+
+
+class TestSignedInPeople:
+    @pytest.mark.parametrize("roles,role", [(["pupil"], "pupil"), (["teacher"], "teacher"), (["admin"], "admin"), (["technician"], "teacher")])
+    def test_me(self, sso_client, roles, role):
+        r = me(sso_client, mint(roles=roles))
+        assert r.status_code == 200
+        assert r.json()["role"] == role and r.json()["id"] == "u-123" and r.json()["school"]
+
+    def test_a_pupil_jwt_cannot_do_teacher_things(self, sso_client):
+        r = sso_client.get("/api/v1/classes", headers=auth(mint(roles=["pupil"])))
+        assert r.status_code == 403
+
+    def test_a_teacher_jwt_can(self, sso_client):
+        assert sso_client.get("/api/v1/classes", headers=auth(mint(roles=["teacher"]))).status_code == 200
+
+    def test_logout_with_a_jwt_is_harmless(self, sso_client):
+        assert sso_client.post("/api/v1/auth/logout", headers=auth(mint())).status_code == 204
+
+    def test_station_tokens_still_work(self, sso_client, app):
+        from kerf_server.security import issue_token
+
+        t = issue_token(sso_client.app.state.db, "station", "station-1")
+        assert me(sso_client, t).json()["role"] == "station"
+
+
+class TestRefusals:
+    def test_expired(self, sso_client):
+        assert me(sso_client, mint(exp=int(time.time()) - 600)).status_code == 401
+
+    def test_inside_the_leeway_is_ok(self, sso_client):
+        assert me(sso_client, mint(exp=int(time.time()) - 10)).status_code == 200
+
+    def test_not_yet_valid(self, sso_client):
+        assert me(sso_client, mint(nbf=int(time.time()) + 600)).status_code == 401
+
+    @pytest.mark.parametrize("over", [{"aud": "something-else"}, {"iss": "https://evil.example"}, {"client_id": "claude"}, {"client_id": None}, {"sub": None},
+                                      {"sub": "has space"}, {"sub": "x" * 65}, {"sub": ""}])
+    def test_wrong_claims(self, sso_client, over):
+        assert me(sso_client, mint(**over)).status_code == 401
+
+    def test_no_known_role_is_403(self, sso_client):
+        assert me(sso_client, mint(roles=["parent"])).status_code == 403
+
+    def test_a_jwt_can_never_be_a_station_or_platform(self, sso_client):
+        for r in ("station", "platform"):
+            assert me(sso_client, mint(roles=[r])).status_code == 403
+
+    def test_signed_by_someone_else(self, sso_client):
+        other, _ = make_key("k1")  # same kid, different key
+        assert me(sso_client, mint(key=other)).status_code == 401
+
+    def test_unknown_kid(self, sso_client):
+        assert me(sso_client, mint(kid="nope")).status_code == 401
+
+    def test_alg_none(self, sso_client):
+        now = int(time.time())
+        t = jwt.encode({"iss": ISS, "sub": "u", "aud": "kerf-sabre", "exp": now + 99, "client_id": "kerf-editor", "roles": ["admin"]}, None, algorithm="none", headers={"kid": "k1"})
+        assert me(sso_client, t).status_code == 401
+
+    def test_hs256_with_the_public_key_as_secret(self, sso_client):
+        now = int(time.time())
+        t = jwt.encode({"iss": ISS, "sub": "u", "aud": "kerf-sabre", "exp": now + 99, "client_id": "kerf-editor", "roles": ["admin"]}, "secret" * 8, algorithm="HS256", headers={"kid": "k1"})
+        assert me(sso_client, t).status_code == 401
+
+    def test_garbage(self, sso_client):
+        assert me(sso_client, "eyJhbGciOi.not.ajwt").status_code == 401
+
+    def test_no_token_at_all(self, sso_client):
+        assert sso_client.get("/api/v1/auth/me").status_code == 401
+
+
+class TestKeys:
+    def test_keys_are_cached(self, sso_client, jwks):
+        for _ in range(3):
+            assert me(sso_client, mint()).status_code == 200
+        assert jwks.calls == 1
+
+    def test_rotation_is_picked_up_on_an_unknown_kid(self, tmp_path):
+        key2, jwk2 = make_key("k2")
+        jwks = Jwks(JWK)
+        t = [0.0]
+        v = Verifier(Settings.from_env(data_dir=tmp_path, auth_mode="both", sso_issuer=ISS), fetch=jwks, clock=lambda: t[0])
+        assert v.verify(mint())[1] == "u-123"
+        jwks.keys = [jwk2, JWK]
+        t[0] += 60  # past the "don't refetch too often" gap, inside the cache lifetime
+        assert v.verify(mint(key=key2, kid="k2"))[1] == "u-123"
+        assert jwks.calls == 2
+
+    def test_unknown_kids_cannot_make_us_hammer_planner(self, tmp_path):
+        jwks = Jwks(JWK)
+        t = [0.0]
+        v = Verifier(Settings.from_env(data_dir=tmp_path, auth_mode="both", sso_issuer=ISS), fetch=jwks, clock=lambda: t[0])
+        v.verify(mint())
+        for _ in range(20):
+            with pytest.raises(Exception):
+                v.verify(mint(kid="bogus"))
+        assert jwks.calls == 1
+
+    def test_planner_down_with_no_keys_is_503(self, sso_client, jwks):
+        jwks.down = True
+        r = me(sso_client, mint())
+        assert r.status_code == 503 and r.json()["code"] == "sso_unavailable"
+
+    def test_planner_down_after_keys_were_fetched_keeps_working(self, tmp_path):
+        jwks = Jwks(JWK)
+        t = [0.0]
+        v = Verifier(Settings.from_env(data_dir=tmp_path, auth_mode="both", sso_issuer=ISS), fetch=jwks, clock=lambda: t[0])
+        v.verify(mint())
+        jwks.down = True
+        t[0] += 3600  # the cache has expired and the refetch fails
+        assert v.verify(mint())[1] == "u-123"
+
+
+class TestModes:
+    def test_pins_mode_refuses_jwts(self, client):
+        r = client.get("/api/v1/auth/me", headers=auth(mint()))
+        assert r.status_code == 401
+
+    def test_config_in_pins_mode(self, client):
+        assert client.get("/api/v1/auth/config").json() == {"mode": "pins", "sso": None}
+
+    def test_config_in_both_mode(self, sso_client):
+        c = sso_client.get("/api/v1/auth/config").json()
+        assert c["mode"] == "both" and c["sso"]["authorizeUrl"] == f"{ISS}/oauth/authorize"
+        assert c["sso"]["clientIds"] == {"editor": "kerf-editor", "admin": "kerf-admin"} and c["sso"]["scopes"] == ["profile"]
+
+    def test_config_needs_no_token(self, sso_client):
+        assert sso_client.get("/api/v1/auth/config").status_code == 200
+
+    def test_planner_mode_has_no_pin_login(self, tmp_path):
+        cfg = Settings.from_env(data_dir=tmp_path / "d", auth_mode="planner", sso_issuer=ISS)
+        with TestClient(create_app(cfg)) as c:
+            r = c.post("/api/v1/auth/login", json={"classCode": "9B", "pupilId": "P001", "pin": "00000"})
+            assert r.status_code == 404 and r.json()["code"] == "sso_only"
+
+    def test_both_mode_keeps_pin_login(self, sso_client):
+        r = sso_client.post("/api/v1/auth/login", json={"classCode": "9B", "pupilId": "P001", "pin": "00000"})
+        assert r.status_code == 401  # wrong, but it is the PIN check answering
+
+    def test_bad_settings_are_refused_at_start(self, tmp_path):
+        with pytest.raises(ValueError):
+            create_app(Settings.from_env(data_dir=tmp_path, auth_mode="sometimes"))
+        with pytest.raises(ValueError):
+            create_app(Settings.from_env(data_dir=tmp_path, auth_mode="planner"))

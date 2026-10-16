@@ -12,6 +12,7 @@ from ..config import Settings
 from ..deps import get_session, get_settings
 from ..errors import ApiError
 from ..models import Token
+from ..sso import auth_config
 from ..security import Principal, bearer, current_principal, hash_token
 
 router = APIRouter(tags=["auth"])
@@ -22,8 +23,15 @@ def me(p: Principal = Depends(current_principal)) -> dict[str, str | None]:
     return {"role": p.role, "id": p.id, "school": p.school}
 
 
+@router.get("/auth/config")
+def config(cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    return auth_config(cfg)
+
+
 @router.post("/auth/login")
 def login(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    if cfg.auth_mode == "planner":
+        raise ApiError(404, "sso_only", "This server uses DINO sign-in. Use 'Sign in with DINO'.")
     for k in ("classCode", "pupilId", "pin"):
         if not isinstance(body.get(k), str) or not body[k].strip():
             raise ApiError(422, "invalid", "Enter your class code, pupil ID and PIN.")

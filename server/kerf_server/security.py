@@ -82,6 +82,13 @@ def current_principal(request: Request) -> Principal:
     token = bearer(request)
     if not token:
         raise ApiError(401, "unauthorized", "Send your token as 'Authorization: Bearer <token>'.")
+    from .sso import looks_like_jwt
+
+    if looks_like_jwt(token):  # a planner-004 (DINO) sign-in; never a station or the platform
+        sso = getattr(request.app.state, "sso", None)
+        if sso is None:
+            raise ApiError(401, "unauthorized", "Sign-in with DINO is not turned on for this server.")
+        return sso.principal(token)
     db: Database = request.app.state.db
     with db.session() as s:
         p = lookup(s, token)

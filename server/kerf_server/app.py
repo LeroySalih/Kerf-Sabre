@@ -14,6 +14,7 @@ from .config import Settings
 from .db import Database
 from .services_seed import seed
 from .services_classes import IpThrottle
+from .sso import Verifier
 from .stations import Hub
 
 API = "/api/v1"
@@ -21,6 +22,10 @@ API = "/api/v1"
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    if settings.auth_mode not in ("pins", "planner", "both"):
+        raise ValueError(f"KERF_AUTH_MODE must be pins, planner or both, not {settings.auth_mode!r}")
+    if settings.sso_enabled and not settings.sso_issuer.startswith(("https://", "http://")):
+        raise ValueError("KERF_SSO_ISSUER (planner-004's public origin) is required when KERF_AUTH_MODE is planner or both")
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     db = Database(settings.db_url)
 
@@ -35,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.db = db
     app.state.throttle = IpThrottle()
+    app.state.sso = Verifier(settings) if settings.sso_enabled else None
     app.state.download_links = {}  # Cutter download links: random link -> expiry (in memory: a restart just means making a new one)
     app.state.hub = Hub(settings.data_dir / "logs", settings.log_max_bytes, settings.log_backups)
     errors.install(app)

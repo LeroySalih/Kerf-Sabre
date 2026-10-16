@@ -1,6 +1,6 @@
 # Sign in to Kerf Sabre with planner-004 (DINO)
 
-Status: **proposed**. Nothing here is implemented yet.
+Status: **Part B implemented** (Server `sso.py`, Editor/Admin `sso.ts`, shared 0.2.18); **Part A** is being implemented in planner-004. Unanswered B7 questions were given the defaults noted there: DINO user ID is the Kerf ID; a teacher still adds pupils to classes (using their DINO IDs); `technician` counts as `teacher`; DINO `admin` is a Kerf school admin.
 
 Goal: a person who signs in to planner-004 (DINO) is signed in to the Kerf Editor, the Kerf Admin site and the Kerf Server queues, and those apps learn **who they are and what role they hold** from a signed JWT, with no extra Kerf password.
 
@@ -88,7 +88,7 @@ Add `scripts/register-oauth-client.ts` (or SQL in `docs/`) that upserts a client
 INSERT INTO oauth_clients (client_id, client_name, redirect_uris, first_party, token_format,
                            allowed_roles, audience, allowed_scopes, access_ttl_seconds, refresh_ttl_seconds)
 VALUES ('kerf-editor', 'Kerf Sabre Editor',
-        ARRAY['https://kerf.example.org/auth/callback', 'http://localhost:5173/auth/callback'],
+        ARRAY['https://kerf.example.org/', 'http://localhost:5173/'],
         true, 'jwt', ARRAY['pupil','teacher','admin','technician'], 'kerf-sabre',
         ARRAY['profile'], 900, 604800)
 ON CONFLICT (client_id) DO UPDATE SET redirect_uris = EXCLUDED.redirect_uris,
@@ -269,7 +269,7 @@ Planner SSO **adds** a way to produce a `Principal`; the existing opaque tokens 
 
 ## B3. Editor and Admin (`editor/`, `editor/admin/`)
 
-- Authorization Code + PKCE (S256) against planner-004, using `client_id` `kerf-editor` or `kerf-admin`. Redirect URI `<origin>/auth/callback`.
+- Authorization Code + PKCE (S256) against planner-004, using `client_id` `kerf-editor` or `kerf-admin`. Redirect URI is the page itself (the server only serves static files, so there is no callback route): `<origin>/` for the Editor and `<origin>/admin/` for Admin (and `http://localhost:5173/`, `http://localhost:5173/admin/` for `--dev`). **Register exactly these on `kerf-editor` / `kerf-admin`.**
 - Sign-in screen gets a "Sign in with DINO" button when `GET /auth/config` says SSO is on; the PIN form stays when `auth_mode` is `pins` or `both`.
 - Hold the access token **in memory**. Keep the refresh token in `sessionStorage` (cleared with the tab), not `localStorage`; rotation and reuse detection limit the damage of theft. Refresh silently about 60 s before `exp`.
 - Send `Authorization: Bearer <JWT>` on API and WebSocket calls exactly as the opaque token is sent today.

@@ -24,7 +24,8 @@
         </div>
         <details><summary>Server address</summary><input id="gate-url" type="text" placeholder="Leave blank unless your teacher says" /></details>
         <p id="gate-error" role="alert"></p>
-        <button type="submit" class="on">Sign in</button>
+        <button type="button" id="gate-sso" class="on" hidden>Sign in with DINO</button>
+        <button type="submit" id="gate-submit" class="on">Sign in</button>
         <button type="button" id="gate-mode" class="link">Teacher or laser station? Sign in with a token</button>
         <button type="button" id="gate-offline" class="link">Work without signing in (nothing is saved to the server)</button>
       </form>

@@ -65,6 +65,8 @@ Kerf has two public clients. They are inserted by a script, not by migration, be
 | `kerf-editor` | Kerf Editor (pupils and teachers) | `pupil, teacher, admin, technician` | `profile` | 900 s / 7 days |
 | `kerf-admin` | Kerf Admin site | `teacher, admin` | `profile, groups` | 900 s / 7 days |
 
+**Redirect URIs** (exact match): `kerf-editor` returns to the Editor's own page, `https://<kerf-host>/` (plus `http://localhost:5173/` for dev); `kerf-admin` to `https://<kerf-host>/admin/` (plus `http://localhost:5173/admin/`). They are page URLs, not `/auth/callback`.
+
 Both: `first_party = true`, `token_format = 'jwt'`, `audience = 'kerf-sabre'`.
 
 Add `scripts/register-oauth-client.ts` (or SQL in `docs/`) that upserts a client from CLI args: `--id`, `--name`, `--redirect-uri` (repeatable), `--roles`, `--scopes`, `--audience`. Example:
@@ -73,7 +75,7 @@ Add `scripts/register-oauth-client.ts` (or SQL in `docs/`) that upserts a client
 INSERT INTO oauth_clients (client_id, client_name, redirect_uris, first_party, token_format,
                            allowed_roles, audience, allowed_scopes, access_ttl_seconds, refresh_ttl_seconds)
 VALUES ('kerf-editor', 'Kerf Sabre Editor',
-        ARRAY['https://kerf.example.org/auth/callback', 'http://localhost:5173/auth/callback'],
+        ARRAY['https://kerf.example.org/', 'http://localhost:5173/'],
         true, 'jwt', ARRAY['pupil','teacher','admin','technician'], 'kerf-sabre',
         ARRAY['profile'], 900, 604800)
 ON CONFLICT (client_id) DO UPDATE SET redirect_uris = EXCLUDED.redirect_uris,

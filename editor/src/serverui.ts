@@ -10,6 +10,7 @@ import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { DEFAULT_ORIGIN, fileKey, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
+import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
   STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, loginWithPin, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
   type JobSummary, type Session,
@@ -85,10 +86,18 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     ctx.tabs.changed();
   };
 
+  /** Keeps a DINO sign-in renewed while it is the current session. */
+  let renewer: Renewer | null = null;
   const dropSession = () => {
     activity = null;
-    if (session?.expiresAt) void logout(session); // a class-login session: end it on the server too
+    if (session?.sso) void endSignIn("editor"); // a DINO session: end the connection there too
+    else if (session?.expiresAt) void logout(session); // a class-login session: end it on the server too
+    renewer?.stop(); renewer = null;
     session = null; saveSession(null); jobId = null; render(); };
+  const keepAlive = (next: Session, tokens: Tokens) => {
+    renewer?.stop();
+    renewer = new Renewer("editor", next, tokens, (why) => { dropSession(); ctx.notify(why); });
+  };
   const handle = (e: unknown): string => {
     if (e instanceof ServerError && e.status === 401) dropSession();
     return problem(e);
@@ -121,15 +130,38 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   /** The sign-in page has two ways in: class code + pupil ID + PIN (pupils), or a token (teachers, laser stations). */
   let tokenMode = false;
+  /** Server set to DINO-only: no class code + PIN form (laser stations still use a token). */
+  let pinsHidden = false;
+  let authConfig: AuthConfig = { mode: "pins", sso: null };
+  const applyAuthConfig = (c: AuthConfig) => {
+    authConfig = c;
+    pinsHidden = c.mode === "planner";
+    $("gate-sso").hidden = c.mode === "pins";
+    $("gate-mode").hidden = pinsHidden;
+    setMode(pinsHidden ? true : tokenMode);
+  };
   const setMode = (token: boolean) => {
     tokenMode = token;
     ($("gate-pin-fields") as HTMLElement).hidden = token;
     ($("gate-token-fields") as HTMLElement).hidden = !token;
-    for (const id of ["gate-class", "gate-pid", "gate-pin"]) ($(id) as HTMLInputElement).required = !token;
+    ($("gate-submit") as HTMLElement).hidden = pinsHidden && !token;
+    for (const id of ["gate-class", "gate-pid", "gate-pin"]) ($(id) as HTMLInputElement).required = !token && !pinsHidden;
     ($("gate-token") as HTMLInputElement).required = token;
     $("gate-mode").textContent = token ? "Pupil? Sign in with your class code and PIN" : "Teacher or laser station? Sign in with a token";
     $("gate-error").textContent = "";
   };
+  const refreshAuthConfig = async () => applyAuthConfig(await fetchAuthConfig((($("gate-url") as HTMLInputElement).value)));
+
+  async function startDino(): Promise<void> {
+    const err = $("gate-error");
+    err.textContent = "";
+    try {
+      const base = (($("gate-url") as HTMLInputElement).value);
+      const c = authConfig.sso ? authConfig : await fetchAuthConfig(base);
+      if (!c.sso) throw new SsoError("This server does not use DINO sign-in.");
+      await beginSignIn("editor", base, c.sso, location, (url) => location.assign(url));
+    } catch (e) { err.textContent = problem(e); }
+  }
 
   async function gateSubmit(): Promise<void> {
     const err = $("gate-error");
@@ -345,6 +377,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     void gateSubmit();
   });
   $("gate-mode").addEventListener("click", () => setMode(!tokenMode));
+  $("gate-sso").addEventListener("click", () => void startDino());
+  $("gate-url").addEventListener("change", () => void refreshAuthConfig());
   try { ($("gate-class") as HTMLInputElement).value = localStorage.getItem("kerf.classCode") ?? ""; } catch { /* fine */ }
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); });
@@ -385,9 +419,25 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     });
   });
   setMode(false);
+  void refreshAuthConfig();
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
   window.addEventListener("beforeunload", (ev) => { if (session && (dirty() || ctx.tabs.othersDirty())) ev.preventDefault(); });
   render();
+  /** Back from DINO (?code=&state=), or a reload of a tab that was signed in with DINO. */
+  const dinoStart = async (): Promise<void> => {
+    if (readCallback(location.search)) {
+      $("gate").hidden = false;
+      try {
+        const r = await finishSignIn("editor", location.search, location);
+        cleanAddress();
+        if (r) { await signedIn(r.session); keepAlive(r.session, r.tokens); }
+      } catch (e) { cleanAddress(); $("gate").hidden = false; $("gate-error").textContent = problem(e); }
+    } else if (!session) {
+      const r = await restoreSignIn("editor");
+      if (r) { await signedIn(r.session); keepAlive(r.session, r.tokens); }
+    }
+  };
+  void dinoStart();
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
     void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); if (session?.role === "pupil") void files(true); }).catch((e) => {

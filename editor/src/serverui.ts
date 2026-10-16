@@ -3,7 +3,7 @@
 import { infoDialog, openDialog } from "./dialog";
 import { sizeText } from "./stationlogic";
 import { openMyActivities } from "./activitiesui";
-import { closeStation, openStation } from "./stationui";
+import { closeStation, openStation, openStationPicker } from "./stationui";
 import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts";
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
@@ -12,7 +12,7 @@ import { DEFAULT_ORIGIN, blankMeta, fileKey, type ClosedFile, type FileMeta, typ
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
-  STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, loginWithPin, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, loadSession, request, saveDraft, saveSession, sendJob, signIn, submitJob,
+  STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -73,7 +73,7 @@ export interface ServerUiHandle {
 }
 
 export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
-  let session = loadSession();
+  let session: Session | null = null; saveSession(null); // an older version kept a pasted token here; only DINO sign-in is left
   let offline = false;
   /** The file in the tab that is showing (swapped by `setFile` when another tab is shown; saves hold on to the object they started on). */
   let cur: FileMeta = blankMeta();
@@ -125,11 +125,28 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     try { setPresets(await listPresets(session)); ctx.presetsChanged(); } catch (e) { ctx.notify(`Couldn't load materials: ${handle(e)}`); }
   }
 
-  /** A laser-station token goes straight to Station mode; the platform owner goes to the admin site; everyone else gets the design Editor. */
+  /** Is the Station page showing instead of the design Editor? */
+  let stationMode = false;
+  /** The laser a technician or admin chose (the Admin site links to `/?station=<id>`; it survives the trip to DINO and back in this tab). */
+  const wantedStation = (): string | null => { try { return sessionStorage.getItem("kerf.station"); } catch { return null; } };
+  const wantStation = (id: string | null): void => { try { if (id) sessionStorage.setItem("kerf.station", id); else sessionStorage.removeItem("kerf.station"); } catch { /* fine */ } };
+  try { const q = new URLSearchParams(location.search).get("station"); if (q) { wantStation(q); history.replaceState(null, "", location.pathname); } } catch { /* fine */ }
+
+  /** A technician always gets the Station page (and picks the laser); an admin or teacher gets it when they follow a station link; everyone else gets the design Editor. */
   function enterRole(): void {
-    if (session?.role === "platform") { location.assign("/admin/"); return; }
-    if (session?.role === "station") { $("gate").hidden = true; openStation(session, signOut); }
-    else closeStation();
+    stationMode = false;
+    const role = session?.role;
+    if (!session || role === "pupil") { closeStation(); return; }
+    if (role === "platform") { location.assign("/admin/"); return; }
+    const id = wantedStation();
+    if (role === "technician" || id) {
+      stationMode = true;
+      $("gate").hidden = true;
+      const s = session;
+      const choose = () => { wantStation(null); openStationPicker(s, (pick) => { wantStation(pick); enterRole(); }, signOut); };
+      if (id) openStation(s, signOut, { stationId: id, onOtherStation: choose });
+      else choose();
+    } else closeStation();
   }
 
   /** Everything after a successful sign-in, however it happened. */
@@ -140,35 +157,14 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     render();
     await loadPresets();
     enterRole();
-    if (session.role === "station") return;
+    if (stationMode) return;
     ctx.notify(`Signed in as ${session.id}`);
     const restored = ctx.tabs.restore(session.id); // the tabs this person had open last time
     if (session.role === "pupil" && !restored) void files(true);
   }
 
-  /** The sign-in page has two ways in: class code + pupil ID + PIN (pupils), or a token (teachers, laser stations). */
-  let tokenMode = false;
-  /** Server set to DINO-only: no class code + PIN form (laser stations still use a token). */
-  let pinsHidden = false;
-  let authConfig: AuthConfig = { mode: "pins", sso: null };
-  const applyAuthConfig = (c: AuthConfig) => {
-    authConfig = c;
-    pinsHidden = c.mode === "planner";
-    $("gate-sso").hidden = c.mode === "pins";
-    $("gate-mode").hidden = pinsHidden;
-    setMode(pinsHidden ? true : tokenMode);
-  };
-  const setMode = (token: boolean) => {
-    tokenMode = token;
-    ($("gate-pin-fields") as HTMLElement).hidden = token;
-    ($("gate-token-fields") as HTMLElement).hidden = !token;
-    ($("gate-submit") as HTMLElement).hidden = pinsHidden && !token;
-    for (const id of ["gate-class", "gate-pid", "gate-pin"]) ($(id) as HTMLInputElement).required = !token && !pinsHidden;
-    ($("gate-token") as HTMLInputElement).required = token;
-    $("gate-mode").textContent = token ? "Pupil? Sign in with your class code and PIN" : "Teacher or laser station? Sign in with a token";
-    $("gate-error").textContent = "";
-  };
-  const refreshAuthConfig = async () => applyAuthConfig(await fetchAuthConfig((($("gate-url") as HTMLInputElement).value)));
+  /** The only way in is DINO. The sign-in page asks the server how to reach it. */
+  let authConfig: AuthConfig = { mode: "planner", sso: null };
 
   async function startDino(): Promise<void> {
     const err = $("gate-error");
@@ -176,22 +172,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     try {
       const base = (($("gate-url") as HTMLInputElement).value);
       const c = authConfig.sso ? authConfig : await fetchAuthConfig(base);
-      if (!c.sso) throw new SsoError("This server does not use DINO sign-in.");
+      if (!c.sso) throw new SsoError("Can't reach the server's DINO sign-in settings. Check the address and your network.");
+      authConfig = c;
       await beginSignIn("editor", base, c.sso, location, (url) => location.assign(url));
-    } catch (e) { err.textContent = problem(e); }
-  }
-
-  async function gateSubmit(): Promise<void> {
-    const err = $("gate-error");
-    const base = (($("gate-url") as HTMLInputElement).value);
-    err.textContent = "";
-    try {
-      if (tokenMode) { await signedIn(await signIn(base, (($("gate-token") as HTMLInputElement).value).trim())); return; }
-      const cls = (($("gate-class") as HTMLInputElement).value);
-      const next = await loginWithPin(base, cls, (($("gate-pid") as HTMLInputElement).value), (($("gate-pin") as HTMLInputElement).value));
-      try { localStorage.setItem("kerf.classCode", cls.trim()); } catch { /* fine */ }
-      ($("gate-pin") as HTMLInputElement).value = ""; // never leave a PIN sitting in the form
-      await signedIn(next);
     } catch (e) { err.textContent = problem(e); }
   }
 
@@ -246,7 +229,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     const extra = localOk ? "" : " Too big to keep on this computer as well.";
     el.hidden = false;
     if (!session) { el.textContent = offline ? `Kept on this computer.${extra}` : ""; el.className = ""; return; }
-    if (session.role === "station") { el.hidden = true; return; }
+    if (stationMode) { el.hidden = true; return; }
     el.className = saveState === "failed" || !localOk ? "bad" : "";
     el.textContent = saveState === "saving" ? "Saving…"
       : saveState === "failed" ? `Not on the server yet: kept on this computer, trying again.${extra}`
@@ -257,7 +240,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   /** Save the page to the server now if there is anything new. Never throws: a failure is shown and retried. */
   async function autosave(): Promise<void> {
     clearTimeout(autoTimer); autoTimer = undefined;
-    if (!session || session.role === "station" || !ctx.objects().length || key() === cur.savedKey) { showSaveState(); return; }
+    if (!session || stationMode || !ctx.objects().length || key() === cur.savedKey) { showSaveState(); return; }
     saving++; saveState = "saving"; showSaveState();
     try {
       await saveCurrent();
@@ -277,7 +260,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   /** Called often (by main.ts, a few times a second after anything is drawn): schedule a save when the page differs from the last saved version. */
   function noteChange(): void {
-    if (!session || session.role === "station") { showSaveState(); return; }
+    if (!session || stationMode) { showSaveState(); return; }
     if (!dirty()) { if (saveState === "saved") showSaveState(); return; }
     if (autoTimer) clearTimeout(autoTimer);
     if (saveState !== "failed") { saveState = "idle"; showSaveState(); }
@@ -470,7 +453,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   }
 
   async function signOut(): Promise<void> {
-    if (session?.role === "station") { closeStation(); dropSession(); offline = false; render(); return; }
+    if (stationMode) { wantStation(null); closeStation(); dropSession(); offline = false; render(); return; }
     await flushNow(); // whatever is new goes to the server first
     if ((dirty() || ctx.tabs.othersDirty()) && !confirm("Some changes could not be saved to the server. They are kept on this computer and will be here when you sign in again as the same person. Sign out anyway?")) return;
     ctx.tabs.persist(); // the open tabs stay on this computer for the next time this pupil signs in
@@ -483,12 +466,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   $("gate-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    void gateSubmit();
+    void startDino();
   });
-  $("gate-mode").addEventListener("click", () => setMode(!tokenMode));
-  $("gate-sso").addEventListener("click", () => void startDino());
-  $("gate-url").addEventListener("change", () => void refreshAuthConfig());
-  try { ($("gate-class") as HTMLInputElement).value = localStorage.getItem("kerf.classCode") ?? ""; } catch { /* fine */ }
+  $("gate-url").addEventListener("change", () => { authConfig = { mode: "planner", sso: null }; });
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); ctx.tabs.restore("offline"); });
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
@@ -526,8 +506,6 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       },
     });
   });
-  setMode(false);
-  void refreshAuthConfig();
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
   window.addEventListener("beforeunload", (ev) => { if (session && (dirty() || ctx.tabs.othersDirty())) ev.preventDefault(); });
   render();
@@ -548,10 +526,10 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   void dinoStart();
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
-    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); const restored = !!session && session.role !== "station" && ctx.tabs.restore(session.id); if (session?.role === "pupil" && !restored) void files(true); }).catch((e) => {
+    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); const restored = !!session && !stationMode && ctx.tabs.restore(session.id); if (session?.role === "pupil" && !restored) void files(true); }).catch((e) => {
       if (e instanceof ServerError && e.status === 401) { dropSession(); return; }
       // the server cannot be reached right now: the tabs kept on this computer still come back, and saving carries on trying
-      if (session && session.role !== "station") { ctx.tabs.restore(session.id); ctx.notify("The server cannot be reached. Your work is kept on this computer and will be saved when it is back."); }
+      if (session && !stationMode) { ctx.tabs.restore(session.id); ctx.notify("The server cannot be reached. Your work is kept on this computer and will be saved when it is back."); }
     });
   }
   return {

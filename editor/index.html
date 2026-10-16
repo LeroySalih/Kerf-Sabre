@@ -13,20 +13,10 @@
     <div id="gate" hidden>
       <form id="gate-form" class="gate-card">
         <h1>BISAK Kerf</h1>
-        <p>Sign in to see your files and send designs to the laser.</p>
-        <div id="gate-pin-fields" class="gate-fields">
-          <label>Class code <input id="gate-class" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required placeholder="e.g. 9B-DT" /></label>
-          <label>Pupil ID <input id="gate-pid" type="text" autocomplete="username" spellcheck="false" required /></label>
-          <label>PIN <input id="gate-pin" type="password" inputmode="numeric" autocomplete="current-password" required placeholder="From your teacher" /></label>
-        </div>
-        <div id="gate-token-fields" class="gate-fields" hidden>
-          <label>Token <input id="gate-token" type="password" autocomplete="off" spellcheck="false" placeholder="Teachers and laser stations" /></label>
-        </div>
+        <p>Sign in with your DINO account to see your files and send designs to the laser.</p>
         <details><summary>Server address</summary><input id="gate-url" type="text" placeholder="Leave blank unless your teacher says" /></details>
         <p id="gate-error" role="alert"></p>
-        <button type="button" id="gate-sso" class="on" hidden>Sign in with DINO</button>
-        <button type="submit" id="gate-submit" class="on">Sign in</button>
-        <button type="button" id="gate-mode" class="link">Teacher or laser station? Sign in with a token</button>
+        <button type="submit" id="gate-sso" class="on">Sign in with DINO</button>
         <button type="button" id="gate-offline" class="link">Work without signing in (nothing is saved to the server)</button>
       </form>
     </div>

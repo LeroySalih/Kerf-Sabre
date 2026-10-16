@@ -125,7 +125,7 @@ def ensure_cutter_build(force: bool, skip: bool) -> None:
 
 
 def admin(data_dir: Path, *args: str) -> str:
-    env = {"KERF_DATA_DIR": str(data_dir)}
+    env = {"KERF_DATA_DIR": str(data_dir), "KERF_AUTH_MODE": os.environ.get("KERF_AUTH_MODE", "pins")}  # local demo: stored demo tokens, no DINO
     r = subprocess.run([str(VENV_PY), "-m", "kerf_server.admin", *args], cwd=SERVER, env={**os.environ, **env}, capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit(f"kerf-admin {' '.join(args)} failed:\n{r.stdout}{r.stderr}")
@@ -259,7 +259,7 @@ def main() -> int:
 
     procs: list[Proc] = []
     server = Proc("server", [str(VENV_PY), "-m", "kerf_server.main"], SERVER, {
-        "KERF_DATA_DIR": str(data_dir), "KERF_EDITOR_DIST": str(EDITOR / "dist"), "KERF_PORT": str(server_port), "KERF_HOST": host,
+        "KERF_AUTH_MODE": os.environ.get("KERF_AUTH_MODE", "pins"), "KERF_DATA_DIR": str(data_dir), "KERF_EDITOR_DIST": str(EDITOR / "dist"), "KERF_PORT": str(server_port), "KERF_HOST": host,
         "KERF_FORWARDED_ALLOW_IPS": "127.0.0.1", "KERF_LOG_LEVEL": "warning"})
     procs.append(server)
     stopping = False
@@ -297,8 +297,7 @@ def main() -> int:
         if ip:
             print(f"   Other PCs:   http://{ip}:{editor_port or server_port}")
         print(f"   Connector:   " + (f"pretend laser '{args.station}' (cuts nothing; connects out to the Server)" if cutter else "none"))
-        print(f"\n   Sign in as a pupil:  class DEMO, ID and PIN: " + ", ".join(f"{p['id']} / {p['pin']}" for p in logins["pupils"]))
-        print(f"   Teacher token:       {logins['teacher']}   (the Admin site, or the Editor via 'Teacher or laser station?')")
+        print(f"   Teacher token:       {logins['teacher']}   (for the API; the Editor and Admin site sign in with DINO only)")
         print(f"   Station mode token:  {logins['stationToken']}")
         print(f"   Logins are saved in {data_dir / 'local-logins.json'}")
         print(f"\n   Press Ctrl+C to stop everything.\n{bar}\n", flush=True)

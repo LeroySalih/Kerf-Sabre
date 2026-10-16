@@ -7,14 +7,14 @@ export interface SsoConfig {
   issuer: string; authorizeUrl: string; tokenUrl: string; revokeUrl: string; userinfoUrl?: string;
   clientIds: { editor: string; admin: string }; scopes: string[];
 }
-export interface AuthConfig { mode: "pins" | "planner" | "both"; sso: SsoConfig | null }
+export interface AuthConfig { mode: "pins" | "planner" | "both"; sso: SsoConfig | null }  // `pins` only from a development server
 export type App = "editor" | "admin";
 type Fetch = typeof fetch;
 export interface Tokens { accessToken: string; refreshToken: string | null; expiresAt: number }
 
 export class SsoError extends Error {}
 
-/** How this server wants people to sign in. An older server (or any failure) means the class code + PIN page. */
+/** How this server wants people to sign in: DINO. `sso: null` (offline, or a server without DINO) means nobody can sign in. */
 export async function fetchAuthConfig(baseUrl: string, f: Fetch = fetch): Promise<AuthConfig> {
   try {
     const res = await f(`${normaliseBase(baseUrl)}/api/v1/auth/config`);

@@ -3,23 +3,15 @@
 import "../style.css";
 import "./admin.css";
 import { btn, el, msg } from "../dom";
-import { ServerError, normaliseBase, request, type Session } from "../server";
+import { ServerError, request, type Session } from "../server";
 import { pagesFor, type Ctx, type Page } from "./pages";
 import { Renewer, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type Tokens } from "../sso";
 
-const KEY = "kerf.admin.session";
-const loadSession = (): Session | null => {
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return s && typeof s.token === "string" && typeof s.baseUrl === "string" ? (s as Session) : null;
-  } catch { return null; }
-};
-const saveSession = (s: Session | null): void => {
-  try { if (s && !s.sso) localStorage.setItem(KEY, JSON.stringify(s)); else localStorage.removeItem(KEY); } catch { /* private window: this page only */ }
-};
+const KEY = "kerf.admin.session"; // an older version kept a pasted token here; nothing is stored any more
+const saveSession = (_s: Session | null): void => { try { localStorage.removeItem(KEY); } catch { /* fine */ } };
 
 const root = document.getElementById("admin")!;
-let session = loadSession();
+let session: Session | null = null;
 let renewer: Renewer | null = null;
 /** A DINO sign-in is kept fresh in the background; if DINO ends it, back to the sign-in page. */
 const keepAlive = (s: Session, tokens: Tokens): void => {
@@ -28,42 +20,27 @@ const keepAlive = (s: Session, tokens: Tokens): void => {
 };
 /** Only staff belong here, however they signed in. */
 function staffOnly(me: { role: string }): void {
-  if (!["teacher", "admin", "platform"].includes(me.role)) throw new ServerError(me.role === "station" ? "That is a laser station token. Use the Editor on the laser PC." : "This site is for teachers and school admins. Pupils use the Editor.", 403, "forbidden");
+  if (!["teacher", "admin", "technician", "platform"].includes(me.role)) throw new ServerError(me.role === "station" ? "That is a laser station token. Station pages are for technicians and admins signing in with DINO." : "This site is for teachers, technicians and school admins. Pupils use the Editor.", 403, "forbidden");
 }
 let schoolName = "";
 let stopPage: () => void = () => {};
 
-/** Only staff belong here. A pupil or laser-station token is turned away with a pointer to the right place. */
-async function signInWith(token: string, address: string): Promise<Session> {
-  const baseUrl = normaliseBase(address);
-  const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl, token }, "GET", "/auth/me");
-  staffOnly(me);
-  return { baseUrl, token, role: me.role, id: me.id, school: me.school };
-}
-
 function signInView(error = ""): void {
   stopPage();
   const err = el("p", { class: "ad-err", role: "alert" }, error);
-  const token = el("input", { type: "password", autocomplete: "off", spellcheck: "false", required: "", placeholder: "Teacher, admin or platform token" });
   const url = el("input", { type: "text", placeholder: "Leave blank unless told otherwise" });
   (url as HTMLInputElement).value = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
-  const dino = el("button", { type: "button", class: "on", hidden: "" }, "Sign in with DINO");
-  void fetchAuthConfig((url as HTMLInputElement).value).then((c) => {
-    if (!c.sso) return;
-    (dino as HTMLElement).hidden = false;
-    dino.addEventListener("click", () => { void beginSignIn("admin", (url as HTMLInputElement).value, c.sso!, location, (u) => location.assign(u)).catch((e) => signInView(msg(e))); });
-  });
+  const dino = el("button", { type: "submit", class: "on" }, "Sign in with DINO");
   const form = el("form", { class: "ad-card ad-signin" }, el("h1", {}, "BISAK Kerf Admin"),
-    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with your teacher or admin token."),
-    el("label", {}, "Token", token), el("details", {}, el("summary", {}, "Server address"), url), err, el("button", { type: "submit", class: "on" }, "Sign in"),
-    dino, el("a", { href: "/" }, "Looking for the Editor?"));
+    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with your DINO account."),
+    el("details", {}, el("summary", {}, "Server address"), url), err, dino, el("a", { href: "/" }, "Looking for the Editor?"));
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     void (async () => {
       try {
-        session = await signInWith((token as HTMLInputElement).value.trim(), (url as HTMLInputElement).value);
-        saveSession(session);
-        await shell();
+        const c = await fetchAuthConfig((url as HTMLInputElement).value);
+        if (!c.sso) throw new Error("Can't reach the server's DINO sign-in settings. Check the address and your network.");
+        await beginSignIn("admin", (url as HTMLInputElement).value, c.sso, location, (u) => location.assign(u));
       } catch (e) { signInView(msg(e)); }
     })();
   });
@@ -83,10 +60,10 @@ async function shell(): Promise<void> {
   if (!session) return signInView();
   const s = session;
   schoolName = "";
-  if (s.role !== "platform") {
+  if (s.role === "teacher" || s.role === "admin") {
     try { schoolName = (await request<{ name: string }>(s, "GET", "/school")).name; }
     catch (e) {
-      if (e instanceof ServerError && e.status === 401) { session = null; saveSession(null); return signInView("Your token is no longer valid. Sign in again."); }
+      if (e instanceof ServerError && e.status === 401) { session = null; saveSession(null); return signInView("Your sign-in is no longer valid. Sign in again."); }
       throw e;
     }
   }
@@ -109,8 +86,8 @@ async function shell(): Promise<void> {
   }
 
   const head = el("header", { class: "ad-head" }, el("span", { class: "brand" }, "BISAK Kerf Admin"),
-    el("span", { class: "who" }, `${schoolName ? schoolName + " · " : ""}${s.role === "platform" ? "Platform owner" : s.role === "admin" ? "School admin" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
-    ...(s.role === "platform" ? [] : [el("a", { class: "btnlink", href: "/" }, "Editor")]), btn("Sign out", signOut));
+    el("span", { class: "who" }, `${schoolName ? schoolName + " · " : ""}${s.role === "platform" ? "Platform owner" : s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
+    ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/" }, "Editor")] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);
   let saved = "";
   try { saved = localStorage.getItem("kerf.admin.page") ?? ""; } catch { /* fine */ }

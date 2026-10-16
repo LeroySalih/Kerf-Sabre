@@ -16,6 +16,10 @@ from .errors import ApiError
 from .models import DEFAULT_SCHOOL, Token
 
 ROLES = ("pupil", "teacher", "admin", "station", "platform")
+#: Roles a DINO sign-in can give. `technician` runs the laser stations and nothing else; it is never a stored token.
+SSO_ROLES = ("pupil", "teacher", "admin", "technician")
+#: Roles that, when DINO is the only way in, may only be held by a DINO sign-in (never by a long-lived token).
+PERSON_ROLES = ("pupil", "teacher", "admin", "technician")
 _PREFIX = {"pupil": "kp", "teacher": "kt", "admin": "ka", "station": "ks", "platform": "kx"}
 
 
@@ -38,9 +42,18 @@ class Principal:
     def is_station(self) -> bool:
         return self.role == "station"
 
+    @property
+    def is_technician(self) -> bool:
+        return self.role == "technician"
+
+    @property
+    def can_override_queue(self) -> bool:
+        """Teachers, admins and technicians (who run the lasers) may skip the queue, which a camera calibration needs."""
+        return self.role in ("teacher", "admin", "technician")
+
     def staff(self) -> bool:
-        """Teachers, admins and stations see every job in their school; pupils only their own."""
-        return self.role in ("teacher", "admin", "station")
+        """Teachers, admins, technicians and stations see every job in their school; pupils only their own."""
+        return self.role in ("teacher", "admin", "technician", "station")
 
 
 def hash_token(token: str) -> str:
@@ -64,8 +77,11 @@ def issue_token(db: Database, role: str, subject_id: str, label: str | None = No
     return token
 
 
-def lookup(session: Session, token: str) -> Principal | None:
+def lookup(session: Session, token: str, people_tokens: bool = True) -> Principal | None:
+    """`people_tokens` False (DINO is the only way in): only stations and the platform owner may hold a stored token."""
     row = session.scalar(select(Token).where(Token.token_hash == hash_token(token), Token.revoked.is_(False)))
+    if row is not None and not people_tokens and row.role in PERSON_ROLES:
+        return None
     if row is None or (row.expires_at is not None and as_utc(row.expires_at) <= utcnow()):
         return None  # unknown, revoked or expired
     return Principal(row.role, row.subject_id, None if row.role == "platform" else (row.school_id or DEFAULT_SCHOOL))
@@ -91,7 +107,7 @@ def current_principal(request: Request) -> Principal:
         return sso.principal(token)
     db: Database = request.app.state.db
     with db.session() as s:
-        p = lookup(s, token)
+        p = lookup(s, token, request.app.state.settings.auth_mode != "planner")
     if p is None:
         raise ApiError(401, "unauthorized", "That token is not recognised or has been revoked.")
     return p
@@ -101,6 +117,7 @@ def require(*roles: str):
     """Dependency: the caller must hold one of these roles. Teachers pass for pupil endpoints, and admins wherever teachers do."""
     allowed = set(roles) | ({"teacher"} if "pupil" in roles else set())
     allowed |= {"admin"} if "teacher" in allowed else set()
+    allowed |= {"technician"} if "station" in allowed else set()  # a technician runs the laser stations from the browser
 
     def dep(p: Principal = Depends(current_principal)) -> Principal:
         if p.role not in allowed:

@@ -25,15 +25,10 @@ export class ServerError extends Error {
   }
 }
 
-const KEY = "kerf.session";
-export function loadSession(): Session | null {
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return s && typeof s.token === "string" && typeof s.baseUrl === "string" ? (s as Session) : null;
-  } catch { return null; }
-}
-export function saveSession(s: Session | null): void {
-  try { if (s && !s.sso) localStorage.setItem(KEY, JSON.stringify(s)); else localStorage.removeItem(KEY); } catch { /* private window: stay signed in for this page only */ }
+const KEY = "kerf.session"; // an older version kept a pasted token here
+/** Nothing is stored: a DINO session lives in memory and a refresh token in the tab. This only clears what an older version stored. */
+export function saveSession(_s: Session | null): void {
+  try { localStorage.removeItem(KEY); } catch { /* fine */ }
 }
 
 /** "https://kerf.school/" and "https://kerf.school/api/v1" both become "https://kerf.school"; blank means this page's own server. */
@@ -59,20 +54,14 @@ export async function request<T>(s: { baseUrl: string; token: string }, method: 
   try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
   if (!res.ok) {
     const e = (json ?? {}) as { code?: string; message?: string; details?: { path: string; message: string }[] };
-    const msg = res.status === 401 ? "The server doesn't accept that token. Ask your teacher for a new one." : e.message ?? `The server answered ${res.status}.`;
+    const msg = res.status === 401 ? "Your sign-in is not valid any more. Sign in with DINO again." : e.message ?? `The server answered ${res.status}.`;
     throw new ServerError(msg, res.status, e.code ?? "error", e.details);
   }
   return json as T;
 }
 
-export async function signIn(baseUrl: string, token: string, f: Fetch = fetch): Promise<Session> {
-  const base = normaliseBase(baseUrl);
-  const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl: base, token }, "GET", "/auth/me", undefined, f);
-  return { baseUrl: base, token, role: me.role, id: me.id, school: me.school };
-}
-
 export interface School { id: string; name: string; createdAt?: string }
-export interface StaffMember { role: "admin" | "teacher" | "station"; id: string; label?: string | null; createdAt?: string }
+export interface StaffMember { role: "admin" | "teacher" | "technician" | "station"; id: string; label?: string | null; createdAt?: string }
 export const listSchools = (s: Session, f?: Fetch) => request<School[]>(s, "GET", "/schools", undefined, f);
 export const createSchool = (s: Session, id: string, name: string, adminId?: string, f?: Fetch) => request<School & { admin?: { id: string; token: string } }>(s, "POST", "/schools", { id, name, ...(adminId ? { adminId } : {}) }, f);
 export const mySchool = (s: Session, f?: Fetch) => request<School>(s, "GET", "/school", undefined, f);
@@ -80,21 +69,7 @@ export const listStaff = (s: Session, f?: Fetch) => request<StaffMember[]>(s, "G
 export const addStaff = (s: Session, role: StaffMember["role"], id: string, label?: string, f?: Fetch) => request<{ role: string; id: string; token: string }>(s, "POST", "/staff", { role, id, ...(label ? { label } : {}) }, f);
 export const revokeStaff = (s: Session, id: string, f?: Fetch) => request<null>(s, "DELETE", `/staff/${encodeURIComponent(id)}`, undefined, f);
 
-/** Class login: class code + pupil ID + PIN give a short-lived token. Wrong details come back as the server's own words. */
-export async function loginWithPin(baseUrl: string, classCode: string, pupilId: string, pin: string, f: Fetch = fetch): Promise<Session> {
-  const base = normaliseBase(baseUrl);
-  let res: Response;
-  try {
-    res = await f(`${base}/api/v1/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ classCode: classCode.trim(), pupilId: pupilId.trim(), pin: pin.trim() }) });
-  } catch {
-    throw new ServerError("Can't reach the server. Check the address and your network.", 0, "network");
-  }
-  const json = (await res.json().catch(() => null)) as { token?: string; id?: string; classCode?: string; expiresAt?: string; code?: string; message?: string } | null;
-  if (!res.ok || !json?.token) throw new ServerError(json?.message ?? `The server answered ${res.status}.`, res.status, json?.code ?? "error");
-  return { baseUrl: base, token: json.token, role: "pupil", id: json.id!, classCode: json.classCode, expiresAt: json.expiresAt };
-}
-
-/** End a class-login session on the server (best effort: the token also expires by itself). */
+/** End a session on the server (best effort: the token also expires by itself). */
 export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
   try { await f(`${s.baseUrl}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${s.token}` } }); } catch { /* offline: it will expire */ }
 }
@@ -107,7 +82,6 @@ export const createClass = (s: Session, code: string, label: string, requireAppr
 export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
 export const classPupils = (s: Session, code: string, f?: Fetch) => request<ClassPupil[]>(s, "GET", `/classes/${encodeURIComponent(code)}/pupils`, undefined, f);
 export const addPupils = (s: Session, code: string, pupilIds: string[], f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, { pupilIds }, f);
-export const resetPin = (s: Session, pupilId: string, f?: Fetch) => request<{ pupilId: string; pin: string }>(s, "POST", `/pupils/${encodeURIComponent(pupilId)}/reset-pin`, undefined, f);
 export const removePupil = (s: Session, code: string, pupilId: string, f?: Fetch) => request<null>(s, "DELETE", `/classes/${encodeURIComponent(code)}/pupils/${encodeURIComponent(pupilId)}`, undefined, f);
 
 /** Pupil IDs pasted from a spreadsheet or typed: split on whitespace, commas and semicolons; drop blanks and repeats. */
@@ -116,7 +90,6 @@ export function parseIds(text: string): string[] {
 }
 
 /** "pupilId,pin" lines for handing out. */
-export const pinsCsv = (rows: { pupilId: string; pin: string }[]): string => ["pupilId,pin", ...rows.map((r) => `${r.pupilId},${r.pin}`)].join("\n") + "\n";
 
 export type ActivityStatus = "todo" | "working" | "submitted" | "revise" | "complete";
 export const ACTIVITY_STATUS_TEXT: Record<ActivityStatus, string> = { todo: "Not started", working: "Working on it", submitted: "Handed in", revise: "Please improve", complete: "Complete" };

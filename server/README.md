@@ -16,7 +16,7 @@ Origin: a job is either `absolute` (bed coordinates) or `current-position` (the 
 
 ## Class login
 
-Pupils sign in with **class code + pupil ID + PIN** (no names anywhere, only IDs). The server issues a token that lasts `KERF_SESSION_HOURS` (default 10) and is revoked on sign-out. Five wrong PINs in a row lock that ID for five minutes; a wrong class, ID or PIN always gives the same message so nobody can find out which IDs exist; many failures from one computer slow it down. PINs are random 5-digit numbers, stored hashed (scrypt), shown once when made.
+Everyone signs in with **DINO** (planner-004; see `docs/AUTH-PLANNER-004.md`): set `KERF_SSO_ISSUER` (the server does not start without it). DINO's `roles` become pupil, teacher, admin or technician (the technician runs the Station pages only). The only stored tokens left are the Cutter's station token and the platform owner's. The class code + PIN login is gone (`POST /auth/login` answers 404 `sso_only`); `KERF_AUTH_MODE=pins` exists only for tests and local demos.
 
 ```bash
 kerf-admin create-class --code 9B-DT --label "Y9 set 2"

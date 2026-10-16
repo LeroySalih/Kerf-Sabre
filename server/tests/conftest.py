@@ -13,7 +13,7 @@ from kerf_server.security import issue_token
 @pytest.fixture()
 def settings(tmp_path: Path) -> Settings:
     # most tests put several files from the same pupil in the queue; TestANewSendReplacesTheOldOne turns replacement on
-    return Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False)
+    return Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="pins")  # the tests sign in with stored tokens; test_sso.py covers DINO
 
 
 @pytest.fixture()
@@ -40,3 +40,9 @@ def tokens(client, app) -> dict[str, str]:
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(autouse=True)
+def _stored_tokens_for_tests(monkeypatch):
+    """A running server is DINO-only by default; most tests (and the kerf-admin CLI they run) use stored tokens. test_sso.py asks for DINO itself."""
+    monkeypatch.setenv("KERF_AUTH_MODE", "pins")

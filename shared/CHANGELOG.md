@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.19 - DINO is the only way in; technician role (additive)
+- `openapi.yaml`: new role `technician` (from a DINO token's `roles`; admin > teacher > technician > pupil). A technician runs the laser stations and nothing else: the station endpoints (queue, frame, placement, start, pause/resume/stop, camera, camera calibration and calibration marks, `skipQueue`) accept it, every teacher/admin endpoint refuses it. `Me.role` and the role lists include it.
+- A running server is **DINO-only** (`KERF_AUTH_MODE=planner`, now the default; it needs `KERF_SSO_ISSUER`). Stored tokens for pupils, teachers and admins stop working (401), `POST /auth/login` (class code + PIN) answers `404 sso_only`, `POST /staff` and `kerf-admin create-token` only make `station` tokens, `POST /schools` takes no `adminId`. The Cutter's station token and the platform owner's token are the only stored tokens left. `pins` and `both` remain as test and local-development modes.
+- Editor and Admin: no class code + PIN form, no pasted-token sign-in, no PINs. A technician sees only a "Station pages" page on the Admin site; an admin also has it. `/?station=<laser>` opens that laser's Station page.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.19`.
+
 ## 0.2.18 - sign in with planner-004 (additive)
 - `openapi.yaml`: bearer tokens may also be a planner-004 (DINO) JWT for pupils, teachers and admins (never stations or the platform). New public `GET /auth/config` (`mode` = `pins`, `planner` or `both`, plus the OAuth endpoints and client IDs the Editor and Admin need for Authorization Code + PKCE). `POST /auth/login` answers `404 sso_only` when the server only accepts planner-004 sign-in. `Me` now lists every role and carries `school`.
 - Pupil IDs stay IDs only: a planner-004 sign-in uses the DINO user ID (`sub`) as the person's ID; names and emails are never stored or logged. Design: `docs/AUTH-PLANNER-004.md`.

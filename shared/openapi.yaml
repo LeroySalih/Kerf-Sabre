@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.18
+  version: 0.2.19
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -122,7 +122,7 @@ paths:
       responses:
         "200": {description: OK}
     post:
-      summary: School admin. Add a teacher, admin or station token to my school. The token is returned once.
+      summary: School admin. Add a station token to my school (people sign in with DINO, so a teacher/admin role answers 422). The token is returned once.
       requestBody:
         required: true
         content:
@@ -131,7 +131,7 @@ paths:
               type: object
               required: [role, id]
               properties:
-                role: {type: string, enum: [admin, teacher, station]}
+                role: {type: string, enum: [station]}
                 id: {type: string, description: "An ID, never a name. A station's ID is its laser's ID."}
                 label: {type: string}
       responses:
@@ -1191,7 +1191,7 @@ components:
       type: object
       required: [role, id]
       properties:
-        role: {enum: [pupil, teacher, admin, station, platform]}
+        role: {enum: [pupil, teacher, admin, technician, station, platform]}
         id: {type: string, description: "Pupil ID, teacher ID or station id. Never a name. For a planner-004 sign-in this is the DINO user ID (`sub`)."}
         school: {type: [string, "null"]}
     LogLevel:

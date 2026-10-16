@@ -54,7 +54,8 @@ class Settings:
     #: Failed logins allowed from one address in `login_ip_window_s` before it is slowed down.
     login_ip_failures: int = 30
     login_ip_window_s: float = 300.0
-    #: How people sign in. "pins": class code + PIN only (default). "planner": planner-004 (DINO) sign-in only. "both": either.
+    #: How people sign in. "planner" (what a running server uses): planner-004 (DINO) sign-in only; the only stored tokens left are the
+    #: Cutter's station token and the platform owner's. "pins" and "both" (class code + PIN and tokens) exist for tests and offline development only.
     auth_mode: str = "pins"
     #: planner-004's public origin (the JWT `iss`), e.g. https://dino.mr-salih.org. Required unless auth_mode is "pins".
     sso_issuer: str = ""
@@ -63,8 +64,6 @@ class Settings:
     sso_jwks_url: str = ""
     sso_client_editor: str = "kerf-editor"
     sso_client_admin: str = "kerf-admin"
-    #: planner-004 `technician` counts as a Kerf teacher.
-    sso_technician_is_teacher: bool = True
     log_max_bytes: int = 5_000_000
     log_backups: int = 5
 
@@ -95,13 +94,12 @@ class Settings:
             session_hours=float(e.get("KERF_SESSION_HOURS", "10")),
             login_max_failures=int(e.get("KERF_LOGIN_MAX_FAILURES", "5")),
             login_lockout_minutes=float(e.get("KERF_LOGIN_LOCKOUT_MINUTES", "5")),
-            auth_mode=e.get("KERF_AUTH_MODE", "pins").strip().lower(),
+            auth_mode=e.get("KERF_AUTH_MODE", "planner").strip().lower(),
             sso_issuer=e.get("KERF_SSO_ISSUER", "").strip().rstrip("/"),
             sso_audience=e.get("KERF_SSO_AUDIENCE", "kerf-sabre"),
             sso_jwks_url=e.get("KERF_SSO_JWKS_URL", "").strip(),
             sso_client_editor=e.get("KERF_SSO_CLIENT_EDITOR", "kerf-editor"),
             sso_client_admin=e.get("KERF_SSO_CLIENT_ADMIN", "kerf-admin"),
-            sso_technician_is_teacher=_bool(e.get("KERF_SSO_TECHNICIAN_IS_TEACHER"), True),
             cors_origins=tuple(o.strip() for o in e.get("KERF_CORS_ORIGINS", "").split(",") if o.strip()),
         )
         return replace_settings(base, **overrides) if overrides else base

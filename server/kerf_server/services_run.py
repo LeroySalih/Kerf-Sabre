@@ -54,7 +54,7 @@ def head_of(live: Live):
 
 
 def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, skip_queue: bool = False) -> dict[str, Any]:
-    live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.is_teacher)
+    live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.can_override_queue)
     head = head_of(live)
     if j.origin["mode"] == "current-position" and head is None:
         raise ApiError(409, "position_unknown", "The laser has not reported where its head is yet. Wait a moment and try again.")
@@ -103,7 +103,7 @@ def assign_checks(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: 
     """Everything that must hold before the Cutter is told to cut. Returns (live, machine, result, gcode row)."""
     if not material_confirmed:
         raise ApiError(422, "material_not_confirmed", "Confirm the right material is loaded before cutting.")
-    live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.is_teacher)
+    live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.can_override_queue)
     head = head_of(live)
     if j.origin["mode"] == "current-position" and head is None:
         raise ApiError(409, "position_unknown", "The laser has not reported where its head is yet.")

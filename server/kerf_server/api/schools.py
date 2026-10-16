@@ -24,6 +24,8 @@ def list_schools(_: Principal = Depends(require("platform")), s: Session = Depen
 def create_school(request: Request, body: dict[str, Any] = Body(...), _: Principal = Depends(require("platform")), s: Session = Depends(get_session)):
     """Create a school and its first admin. The admin's token is in the answer once and is never shown again."""
     admin_id = body.get("adminId")
+    if admin_id and request.app.state.settings.auth_mode == "planner":
+        raise ApiError(422, "invalid", "School admins sign in with DINO, so no admin token is made. Create the school without adminId.")
     school = ss.create_school(s, str(body.get("id", "")), str(body.get("name", "")))
     out: dict[str, Any] = ss.school_doc(school)
     if admin_id:
@@ -49,6 +51,8 @@ def add_staff(request: Request, body: dict[str, Any] = Body(...), who: Principal
     role, sid = body.get("role"), body.get("id")
     if not isinstance(role, str) or not isinstance(sid, str):
         raise ApiError(422, "invalid", "Send role (admin, teacher or station) and id.")
+    if request.app.state.settings.auth_mode == "planner" and role != "station":
+        raise ApiError(422, "invalid", "People sign in with DINO. Only a station token (for a Cutter) can be made here.")
     token = ss.add_staff(request.app.state.db, who.school, role, sid, body.get("label") if isinstance(body.get("label"), str) else None)
     return {"role": role, "id": sid, "token": token}
 

@@ -2,7 +2,7 @@
 
 Design: docs/AUTH-PLANNER-004.md. The token carries `sub` (the DINO user ID, used as the person's ID here), `roles`,
 `iss`, `aud`, `client_id` and `exp`. Never a name or email, and this module never stores or logs the token or claims
-beyond `sub`. A JWT can only ever become a pupil, teacher or admin: never a station or the platform.
+beyond `sub`. A JWT can only ever become a pupil, teacher, technician or admin: never a station or the platform.
 """
 from __future__ import annotations
 
@@ -39,15 +39,17 @@ def _http_get_json(url: str) -> dict[str, Any]:
         return json.loads(r.read().decode())
 
 
-def pick_role(roles: Any, technician_is_teacher: bool = True) -> str | None:
-    """admin > teacher (and technician) > pupil. None when the token holds no role Kerf knows."""
+def pick_role(roles: Any) -> str | None:
+    """admin > teacher > technician > pupil. None when the token holds no role Kerf knows."""
     if not isinstance(roles, list):
         return None
     have = {r.strip().lower() for r in roles if isinstance(r, str)}
     if "admin" in have:
         return "admin"
-    if "teacher" in have or (technician_is_teacher and "technician" in have):
+    if "teacher" in have:
         return "teacher"
+    if "technician" in have:
+        return "technician"
     if "pupil" in have:
         return "pupil"
     return None
@@ -124,7 +126,7 @@ class Verifier:
         sub = claims["sub"]
         if not isinstance(sub, str) or not 0 < len(sub) <= 64 or not set(sub) <= ID_OK:
             raise bad
-        role = pick_role(claims.get("roles"), self.cfg.sso_technician_is_teacher)
+        role = pick_role(claims.get("roles"))
         if role is None:
             raise ApiError(403, "forbidden", "Your DINO account does not have a role that can use Kerf.")
         return role, sub

@@ -50,26 +50,26 @@ def get_station(station_id: str, request: Request, who: Principal = Depends(requ
 
 @router.get("/stations/{station_id}/camera-calibration")
 def get_camera_calibration(station_id: str, who: Principal = Depends(require("station", "teacher")), s: Session = Depends(get_session)):
-    """Where the camera picture sits on the bed, or 404 not_calibrated. Any laser PC or teacher of the school may read it."""
+    """Where the camera picture sits on the bed, or 404 not_calibrated. Any laser PC, technician or teacher of the school may read it."""
     cal = sp.get_calibration(s, who.school, station_id)
     if cal is None:
-        raise ApiError(404, "not_calibrated", f"The camera on {station_id} has not been calibrated yet. A teacher can do this on the Admin site's Lasers page.")
+        raise ApiError(404, "not_calibrated", f"The camera on {station_id} has not been calibrated yet. A technician or teacher can do this from the station's page (Calibrate camera).")
     return cal
 
 
 @router.put("/stations/{station_id}/camera-calibration")
-def put_camera_calibration(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+def put_camera_calibration(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     return sp.put_calibration(s, who.school, station_id, body, who.id)
 
 
 @router.delete("/stations/{station_id}/camera-calibration", status_code=204)
-def delete_camera_calibration(station_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+def delete_camera_calibration(station_id: str, who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     sp.clear_calibration(s, who.school, station_id)
     return Response(status_code=204)
 
 
 @router.post("/stations/{station_id}/calibration-marks", status_code=201)
-def calibration_marks(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+def calibration_marks(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     """Make (and approve, pinned to this laser) a job of known squares. The teacher cuts it, then clicks the squares' corners in the
     camera picture to calibrate. `corners` lists each square's corners in bed mm, in the order to click them."""
     j, corners = sj.calibration_marks(s, cfg, who, station_id, body)

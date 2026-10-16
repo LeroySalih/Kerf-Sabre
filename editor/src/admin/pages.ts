@@ -1,5 +1,5 @@
 // The pages of the admin site. Each page draws itself into a host element and may return a function that stops its refreshing.
-import { openClasses, showPins } from "../classesui";
+import { openClasses } from "../classesui";
 import { openClassWork } from "../activitiesui";
 import { infoDialog, openDialog, type DialogValue } from "../dialog";
 import { profileFromForm, stationFields } from "../machineform";
@@ -8,7 +8,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, removePupil, resetPin, revokeStaff, updateClass,
+  listJobsByStatus, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -97,13 +97,13 @@ const classes: Page = {
         ], { ok: "Create" });
         if (v && String(v.code).trim()) await attempt(() => createClass(s, String(v.code).trim(), String(v.label).trim(), v.approval !== "no"), redraw);
       })(), "on"));
-      if (!list.length) return host.replaceChildren(bar, empty("No classes yet. Create one, then add the pupil IDs."));
+      if (!list.length) return host.replaceChildren(bar, empty("No classes yet. Create one, then add the pupils' DINO IDs."));
       host.replaceChildren(bar, table(["Class", "Note", "Teacher", "Pupils", "Files from this class", ""], list.map((c) => {
         const sel = el("select", { "aria-label": `Approval for ${c.code}` }, ...APPROVAL.map((a) => new Option(a.text, a.v)));
         sel.value = c.requireApproval === false ? "no" : "yes";
         sel.addEventListener("change", () => void attempt(() => updateClass(s, c.code, { requireApproval: sel.value !== "no" }), redraw));
         return el("tr", {}, cell(el("b", {}, c.code)), cell(c.label ?? ""), cell(c.teacherId ?? "shared"), cell(String(c.pupilCount)), cell(sel),
-          actions(btn("Pupils and PINs…", () => openClasses(s, { openFile: lookAtFile }, c.code)), btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")),
+          actions(btn("Pupils…", () => openClasses(s, { openFile: lookAtFile }, c.code)), btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")),
             btn("Progress…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "progress"))));
       })), el("p", { class: "hint" }, "Changing the approval setting only affects files sent from now on. Files already waiting stay as they are."));
     };
@@ -114,7 +114,7 @@ const classes: Page = {
 // ---------------------------------------------------------------- pupils
 
 const pupils: Page = {
-  key: "pupils", title: "Pupils", lead: "Every pupil in the school, by class. Pupil IDs only, never names. A PIN is shown once when it is made.",
+  key: "pupils", title: "Pupils", lead: "Every pupil in the school, by class. Pupil IDs (their DINO IDs) only, never names.",
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
@@ -123,11 +123,10 @@ const pupils: Page = {
       const redraw = () => void draw().catch((e) => fail(host, e));
       const rows: HTMLElement[] = [];
       for (const { c, rows: ps } of all) for (const p of ps) {
-        rows.push(el("tr", {}, cell(el("b", {}, p.pupilId)), cell(c.code), cell(p.lastLogin ? new Date(p.lastLogin).toLocaleString() : "never"), cell(p.locked ? el("span", { class: "ad-tag warn" }, "locked") : ""),
-          actions(btn("New PIN", () => void attempt(async () => { const r = await resetPin(s, p.pupilId); await showPins("New PIN", [r]); }, redraw)),
-            btn("Remove", () => { if (confirm(`Remove ${p.pupilId} from ${c.code}? They will be signed out.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
+        rows.push(el("tr", {}, cell(el("b", {}, p.pupilId)), cell(c.code), cell(p.lastLogin ? new Date(p.lastLogin).toLocaleString() : "never"),
+          actions(btn("Remove", () => { if (confirm(`Remove ${p.pupilId} from ${c.code}? They will be signed out.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
       }
-      host.replaceChildren(...(rows.length ? [table(["Pupil ID", "Class", "Last signed in", "", ""], rows)] : [empty(cls.length ? "No pupils yet. Open a class and add pupil IDs." : "No classes yet.")]),
+      host.replaceChildren(...(rows.length ? [table(["Pupil ID", "Class", "Last signed in", ""], rows)] : [empty(cls.length ? "No pupils yet. Open a class and add pupils' DINO IDs." : "No classes yet.")]),
         ...(cls.length ? [el("p", { class: "hint" }, "To add pupils, open the class on the Classes page.")] : []));
     };
     void draw().catch((e) => fail(host, e));
@@ -264,36 +263,51 @@ const stations: Page = {
 
 // ---------------------------------------------------------------- staff (school admins)
 
-const ROLE_TEXT: Record<string, string> = { admin: "School admin", teacher: "Teacher", station: "Laser station" };
 const staff: Page = {
-  key: "staff", title: "Staff", lead: "Teachers, other admins and laser-station tokens for this school. A token is shown once; only its hash is kept.",
+  key: "staff", title: "Station tokens", lead: "The tokens the Cutter programs use to connect (one per laser). People sign in with DINO, so there are no other tokens. A token is shown once; only its hash is kept.",
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
-      const list = await listStaff(s);
+      const list = (await listStaff(s)).filter((m) => m.role === "station");
       const redraw = () => void draw().catch((e) => fail(host, e));
-      const bar = el("div", { class: "ad-bar" }, btn("Add someone…", () => void (async () => {
-        const v = await openDialog("Add staff", [
-          { key: "role", label: "Role", type: "select", value: "teacher", options: [{ value: "teacher", label: "Teacher (their own classes)" }, { value: "admin", label: "School admin (everything in the school)" }, { value: "station", label: "Laser station (a laser PC)" }] },
-          { key: "id", label: "ID", type: "text", value: "", hint: "Letters, digits, - and _. An ID, never a name. For a station this is the laser's ID" },
-        ], { ok: "Add" });
+      const bar = el("div", { class: "ad-bar" }, btn("New station token…", () => void (async () => {
+        const v = await openDialog("New station token", [
+          { key: "id", label: "Laser ID", type: "text", value: "", hint: "The laser's ID, e.g. station-1. Letters, digits, - and _" },
+        ], { ok: "Make token" });
         if (!v || !String(v.id).trim()) return;
         await attempt(async () => {
-          const r = await addStaff(s, v.role as "admin" | "teacher" | "station", String(v.id).trim());
-          await showToken("Token", `${ROLE_TEXT[r.role] ?? r.role}: ${r.id}`, r.token, "Copy this now. It is not shown again. Use it to sign in (teachers and admins: on this site; laser stations: in the Editor on the laser PC).");
+          const r = await addStaff(s, "station", String(v.id).trim());
+          await showToken("Token", `Laser station: ${r.id}`, r.token, "Copy this now. It is not shown again. Give it to the Cutter program on the laser PC.");
         }, redraw);
       })(), "on"));
-      host.replaceChildren(bar, table(["ID", "Role", "Added", ""], list.map((m) => el("tr", {}, cell(el("b", {}, m.id)), cell(ROLE_TEXT[m.role] ?? m.role), cell(m.createdAt ? new Date(m.createdAt).toLocaleDateString() : ""),
-        actions(...(m.id === s.id ? [] : [btn("Revoke", () => { if (confirm(`Revoke ${m.id}? Their token stops working straight away.`)) void attempt(() => revokeStaff(s, m.id), redraw); }, "danger")]))))));
+      host.replaceChildren(bar, ...(list.length ? [table(["Laser", "Added", ""], list.map((m) => el("tr", {}, cell(el("b", {}, m.id)), cell(m.createdAt ? new Date(m.createdAt).toLocaleDateString() : ""),
+        actions(btn("Revoke", () => { if (confirm(`Revoke the token for ${m.id}? Its Cutter disconnects and cannot reconnect.`)) void attempt(() => revokeStaff(s, m.id), redraw); }, "danger")))))] : [empty("No station tokens yet.")]));
     };
     void draw().catch((e) => fail(host, e));
+  },
+};
+
+/** Technicians and admins: one link per laser to its Station page (the full-screen queue, Frame and Start at the laser PC). */
+export const stationPages: Page = {
+  key: "stationpages", title: "Station pages", lead: "Open a laser's Station page: its queue, then Frame and Start. Use it on the PC next to that laser.",
+  mount(host, ctx) {
+    const s = ctx.session;
+    const draw = async () => {
+      const list = await listStations(s);
+      host.replaceChildren(...(list.length ? [table(["Laser", "Cutter", ""], list.map((st) => el("tr", {}, cell(el("b", {}, st.id)),
+        cell(st.online ? `Connected · ${st.state ?? ""}` : "Not connected"),
+        actions(el("a", { class: "btnlink on", href: `/?station=${encodeURIComponent(st.id)}` }, "Open station page")))))] : [empty("There are no stations yet.")]));
+    };
+    void draw().catch((e) => fail(host, e));
+    const t = setInterval(() => void draw().catch(() => {}), 5000);
+    return () => clearInterval(t);
   },
 };
 
 // ---------------------------------------------------------------- schools (platform owner)
 
 const schools: Page = {
-  key: "schools", title: "Schools", lead: "Each school's classes, pupils, files, lasers and materials are private to it. You create schools and their first admin; you see nothing inside them.",
+  key: "schools", title: "Schools", lead: "Each school's classes, pupils, files, lasers and materials are private to it. You create schools; people in them sign in with DINO, and you see nothing inside them.",
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
@@ -303,12 +317,11 @@ const schools: Page = {
         const v = await openDialog("New school", [
           { key: "id", label: "School ID", type: "text", value: "", hint: "Lower-case letters, digits and -, e.g. bisak" },
           { key: "name", label: "Name", type: "text", value: "" },
-          { key: "admin", label: "First admin's ID", type: "text", value: "", hint: "They get a token to sign in and set up their own teachers" },
+          
         ], { ok: "Create" });
         if (!v || !String(v.id).trim() || !String(v.name).trim()) return;
         await attempt(async () => {
-          const r = await createSchool(s, String(v.id).trim(), String(v.name).trim(), String(v.admin).trim() || undefined);
-          if (r.admin) await showToken("School created", `${r.name}: first admin ${r.admin.id}`, r.admin.token, "Give this token to the school's admin. It is not shown again.");
+          await createSchool(s, String(v.id).trim(), String(v.name).trim());
         }, redraw);
       })(), "on"));
       host.replaceChildren(bar, list.length ? table(["ID", "Name", "Created"], list.map((x) => el("tr", {}, cell(el("b", {}, x.id)), cell(x.name), cell(x.createdAt ? new Date(x.createdAt).toLocaleDateString() : "")))) : empty("No schools yet."));
@@ -319,6 +332,7 @@ const schools: Page = {
 
 export function pagesFor(role: string): Page[] {
   if (role === "platform") return [schools];
+  if (role === "technician") return [stationPages]; // technicians run the stations and see nothing else here
   const base = [overview, classes, pupils, activities, queue, stations];
-  return role === "admin" ? [...base, staff] : base;
+  return role === "admin" ? [...base, stationPages, staff] : base;
 }

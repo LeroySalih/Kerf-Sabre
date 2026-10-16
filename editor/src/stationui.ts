@@ -7,7 +7,7 @@ import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
 import { findPreset, presetLabel } from "./presets";
 import {
-  STATUS_TEXT, ServerError, approveJob, request, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -43,11 +43,12 @@ function poller(fn: () => Promise<void>, ms = POLL_MS): () => void {
 
 // ---------------------------------------------------------------- Station mode
 
-export function openStation(session: Session, onSignOut: () => void): void {
+/** A technician (or an admin) opens a laser's Station page: `stationId` says which laser; `onOtherStation` offers the picker again. */
+export function openStation(session: Session, onSignOut: () => void, opts: { stationId?: string; onOtherStation?: () => void } = {}): void {
   const root = document.getElementById("station")!;
   root.hidden = false;
   root.replaceChildren();
-  const stationId = session.id;
+  const stationId = opts.stationId ?? session.id;
   const jobCache = new Map<string, Awaited<ReturnType<typeof getJob>>>();
   let confirmed = false;
   let confirmedFor = "";
@@ -113,6 +114,8 @@ export function openStation(session: Session, onSignOut: () => void): void {
       h("span", { class: `st-dot ${st?.online ? "on" : "off"}` }, st?.online ? `Connected · ${st.state ?? "…"}` : "Cutter not connected"),
       h("span", { class: "spacer" }),
       ...(st?.cameraAvailable ? [button(st.calibrated ? "Recalibrate camera" : "Calibrate camera", () => void calibrate(), st.calibrated ? "" : "on")] : []),
+      ...(opts.onOtherStation ? [button("Other stations", () => opts.onOtherStation!())] : []),
+      ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []),
       button("Sign out", onSignOut));
     const main = h("div", { class: "st-main" });
     main.append(h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"), queueList(data.queue, stationId)));
@@ -125,17 +128,14 @@ export function openStation(session: Session, onSignOut: () => void): void {
     root.replaceChildren(head, main);
   }
 
-  /** Calibrating changes what every pupil sees, so a teacher must do it: they type their own token, which is used here and then forgotten. */
+  /** Calibrating changes what every pupil sees, so only a technician, teacher or admin (signed in with DINO) may do it. */
   async function calibrate(): Promise<void> {
     if (aligning) return;
-    const v = await openDialog("Calibrate the camera", [{ key: "token", label: "Teacher token", type: "password", value: "", hint: "Only a teacher can do this. The token is used for this and then forgotten." }],
-      { intro: "You will cut test squares in a scrap of material and click their corners in the camera picture. Have a scrap piece ready.", ok: "Continue" });
-    const token = v ? String(v.token).trim() : "";
-    if (!token) return;
+    if (!["technician", "teacher", "admin"].includes(session.role)) { say("Only a technician, teacher or admin can calibrate the camera.", "error"); return; }
+    const ok = await openDialog("Calibrate the camera", [], { intro: "You will cut test squares in a scrap of material and click their corners in the camera picture. Have a scrap piece ready.", ok: "Continue" });
+    if (!ok) return;
     try {
-      const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl: session.baseUrl, token }, "GET", "/auth/me");
-      if (me.role !== "teacher" && me.role !== "admin") throw new Error("That is not a teacher's token.");
-      if (await openCalibration(session, { baseUrl: session.baseUrl, token, role: me.role, id: me.id, school: me.school }, stationId)) { calib = undefined; polls = 0; say("The camera calibration was updated."); await refresh(); }
+      if (await openCalibration(session, session, stationId)) { calib = undefined; polls = 0; say("The camera calibration was updated."); await refresh(); }
     } catch (e) { say(msg(e), "error"); }
   }
 
@@ -227,6 +227,22 @@ export function openStation(session: Session, onSignOut: () => void): void {
   const stop = poller(refresh);
   (root as HTMLElement & { _stop?: () => void })._stop = () => { stop(); stopAlign(); if (cam) URL.revokeObjectURL(cam); };
   render();
+}
+
+/** A technician chooses which laser's Station page to open. */
+export function openStationPicker(session: Session, onPick: (stationId: string) => void, onSignOut: () => void): void {
+  const root = document.getElementById("station")!;
+  root.hidden = false;
+  const list = h("div", { class: "st-card" }, h("p", { class: "hint" }, "Loading the stations…"));
+  const draw = async () => {
+    try {
+      const all = await listStations(session);
+      list.replaceChildren(h("h2", {}, "Choose a laser"), ...(all.length ? all.map((st) => h("p", {}, button(st.id, () => onPick(st.id), "on"), ` ${st.online ? `Connected · ${st.state ?? ""}` : "Cutter not connected"}`)) : [h("p", { class: "hint" }, "There are no stations yet. An admin can add one on the Admin site.")]));
+    } catch (e) { list.replaceChildren(h("p", { class: "st-error", role: "alert" }, msg(e))); }
+  };
+  void draw();
+  root.replaceChildren(h("header", { class: "st-head" }, h("strong", {}, "BISAK Kerf"), h("span", {}, "Station pages"), h("span", { class: "spacer" }),
+    ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []), button("Sign out", onSignOut)), h("div", { class: "st-main" }, list));
 }
 
 export function closeStation(): void {

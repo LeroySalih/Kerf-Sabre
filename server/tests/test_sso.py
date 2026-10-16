@@ -12,6 +12,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from kerf_server.app import create_app
 from kerf_server.config import Settings
+from kerf_server.security import issue_token
 from kerf_server.sso import Verifier, pick_role
 
 from .conftest import auth
@@ -77,12 +78,10 @@ def me(client, token):
 
 class TestRoles:
     @pytest.mark.parametrize("roles,want", [(["pupil"], "pupil"), (["teacher"], "teacher"), (["Teacher", "pupil"], "teacher"),
-                                            (["admin", "teacher"], "admin"), (["technician"], "teacher"), (["pupil", "admin"], "admin")])
+                                            (["admin", "teacher"], "admin"), (["technician"], "technician"), (["technician", "pupil"], "technician"),
+                                            (["technician", "teacher"], "teacher"), (["pupil", "admin"], "admin")])
     def test_pick_role(self, roles, want):
         assert pick_role(roles) == want
-
-    def test_technician_can_be_turned_off(self):
-        assert pick_role(["technician"], technician_is_teacher=False) is None
 
     @pytest.mark.parametrize("roles", [[], ["station"], ["platform"], "admin", None, [1], ["parent"]])
     def test_unknown_roles_get_nothing(self, roles):
@@ -90,7 +89,7 @@ class TestRoles:
 
 
 class TestSignedInPeople:
-    @pytest.mark.parametrize("roles,role", [(["pupil"], "pupil"), (["teacher"], "teacher"), (["admin"], "admin"), (["technician"], "teacher")])
+    @pytest.mark.parametrize("roles,role", [(["pupil"], "pupil"), (["teacher"], "teacher"), (["admin"], "admin"), (["technician"], "technician")])
     def test_me(self, sso_client, roles, role):
         r = me(sso_client, mint(roles=roles))
         assert r.status_code == 200
@@ -238,3 +237,58 @@ class TestModes:
             create_app(Settings.from_env(data_dir=tmp_path, auth_mode="sometimes"))
         with pytest.raises(ValueError):
             create_app(Settings.from_env(data_dir=tmp_path, auth_mode="planner"))
+
+
+# ------------------------------------------------ DINO is the only way in; technicians run the stations and nothing else
+
+@pytest.fixture()
+def planner_client(tmp_path, jwks):
+    cfg = Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="planner", sso_issuer=ISS)
+    app = create_app(cfg)
+    app.state.sso = Verifier(cfg, fetch=jwks)
+    with TestClient(app) as c:
+        # stored tokens made directly in the database, as an old install or someone with the database could have
+        c.tokens = {r: issue_token(app.state.db, r, f"{r}-1") for r in ("pupil", "teacher", "admin", "station", "platform")}
+        yield c
+
+
+class TestOnlyDinoSignsPeopleIn:
+    @pytest.mark.parametrize("role", ["pupil", "teacher", "admin"])
+    def test_a_stored_people_token_is_refused(self, planner_client, role):
+        assert planner_client.get("/api/v1/auth/me", headers=auth(planner_client.tokens[role])).status_code == 401
+
+    @pytest.mark.parametrize("role", ["station", "platform"])
+    def test_the_cutter_and_platform_tokens_still_work(self, planner_client, role):
+        assert planner_client.get("/api/v1/auth/me", headers=auth(planner_client.tokens[role])).json()["role"] == role
+
+    def test_class_code_and_pin_login_is_gone(self, planner_client):
+        r = planner_client.post("/api/v1/auth/login", json={"classCode": "A", "pupilId": "P1", "pin": "12345"})
+        assert r.status_code == 404 and r.json()["code"] == "sso_only"
+
+    def test_only_station_tokens_can_be_made(self, planner_client, jwks):
+        tok = mint(roles=["admin"])
+        for role in ("teacher", "admin", "pupil", "technician"):
+            r = planner_client.post("/api/v1/staff", json={"role": role, "id": "x1"}, headers=auth(tok))
+            assert r.status_code == 422, role
+        assert planner_client.post("/api/v1/staff", json={"role": "station", "id": "station-9"}, headers=auth(tok)).status_code == 201
+
+
+class TestTechnician:
+    def hdr(self):
+        return auth(mint(roles=["technician"]))
+
+    def test_can_see_and_run_the_station_side(self, planner_client):
+        h = self.hdr()
+        assert planner_client.get("/api/v1/stations", headers=h).status_code == 200
+        assert planner_client.get("/api/v1/queue?station=station-1", headers=h).status_code == 200
+        assert planner_client.get("/api/v1/presets", headers=h).status_code == 200
+
+    def test_can_calibrate(self, planner_client):
+        r = planner_client.post("/api/v1/stations/station-1/calibration-marks", json={"centerX": 100, "centerY": 100}, headers=self.hdr())
+        assert r.status_code != 403
+
+    @pytest.mark.parametrize("method,path", [("get", "/api/v1/classes"), ("get", "/api/v1/staff"), ("get", "/api/v1/school"), ("get", "/api/v1/pupils"),
+                                             ("post", "/api/v1/schools"), ("get", "/api/v1/stations/station-1/logs")])
+    def test_has_none_of_the_other_admin_pages(self, planner_client, method, path):
+        r = getattr(planner_client, method)(path, headers=self.hdr())
+        assert r.status_code in (403, 404, 405, 422) and r.status_code != 200, path

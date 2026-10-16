@@ -22,6 +22,9 @@ cd "$ROOT/server"
 source .venv/bin/activate
 pip install -q -e .
 
+# Local demo only: without DINO there is nobody to sign in, so stored demo tokens (for curl, the API and the practice Cutter) are allowed here.
+# A real server leaves KERF_AUTH_MODE unset (DINO sign-in) and sets KERF_SSO_ISSUER.
+export KERF_AUTH_MODE="${KERF_AUTH_MODE:-pins}"
 export KERF_DATA_DIR="${KERF_DATA_DIR:-$ROOT/server/data}" KERF_EDITOR_DIST="$ROOT/editor/dist" KERF_PORT="$PORT"
 kerf-admin init-db >/dev/null
 CREDS="$KERF_DATA_DIR/demo-logins.txt"
@@ -45,7 +48,7 @@ echo " Admin site:         http://localhost:$PORT/admin/   (teachers and school 
 [ -n "$IP" ] && echo " From other devices: http://$IP:$PORT"
 echo " Logins (saved in $CREDS):"
 sed 's/^/   /' "$CREDS"
-echo " Pupils sign in with class DEMO + ID + PIN; teachers and stations use 'sign in with a token'."
+echo " The Editor and Admin site sign in with DINO only. Without DINO here, use the demo tokens above with the API (curl) and the practice Cutter."
 echo " Pretend laser:  python -m kerf_server.devtools.fake_cutter --token <station token>"
 echo "=================================================="
 exec kerf-server

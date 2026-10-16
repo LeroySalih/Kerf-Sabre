@@ -23,8 +23,8 @@ const sv = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * `view` is the session that fetches the camera picture (the laser PC's own); `teacher` makes the changes (a teacher's token the
- * teacher just typed in: it is used for this dialog only and never stored). Resolves true if a calibration was saved or removed.
+ * `view` is the session that fetches the camera picture; `teacher` makes the changes (a technician, teacher or admin: today the same DINO session; it was once a
+ * teacher token typed in for the dialog only). Resolves true if a calibration was saved or removed.
  */
 export async function openCalibration(view: Session, teacher: Session, stationId: string): Promise<boolean> {
   let loaded: [MachineInfo, Calibration | null, { id: string; material: string; thicknessMm: number }[]];

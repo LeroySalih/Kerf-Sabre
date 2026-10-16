@@ -14,7 +14,7 @@ from .config import Settings
 from .db import Database
 from .models import Token
 from . import services_classes as sc
-from .security import ROLES, hash_token, issue_token
+from .security import PERSON_ROLES, ROLES, hash_token, issue_token
 from . import services_schools as ss
 from .models import DEFAULT_SCHOOL
 from .services_seed import seed
@@ -27,6 +27,12 @@ def _db() -> tuple[Database, Settings]:
     db.create_all()
     seed(db, s)
     return db, s
+
+
+def _stored_tokens_only(cfg: Settings, role: str) -> None:
+    """With DINO as the only way in (the default), only the Cutter's station token and the platform owner's token exist."""
+    if cfg.auth_mode == "planner" and role in PERSON_ROLES:
+        raise SystemExit(f"People sign in with DINO, so no {role} token can be made. Give them the matching role in DINO. (Only 'station' and 'platform' tokens exist.)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--id", required=True)
     args = ap.parse_args(argv)
 
-    db, _ = _db()
+    db, cfg = _db()
     if args.cmd == "init-db":
         print("Database ready.")
     elif args.cmd == "create-school":
@@ -69,14 +75,17 @@ def main(argv: list[str] | None = None) -> int:
             school = ss.create_school(s_, args.id, args.name)
         print(f"Created school {school.id}.", file=sys.stderr)
         if args.admin:
+            _stored_tokens_only(cfg, "admin")
             print(ss.add_staff(db, school.id, "admin", args.admin, "first admin"))
     elif args.cmd == "list-schools":
         with db.session() as s_:
             for row in ss.list_schools(s_):
                 print(f"{row['id']:20} {row['name']}")
     elif args.cmd == "create-token":
+        _stored_tokens_only(cfg, args.role)
         print(issue_token(db, args.role, args.id, args.label, args.school))
     elif args.cmd == "import-pupils":
+        _stored_tokens_only(cfg, "pupil")
         with (sys.stdin if args.csv == "-" else open(args.csv, newline="")) as f:
             rows = [r for r in csv.reader(f) if r]
         if rows and rows[0] and rows[0][0].strip().lower() in ("pupilid", "pupil_id", "id"):
@@ -110,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(res['created'])} added, {len(res['existing'])} already in the class, {len(res['conflicts'])} belong to another class{' ' + str(res['conflicts']) if res['conflicts'] else ''}."
               + (f" PINs written to {args.out}: hand them out, then delete the file." if args.out else ""), file=sys.stderr)
     elif args.cmd == "reset-pin":
+        _stored_tokens_only(cfg, "pupil")
         with db.session() as s_:
             print(sc.reset_pin(s_, args.id))
     elif args.cmd == "list-tokens":

@@ -137,7 +137,7 @@ export async function getCalibration(s: Session, station: string, f?: Fetch): Pr
 export const putCalibration = (s: Session, station: string, cal: Pick<Calibration, "imageWidth" | "imageHeight" | "points" | "homography">, f?: Fetch) => request<Calibration>(s, "PUT", `/stations/${encodeURIComponent(station)}/camera-calibration`, cal, f);
 export const deleteCalibration = (s: Session, station: string, f?: Fetch) => request<null>(s, "DELETE", `/stations/${encodeURIComponent(station)}/camera-calibration`, undefined, f);
 /** Fix the design's place on the bed after lining it up on the camera picture. `matrix` is a move and turn only. */
-export const placeJob = (s: Session, id: string, station: string, matrix: number[], f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/placement`, { station, matrix }, f);
+export const placeJob = (s: Session, id: string, station: string, matrix: number[], opts: { skipQueue?: boolean } = {}, f?: Fetch) => request<{ bounds: { minX: number; minY: number; maxX: number; maxY: number } }>(s, "POST", `/jobs/${encodeURIComponent(id)}/placement`, { station, matrix, ...opts }, f);
 export interface MarksRequest { centerX: number; centerY: number; sizeMm: number; spacingMm: number; count: 1 | 4; layer: "score" | "cut"; presetId: string }
 /** A job of known squares to cut (approved and pinned to this laser), for calibrating its camera. Teacher only. */
 export const createCalibrationMarks = (s: Session, station: string, body: MarksRequest, f?: Fetch) => request<{ jobId: string; squares: { square: number; corners: [number, number][] }[] }>(s, "POST", `/stations/${encodeURIComponent(station)}/calibration-marks`, body, f);

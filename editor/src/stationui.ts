@@ -61,6 +61,8 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
   let calib: Calibration | null | undefined; // undefined: not asked yet; null: this laser's camera is not calibrated
   let bed: { widthMm: number; heightMm: number } | null = null;
   let polls = 0;
+  /** The file the technician clicked in the queue; until they click one, the file that is next for this laser. */
+  let picked: string | null = null;
   let aligning: { jobId: string; view: AlignView } | null = null;
   let data: { queue: QueueEntry[]; station?: StationInfo; failed: boolean } = { queue: [], failed: false };
 
@@ -96,14 +98,26 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       }
     }
     if (st?.cameraAvailable) { const u = await cameraUrl(session, stationId); if (u) { if (cam) URL.revokeObjectURL(cam); cam = u; } }
-    const next = data.queue.find((e) => e.next && e.status === "approved");
+    const next = focusEntry();
     if (next?.jobId && !jobCache.has(next.jobId)) { try { jobCache.set(next.jobId, await getJob(session, next.jobId)); } catch { /* retry next poll */ } }
     render();
   }
 
+  /** Can this file be put on this laser? (Waiting, not meant for another laser, not being set up on another.) */
+  const takeable = (e: QueueEntry): boolean => e.status === "approved" && !!e.jobId && (!e.station || e.station === stationId) && (!e.framedOn || e.framedOn === stationId);
+  const headEntry = (): QueueEntry | undefined => data.queue.find((e) => e.next && e.status === "approved");
+  /** The file on show: the one clicked, else the one that is next. */
+  const focusEntry = (): QueueEntry | undefined => {
+    const clicked = picked ? data.queue.find((e) => e.jobId === picked && takeable(e)) : undefined;
+    if (picked && !clicked) picked = null; // it was cut, rejected or taken elsewhere
+    return clicked ?? headEntry();
+  };
+  /** Taking a file ahead of the one that is next needs the queue to be skipped (the server allows it for a technician, teacher or admin). */
+  const skip = (e: QueueEntry): { skipQueue?: boolean } => (e.jobId !== headEntry()?.jobId ? { skipQueue: true } : {});
+
   function render(): void {
     const st = data.station;
-    const next = data.queue.find((e) => e.next && e.status === "approved");
+    const next = focusEntry();
     const running = st?.currentJobId ? data.queue.find((e) => e.jobId === st.currentJobId) : undefined;
     if (next?.jobId !== confirmedFor) { confirmed = false; confirmedFor = next?.jobId ?? ""; }
     if (aligning && (aligning.jobId !== next?.jobId || st?.currentJobId)) stopAlign(); // the job went away (or a cut started): leave the alignment
@@ -118,7 +132,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []),
       button("Sign out", onSignOut));
     const main = h("div", { class: "st-main" });
-    main.append(h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"), queueList(data.queue, stationId)));
+    main.append(h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"), queueList(data.queue, stationId, { selected: next?.jobId ?? null, onPick: (e) => { if (!busy && !st?.currentJobId && !aligning) { picked = e.jobId ?? null; confirmed = false; notice = ""; void refresh(); } }, canPick: takeable })));
     const panel = h("section", { class: "st-card st-job" });
     if (data.failed) panel.append(h("p", { class: "st-error", role: "alert" }, "Lost contact with the server. Trying again…"));
     if (st?.currentJobId) panel.append(...cuttingPanel(st, running));
@@ -139,6 +153,8 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     } catch (e) { say(msg(e), "error"); }
   }
 
+  const queueSkip = (jobId: string): { skipQueue?: boolean } => (jobId !== headEntry()?.jobId ? { skipQueue: true } : {});
+
   function stopAlign(): void {
     aligning?.view.destroy();
     aligning = null;
@@ -157,7 +173,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       session, stationId, objects: job.objects, calibration: calib, bed,
       onCancel: () => { stopAlign(); render(); },
       onConfirm: async (matrix) => {
-        await placeJob(session, jobId, stationId, matrix);
+        await placeJob(session, jobId, stationId, matrix, queueSkip(jobId));
         jobCache.delete(jobId); // it moved: look at the saved version
         stopAlign();
         notice = "Position saved. Press Frame: the laser traces the outline (laser off) so you can check it sits on your material."; noticeKind = "info";
@@ -186,6 +202,15 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     return out;
   }
 
+  /** The technician found a problem with the file: it leaves the queue and the pupil sees the note. */
+  async function rejectWithNote(e: QueueEntry): Promise<void> {
+    const v = await openDialog(`Reject ticket ${e.ticket}`, [{ key: "note", label: "What is wrong with the file?", type: "text", value: "", hint: "The pupil sees this note. Say what to fix, e.g. \"Lines overlap: please merge them\"." }],
+      { intro: "The file is taken out of the queue and the pupil is told why. They can fix it and send it again.", ok: "Reject the file" });
+    const note = v ? String(v.note).trim() : "";
+    if (!note) return;
+    await guard(async () => { await rejectJob(session, e.jobId!, note); picked = null; confirmed = false; say(`Ticket ${e.ticket} was rejected and the pupil can see your note.`); });
+  }
+
   function readyPanel(next: QueueEntry | undefined, st: StationInfo | undefined): Node[] {
     const out: Node[] = [];
     if (lastJob) out.push(h("p", { class: lastJob.ok ? "st-ok" : "st-error", role: "status" }, `${lastJob.id}: ${lastJob.text}`, button("OK", () => { lastJob = null; render(); })));
@@ -195,7 +220,9 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     const preset = findPreset(next.presetId ?? job?.preset.id);
     const material = preset ? `${presetLabel(preset)}` : next.presetId ?? "the chosen material";
     const size = job ? sizeOf(job.objects) : null;
-    out.push(h("h2", {}, `Next: ticket ${next.ticket}${next.pupilId ? ` · ${next.pupilId}` : ""}`));
+    const jumping = next.jobId !== headEntry()?.jobId;
+    out.push(h("h2", {}, `${jumping ? "Selected" : "Next"}: ticket ${next.ticket}${next.pupilId ? ` · ${next.pupilId}` : ""}`));
+    if (jumping) out.push(h("p", { class: "st-note" }, `This is not the next file in the queue${headEntry() ? ` (ticket ${headEntry()!.ticket} is)` : ""}. Cutting it now takes it ahead of the others.`, button("Back to the next file", () => { picked = null; confirmed = false; void refresh(); }, "link")));
     const info = h("div", { class: "st-info" });
     if (job) { const pv = h("div", { class: "st-preview" }); pv.innerHTML = previewSvg(job.objects); info.append(pv); }
     const facts = h("ul", { class: "st-facts" },
@@ -216,9 +243,10 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     check.addEventListener("change", () => { confirmed = check.checked; render(); });
     out.push(h("label", { class: "st-confirm" }, check, ` I have loaded ${material}`));
     out.push(h("div", { class: "st-actions" },
-      button(step.framed ? "Frame again" : "Frame", () => void guard(async () => { await frameJob(session, next.jobId!, stationId); say("The laser is tracing the outline (laser off). Check it sits on your material."); }), step.canFrame && !busy ? "" : "disabled"),
-      button("Start cutting", () => void guard(async () => { await assignJob(session, next.jobId!, stationId, true); confirmed = false; lastJob = null; }), step.canStart && !busy ? "go" : "disabled"),
-      button("Not ready: let the next person go", () => void guard(async () => { await deferJob(session, next.jobId!); }), "link")));
+      button(step.framed ? "Frame again" : "Frame", () => void guard(async () => { await frameJob(session, next.jobId!, stationId, skip(next)); say("The laser is tracing the outline (laser off). Check it sits on your material."); }), step.canFrame && !busy ? "" : "disabled"),
+      button("Start cutting", () => void guard(async () => { await assignJob(session, next.jobId!, stationId, true, skip(next)); confirmed = false; lastJob = null; }), step.canStart && !busy ? "go" : "disabled"),
+      button("Not ready: let the next person go", () => void guard(async () => { await deferJob(session, next.jobId!); picked = null; }), "link"),
+      button("Reject with a note…", () => void rejectWithNote(next), "danger")));
     // buttons that look disabled must not act
     out.forEach((n) => (n as HTMLElement).querySelectorAll?.("button.disabled").forEach((b) => ((b as HTMLButtonElement).disabled = true)));
     return out;
@@ -253,14 +281,21 @@ export function closeStation(): void {
   root.replaceChildren();
 }
 
-function queueList(queue: QueueEntry[], stationId: string): Node {
+function queueList(queue: QueueEntry[], stationId: string, pick?: { selected: string | null; onPick: (e: QueueEntry) => void; canPick: (e: QueueEntry) => boolean }): Node {
   if (!queue.length) return h("p", { class: "hint" }, "The queue is empty.");
   const ul = h("ul", { class: "st-qlist" });
   for (const e of queue) {
     const label = e.status === "approved" ? (e.position === 1 ? "Next" : `${e.position}`) : e.status === "running" ? "Cutting" : "Starting";
     const where = e.station && e.station !== stationId ? ` (for ${e.station})` : e.framedOn && e.framedOn !== stationId ? ` (being set up on ${e.framedOn})` : "";
-    ul.append(h("li", { class: e.next ? "next" : e.status !== "approved" ? "active" : "" },
-      h("b", {}, `#${e.ticket}`), ` ${e.pupilId ?? ""} `, h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : ""));
+    const clickable = !!pick && pick.canPick(e);
+    const li = h("li", { class: [e.next ? "next" : e.status !== "approved" ? "active" : "", clickable ? "pickable" : "", pick && e.jobId && e.jobId === pick.selected ? "picked" : ""].filter(Boolean).join(" ") },
+      h("b", {}, `#${e.ticket}`), ` ${e.pupilId ?? ""} `, h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : "");
+    if (clickable) {
+      li.tabIndex = 0; li.setAttribute("role", "button"); li.title = "Show this file";
+      li.addEventListener("click", () => pick!.onPick(e));
+      li.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick!.onPick(e); } });
+    }
+    ul.append(li);
   }
   return ul;
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.19
+  version: 0.2.20
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -673,7 +673,7 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
   /jobs/{jobId}/reject:
     post:
-      summary: Teacher rejection. The job becomes cancelled with the reason.
+      summary: Teacher rejection, or a technician's for a file waiting in the queue (the reason then starts with Rejected at the laser). The job becomes cancelled with the reason.
       parameters:
         - {name: jobId, in: path, required: true, schema: {type: string}}
       requestBody:

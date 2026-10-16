@@ -16,7 +16,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.19"
+SCHEMA_VERSION = "0.2.20"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -261,7 +261,10 @@ def approve(s: Session, who, j: Job, station: str | None) -> Job:
 def reject(s: Session, who, j: Job, reason: str) -> Job:
     if j.status not in ("submitted", "approved"):
         raise ApiError(409, "conflict", f"Only a waiting job can be rejected; this one is {j.status}.")
-    j.status, j.status_reason = "cancelled", reason.strip()[:500] or "Rejected"
+    if who.role == "technician" and j.status != "approved":
+        raise ApiError(409, "conflict", "A technician can only reject a file that is waiting in the queue to be cut.")
+    note = reason.strip()[:480] or "Rejected"
+    j.status, j.status_reason = "cancelled", (f"Rejected at the laser: {note}" if who.role == "technician" else note)
     event(s, j.id, who.id, "rejected", {"reason": j.status_reason})
     return j
 

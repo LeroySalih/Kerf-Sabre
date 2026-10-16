@@ -164,6 +164,10 @@ a.btnlink:hover { background: #eef0f3; }
 .st-qlist li { padding: 8px 10px; border-radius: 6px; font-size: 15px; }
 .st-qlist li.next { background: #fff7ed; border: 1px solid #f97316; font-weight: 600; }
 .st-qlist li.active { background: #eff6ff; }
+.st-qlist li.pickable { cursor: pointer; }
+.st-qlist li.pickable:hover { background: #f3f4f6; }
+.st-qlist li.pickable:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.st-qlist li.picked { box-shadow: inset 4px 0 0 #2563eb; background: #eff6ff; }
 .st-qlist .tag { display: inline-block; padding: 0 8px; border-radius: 999px; background: #e5e7eb; font-size: 12px; margin-left: 4px; }
 .st-info { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
 .st-preview { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }

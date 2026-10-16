@@ -292,3 +292,28 @@ class TestTechnician:
     def test_has_none_of_the_other_admin_pages(self, planner_client, method, path):
         r = getattr(planner_client, method)(path, headers=self.hdr())
         assert r.status_code in (403, 404, 405, 422) and r.status_code != 200, path
+
+
+class TestTechnicianPicksAndRejects:
+    @pytest.fixture()
+    def tk(self, sso_app):
+        return {"pupil": issue_token(sso_app.state.db, "pupil", "P001"), "teacher": issue_token(sso_app.state.db, "teacher", "T001")}
+
+    def test_a_technician_rejects_a_waiting_file_with_a_note_the_pupil_sees(self, sso_client, tk):
+        from .test_stations import approved_job
+        jid = approved_job(sso_client, tk)
+        r = sso_client.post(f"/api/v1/jobs/{jid}/reject", json={"reason": "Lines overlap"}, headers=auth(mint(roles=["technician"])))
+        assert r.status_code == 200
+        j = sso_client.get(f"/api/v1/jobs/{jid}", headers=auth(tk["pupil"])).json()
+        assert j["status"] == "cancelled" and j["statusReason"] == "Rejected at the laser: Lines overlap"
+
+    def test_a_note_is_required_and_a_pupil_cannot_reject(self, sso_client, tk):
+        from .test_stations import approved_job
+        jid = approved_job(sso_client, tk)
+        assert sso_client.post(f"/api/v1/jobs/{jid}/reject", json={"reason": " "}, headers=auth(mint(roles=["technician"]))).status_code == 422
+        assert sso_client.post(f"/api/v1/jobs/{jid}/reject", json={"reason": "x"}, headers=auth(mint(roles=["pupil"]))).status_code == 403
+
+    def test_a_technician_cannot_reject_a_file_still_waiting_for_approval(self, sso_client, tk):
+        from .test_jobs import post
+        jid = post(sso_client, tk, status="submitted").json()["id"]
+        assert sso_client.post(f"/api/v1/jobs/{jid}/reject", json={"reason": "x"}, headers=auth(mint(roles=["technician"]))).status_code == 409

@@ -121,7 +121,7 @@ def approve_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Prin
 
 
 @router.post("/jobs/{job_id}/reject")
-def reject_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+def reject_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     reason = body.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         raise ApiError(422, "invalid", "Give a reason so the pupil knows what to fix.")

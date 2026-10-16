@@ -32,11 +32,12 @@ def _receipt(s: Session, j: Job) -> dict[str, Any]:
 def list_jobs(
     status: str | None = Query(None),
     station: str | None = Query(None),
+    mine: bool = Query(False),
     who: Principal = Depends(require("pupil", "station")),
     s: Session = Depends(get_session),
 ):
     q = select(Job).where(Job.school_id == who.school).order_by(Job.created_at.desc())
-    if not who.staff():
+    if mine or not who.staff():
         q = q.where(Job.pupil_id == who.id)
     if status:
         q = q.where(Job.status.in_([x.strip() for x in status.split(",") if x.strip()]))

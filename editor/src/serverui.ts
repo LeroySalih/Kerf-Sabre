@@ -92,7 +92,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     $("gate").hidden = signedIn || offline;
     $("srv-status").textContent = signedIn ? `Signed in: ${session!.id}` : "Working offline";
     $("srv-signin").textContent = signedIn ? "Sign out" : "Sign in";
-    ($("srv-files") as HTMLButtonElement).hidden = !!session && session.role !== "pupil"; // staff manage files on the admin site
+    ($("srv-files") as HTMLButtonElement).hidden = false; // everyone signed in has files of their own (staff look at pupils' files on the Admin site)
     ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil";
     const act = $("srv-activity") as HTMLElement;
     act.hidden = !(session?.role === "pupil" && activity);

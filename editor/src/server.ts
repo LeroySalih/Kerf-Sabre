@@ -175,7 +175,7 @@ export async function cameraUrl(s: Session, station: string, f: Fetch = fetch): 
     return res.ok ? URL.createObjectURL(await res.blob()) : null;
   } catch { return null; }
 }
-export const listJobs = (s: Session, f?: Fetch) => request<JobSummary[]>(s, "GET", "/jobs", undefined, f);
+export const listJobs = (s: Session, f?: Fetch) => request<JobSummary[]>(s, "GET", "/jobs?mine=1", undefined, f); // always the signed-in person's own files (staff would otherwise get everyone's)
 export const cancelJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/cancel`, undefined, f);
 export const submitJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/submit`, undefined, f);
 

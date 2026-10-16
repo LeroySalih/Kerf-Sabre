@@ -359,3 +359,12 @@ class TestDisplayNames:
         sso_app.state.sso.fetch_userinfo = boom
         with TestClient(sso_app) as c:
             assert c.post("/api/v1/auth/profile", headers=auth(mint(roles=["pupil"]))).status_code == 200
+
+
+def test_my_files_for_staff_lists_only_their_own(sso_client):
+    from .test_jobs import post
+    tk = {"pupil": issue_token(sso_client.app.state.db, "pupil", "P001"), "teacher": issue_token(sso_client.app.state.db, "teacher", "T001")}
+    post(sso_client, tk, status="submitted")
+    assert len(sso_client.get("/api/v1/jobs", headers=auth(tk["teacher"])).json()) == 1  # staff see every file in the school
+    assert sso_client.get("/api/v1/jobs?mine=1", headers=auth(tk["teacher"])).json() == []  # but "my files" is only their own
+    assert len(sso_client.get("/api/v1/jobs?mine=1", headers=auth(tk["pupil"])).json()) == 1

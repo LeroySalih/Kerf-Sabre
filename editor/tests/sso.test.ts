@@ -180,6 +180,21 @@ describe("staying signed in", () => {
     expect(st.getItem("kerf.sso.refresh.editor")).toContain("refresh-2");
   });
 
+  it("calls setTimeout and clearTimeout as plain functions (a browser throws \"Illegal invocation\" if `this` is anything but the window)", async () => {
+    const st = new MemStorage();
+    const { net, r } = await signedIn(st);
+    const strict = (name: string, fn: (...a: unknown[]) => unknown) => function (this: unknown, ...a: unknown[]) {
+      if (this !== undefined && this !== globalThis) throw new TypeError(`Illegal invocation: ${name} was called on ${Object.prototype.toString.call(this)}`);
+      return fn(...a);
+    };
+    const timers: { fn: () => void }[] = [];
+    const setT = strict("setTimeout", (fn) => { timers.push({ fn: fn as () => void }); return timers.length; }) as unknown as typeof setTimeout;
+    const clearT = strict("clearTimeout", () => undefined) as unknown as typeof clearTimeout;
+    const renewer = new Renewer("editor", r.session, r.tokens, () => { throw new Error("lost"); }, net.f, st, () => 0, setT, clearT);
+    expect(timers).toHaveLength(1);
+    renewer.stop(); // calls clearTimeout
+  });
+
   it("reports when DINO ends the sign-in", async () => {
     const st = new MemStorage();
     const { r } = await signedIn(st);

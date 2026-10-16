@@ -124,7 +124,7 @@ export class Renewer {
   private schedule(): void {
     if (this.stopped) return;
     const wait = Math.max(1_000, this.tokens.expiresAt - this.now() - 60_000);
-    this.timer = this.setT(() => void this.renew(), wait);
+    this.timer = this.later(() => void this.renew(), wait);
   }
   /** Renew right now (also used when a tab wakes up after sleeping). */
   async renew(): Promise<void> {
@@ -139,12 +139,16 @@ export class Renewer {
       write(this.st, savedKey(this.app), { ...saved, refreshToken: t.refreshToken ?? saved.refreshToken } satisfies Saved);
       this.schedule();
     } catch (e) {
-      if (e instanceof SsoError && /reach DINO/.test(e.message)) { this.timer = this.setT(() => void this.renew(), 15_000); return; } // offline: try again soon
+      if (e instanceof SsoError && /reach DINO/.test(e.message)) { this.timer = this.later(() => void this.renew(), 15_000); return; } // offline: try again soon
       this.lost("Your DINO sign-in ended. Sign in again.");
     }
   }
   private lost(why: string): void { this.stop(); write(this.st, savedKey(this.app), null); this.onLost(why); }
-  stop(): void { this.stopped = true; if (this.timer) this.clearT(this.timer); this.timer = null; }
+  stop(): void { this.stopped = true; if (this.timer) this.cancel(this.timer); this.timer = null; }
+  // The browser's own setTimeout/clearTimeout refuse to run with `this` set to anything but the window ("Illegal invocation"),
+  // so they are pulled out of the object and called as plain functions.
+  private later(fn: () => void, ms: number): ReturnType<typeof setTimeout> { const { setT } = this; return setT(fn, ms); }
+  private cancel(t: ReturnType<typeof setTimeout>): void { const { clearT } = this; clearT(t); }
 }
 
 /** Sign out: tell DINO to end this connection (best effort) and forget it here. */

@@ -252,3 +252,4 @@ td.cell.st-todo { background: #f9fafb; }
 .ftab .ftab-x { padding: 6px 8px; color: var(--muted); }
 .ftab .ftab-x:hover { color: #dc2626; }
 #srv-save-state.bad { color: #b45309; font-weight: 600; }
+.kdialog .seg { grid-template-columns: repeat(2, 1fr); margin: 8px 0; }

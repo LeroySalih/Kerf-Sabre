@@ -126,7 +126,7 @@ describe("unsaved changes", () => {
   });
 });
 
-import { mirrorKey, parseMirror, readMirror, removeMirror, serializeMirror, writeMirror } from "../src/workspace";
+import { MAX_CLOSED, addClosed, readClosed, removeClosed, mirrorKey, parseMirror, readMirror, removeMirror, serializeMirror, writeMirror } from "../src/workspace";
 
 const memory = () => {
   const m = new Map<string, string>();
@@ -212,5 +212,46 @@ describe("keeping the open tabs in the browser", () => {
     const stay = busy.absorb(m, false);
     expect(busy.names()).toEqual(["Untitled", "Other", "Lid"]); // job-7 was not added a second time
     expect(stay).toBe(busy.active());
+  });
+});
+
+
+describe("files closed in the browser", () => {
+  const tab = (n: number, jobId: string | null = null) => ({ name: `T${n}`, state: docWith(n).state, meta: { ...blankMeta(), jobId } });
+
+  it("keeps a closed file for the person who closed it, newest first, and nobody else", () => {
+    const store = memory();
+    expect(addClosed("P001", tab(2), store)).toBe(true);
+    expect(addClosed("P001", tab(3), store)).toBe(true);
+    expect(readClosed("P001", store).map((f) => f.name)).toEqual(["T3", "T2"]);
+    expect(readClosed("P002", store)).toEqual([]);
+    const id = readClosed("P001", store)[0]!.id;
+    removeClosed("P001", id, store);
+    expect(readClosed("P001", store).map((f) => f.name)).toEqual(["T2"]);
+  });
+
+  it("does not keep an empty file, and keeps one server file once", () => {
+    const store = memory();
+    expect(addClosed("P001", tab(0), store)).toBe(false);
+    addClosed("P001", tab(1, "job-1"), store);
+    addClosed("P001", tab(2, "job-1"), store);
+    expect(readClosed("P001", store).map((f) => f.name)).toEqual(["T2"]);
+  });
+
+  it("keeps only the newest few, and copes with a full browser", () => {
+    const store = memory();
+    for (let i = 1; i <= MAX_CLOSED + 5; i++) addClosed("P001", tab(1, `job-${i}`), store);
+    expect(readClosed("P001", store)).toHaveLength(MAX_CLOSED);
+    expect(readClosed("P001", store)[0]!.meta.jobId).toBe(`job-${MAX_CLOSED + 5}`);
+    const full = { getItem: () => null, setItem: () => { throw new Error("quota"); }, removeItem: () => undefined };
+    expect(addClosed("P001", tab(1), full)).toBe(false);
+  });
+
+  it("ignores damaged entries", () => {
+    const store = memory();
+    store.setItem("kerf.closed.P001", JSON.stringify([{ id: "x", name: "bad", state: { objects: [{ nope: 1 }] } }, "junk"]));
+    expect(readClosed("P001", store)).toEqual([]);
+    store.setItem("kerf.closed.P001", "not json");
+    expect(readClosed("P001", store)).toEqual([]);
   });
 });

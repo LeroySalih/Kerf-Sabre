@@ -192,6 +192,18 @@ const validObject = (o: unknown): boolean => {
     && x.path.segs.every((g: { t?: unknown; to?: unknown }) => !!g && (g.t === "l" || g.t === "a" || g.t === "c") && isPoint(g.to));
 };
 
+/** One tab from storage, checked and filled in; null if anything about it is off. */
+function cleanTab(t: MirrorTab | undefined): MirrorTab | null {
+  if (!t || typeof t.name !== "string" || !t.state || !Array.isArray(t.state.objects) || !t.state.objects.every(validObject)) return null;
+  const meta = t.meta ?? blankMeta();
+  const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+  return {
+    name: t.name.slice(0, 60), renamed: t.renamed === true,
+    state: { ...emptyState(), ...t.state },
+    meta: { jobId: str(meta.jobId), origin: meta.origin?.mode === "absolute" || meta.origin?.mode === "current-position" ? meta.origin : DEFAULT_ORIGIN, savedKey: typeof meta.savedKey === "string" ? meta.savedKey : "", openedLocal: str(meta.openedLocal), sourceId: str(meta.sourceId) },
+  };
+}
+
 /** Read what serializeMirror wrote. Anything unexpected gives null (a damaged or foreign entry is ignored, never half-loaded). */
 export function parseMirror(text: string | null): Mirror | null {
   if (!text) return null;
@@ -200,14 +212,9 @@ export function parseMirror(text: string | null): Mirror | null {
     if (m?.v !== 1 || !Array.isArray(m.tabs) || !m.tabs.length || m.tabs.length > MAX_TABS) return null;
     const tabs: MirrorTab[] = [];
     for (const t of m.tabs) {
-      if (!t || typeof t.name !== "string" || !t.state || !Array.isArray(t.state.objects) || !t.state.objects.every(validObject)) return null;
-      const meta = t.meta ?? blankMeta();
-      const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
-      tabs.push({
-        name: t.name.slice(0, 60), renamed: t.renamed === true,
-        state: { ...emptyState(), ...t.state },
-        meta: { jobId: str(meta.jobId), origin: meta.origin?.mode === "absolute" || meta.origin?.mode === "current-position" ? meta.origin : DEFAULT_ORIGIN, savedKey: typeof meta.savedKey === "string" ? meta.savedKey : "", openedLocal: str(meta.openedLocal), sourceId: str(meta.sourceId) },
-      });
+      const c = cleanTab(t);
+      if (!c) return null;
+      tabs.push(c);
     }
     return { v: 1, savedAt: String(m.savedAt), active: isNum(m.active) && m.active >= 0 && m.active < tabs.length ? m.active : 0, tabs };
   } catch { return null; }
@@ -225,4 +232,38 @@ export function writeMirror(owner: string, text: string, store: Store | null = d
 
 export function removeMirror(owner: string, store: Store | null = defaultStore()): void {
   try { store?.removeItem(mirrorKey(owner)); } catch { /* nothing to do */ }
+}
+
+
+// ---- files closed in this browser ----
+// A tab that is closed keeps its file here (per person, the newest few) so it can be opened again from My files > On this computer,
+// including work the server never received. Opening reads only the signed-in person's own key.
+
+export interface ClosedFile extends MirrorTab { id: string; closedAt: string }
+export const closedKey = (owner: string): string => `kerf.closed.${owner}`;
+export const MAX_CLOSED = 20;
+
+export function readClosed(owner: string, store: Store | null = defaultStore()): ClosedFile[] {
+  try {
+    const v = JSON.parse(store?.getItem(closedKey(owner)) ?? "[]") as ClosedFile[];
+    if (!Array.isArray(v)) return [];
+    return v.flatMap((f) => { const c = f && typeof f.id === "string" ? cleanTab(f) : null; return c ? [{ ...c, id: f.id, closedAt: String(f.closedAt) }] : []; });
+  } catch { return []; }
+}
+
+/** Keep a closed file (newest first). The same server file is kept once. Returns false if the browser would not take it. */
+export function addClosed(owner: string, tab: MirrorTab, store: Store | null = defaultStore(), now: Date = new Date()): boolean {
+  if (!store || !tab.state.objects.length) return false;
+  const entry: ClosedFile = { ...tab, id: `closed-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, closedAt: now.toISOString() };
+  let all = [entry, ...readClosed(owner, store).filter((f) => !(tab.meta.jobId && f.meta.jobId === tab.meta.jobId))].slice(0, MAX_CLOSED);
+  for (;;) { // if it does not fit, let the oldest go and try again
+    try { store.setItem(closedKey(owner), JSON.stringify(all)); return true; } catch {
+      if (all.length <= 1) return false;
+      all = all.slice(0, -1);
+    }
+  }
+}
+
+export function removeClosed(owner: string, id: string, store: Store | null = defaultStore()): void {
+  try { store?.setItem(closedKey(owner), JSON.stringify(readClosed(owner, store).filter((f) => f.id !== id))); } catch { /* nothing to do */ }
 }

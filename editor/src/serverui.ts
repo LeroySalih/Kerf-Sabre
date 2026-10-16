@@ -8,7 +8,7 @@ import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
-import { DEFAULT_ORIGIN, blankMeta, fileKey, type FileMeta, type FileRef } from "./workspace";
+import { DEFAULT_ORIGIN, blankMeta, fileKey, type ClosedFile, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
@@ -42,6 +42,13 @@ export interface ServerUiContext {
     restore: (owner: string) => boolean;
     /** Write the open tabs to this browser now. */
     persist: () => void;
+    /** The files open in tabs now. */
+    listOpen: () => { tabId: number; name: string; shapes: number; jobId: string | null; dirty: boolean }[];
+    showTabById: (id: number) => void;
+    /** Files kept in this browser from tabs that were closed, for this person only. */
+    listClosed: (owner: string) => ClosedFile[];
+    openClosed: (owner: string, id: string) => boolean;
+    deleteClosed: (owner: string, id: string) => void;
   };
 }
 
@@ -341,85 +348,121 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   async function files(auto = false): Promise<void> {
     if (!session) return;
+    const me = session.id; // only this person's files: the browser lists are keyed by their ID
     let jobs: JobSummary[];
     try { jobs = await listJobs(session); } catch (e) { await infoDialog("Couldn't load your files", [handle(e)]); return; }
-    let local = listLocal(session.id);
-    if (auto && !jobs.length && !local.length) return; // nothing to show a new pupil yet
+    let local = listLocal(me);
+    if (auto && !jobs.length && !local.length && !ctx.tabs.listClosed(me).length) return; // nothing to show a new pupil yet
     let queued = new Map<string, QueueEntry>();
     try { queued = new Map((await listQueue(session)).filter((q) => q.jobId).map((q) => [q.jobId!, q])); } catch { /* the list still works without queue places */ }
     const dlg = document.createElement("dialog");
     dlg.className = "kdialog wide";
-    dlg.innerHTML = `<h2>My files</h2><p class="hint">${session.id}. Open a file to keep working on it, or send it for cutting.</p>`;
+    dlg.innerHTML = `<h2>My files</h2><p class="hint">${me}. Open a file to keep working on it, or send it for cutting.</p>`;
+    const tabsBar = document.createElement("div");
+    tabsBar.className = "seg";
+    tabsBar.setAttribute("role", "tablist");
     const body = document.createElement("div");
-    dlg.append(body);
+    dlg.append(tabsBar, body);
     const close = document.createElement("button");
     close.textContent = "Close";
     close.addEventListener("click", () => dlg.close());
     dlg.append(close);
-    const draw = () => {
-      body.replaceChildren();
+    let view: "server" | "browser" = auto && !jobs.length ? "browser" : "server";
+
+    const mkRow = (text: string) => {
+      const row = document.createElement("div");
+      row.className = "filerow";
+      const info = document.createElement("span");
+      info.textContent = text;
+      row.append(info);
+      const add = (label: string, run: () => Promise<void> | void, cls = "") => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        if (cls) b.className = cls;
+        b.addEventListener("click", async () => { b.disabled = true; try { await run(); } catch (e) { ctx.notify(handle(e)); } b.disabled = false; });
+        row.append(b);
+      };
+      return { row, add };
+    };
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+    const drawServer = () => {
+      if (!jobs.length) body.append(Object.assign(document.createElement("p"), { textContent: "You haven't saved anything on the server yet." }));
+      for (const j of jobs) {
+        const est = j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : "";
+        const reason = j.statusReason && j.status !== "done" ? ` (${j.statusReason})` : "";
+        const place = queued.get(j.id);
+        const where = j.status === "approved" ? queueText(j.ticket ?? place?.ticket, place?.position, place?.aheadS) : j.ticket != null ? `Ticket ${j.ticket}` : "";
+        const { row, add } = mkRow(`${where ? where + " · " : ""}${j.id} · ${j.preset.id} · ${new Date(j.createdAt).toLocaleString()}${est} · ${STATUS_TEXT[j.status] ?? j.status}${reason}`);
+        add(j.status === "draft" ? "Open" : "Open a copy", () => open(j, () => dlg.close()));
+        if (j.status === "draft") add("Send for cutting", async () => { const r = await submitJob(session!, j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
+        if (["draft", "submitted", "approved"].includes(j.status)) add("Cancel", async () => { const r = await cancelJob(session!, j.id); j.status = r.status; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
+        body.append(row);
+      }
+    };
+
+    const drawBrowser = () => {
+      const open = ctx.tabs.listOpen().filter((t) => t.shapes > 0 || t.jobId);
+      const closed = ctx.tabs.listClosed(me);
+      const h = (t: string) => body.append(Object.assign(document.createElement("h3"), { textContent: t }));
+      body.append(Object.assign(document.createElement("p"), { className: "hint", textContent: "These are kept in this browser on this computer, only for you. Every change is kept here as you work, and the tabs you close stay here so you can open them again." }));
+      if (!open.length && !closed.length && !local.length) body.append(Object.assign(document.createElement("p"), { textContent: "Nothing is kept on this computer yet." }));
+      if (open.length) {
+        h("Open now");
+        for (const t of open) {
+          const { row, add } = mkRow(`${t.name} · ${plural(t.shapes, "shape")} · ${t.jobId ? `on the server as ${t.jobId}` : "not on the server yet"}${t.dirty ? " · changes waiting to be saved" : ""}`);
+          add("Show", () => { ctx.tabs.showTabById(t.tabId); dlg.close(); });
+          body.append(row);
+        }
+      }
+      if (closed.length) {
+        h("Closed tabs");
+        for (const f of closed) {
+          const { row, add } = mkRow(`${f.name} · ${plural(f.state.objects.length, "shape")} · closed ${new Date(f.closedAt).toLocaleString()} · ${f.meta.jobId ? `on the server as ${f.meta.jobId}` : "not on the server yet"}`);
+          add("Open", () => { if (ctx.tabs.openClosed(me, f.id)) { ctx.notify(`Opened ${f.name}.`); dlg.close(); } else { ctx.notify("That file is no longer on this computer."); draw(); } });
+          add("Delete", () => { if (confirm(`Delete "${f.name}" from this computer?${f.meta.jobId ? " It stays on the server." : " It is not on the server, so it will be gone."}`)) { ctx.tabs.deleteClosed(me, f.id); draw(); } }, "danger");
+          body.append(row);
+        }
+      }
       if (local.length) {
-        body.append(Object.assign(document.createElement("h3"), { textContent: "On this computer (not on the server yet)" }));
+        h("Kept because sending did not work");
         for (const d of local) {
-          const row = document.createElement("div");
-          row.className = "filerow";
-          const info = document.createElement("span");
-          info.textContent = `${new Date(d.savedAt).toLocaleString()} · ${d.job.objects.length} shape${d.job.objects.length === 1 ? "" : "s"} · ${d.job.preset.id} · kept because: ${d.reason || "the server did not take it"}`;
-          row.append(info);
-          const lbtn = (label: string, run: () => Promise<void> | void, cls = "") => {
-            const b = document.createElement("button");
-            b.textContent = label;
-            if (cls) b.className = cls;
-            b.addEventListener("click", async () => { b.disabled = true; try { await run(); } catch (e) { ctx.notify(handle(e)); } b.disabled = false; });
-            row.append(b);
-          };
-          lbtn("Open", () => {
+          const { row, add } = mkRow(`${new Date(d.savedAt).toLocaleString()} · ${plural(d.job.objects.length, "shape")} · ${d.job.preset.id} · kept because: ${d.reason || "the server did not take it"}`);
+          add("Open", () => {
             if (ctx.tabs.show({ localId: d.id })) { ctx.notify("That copy is already open: switched to its tab."); dlg.close(); return; }
             ctx.tabs.openBlank();
             ctx.load(fromJobObjects(d.job.objects), d.job.preset.id, (d.job.dimensions ?? []).map(fromJobDimension));
             cur.jobId = null; cur.sourceId = null; cur.origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; cur.openedLocal = d.id;
-            markSaved(); render(); ctx.notify("Opened the copy kept on this computer. Save to put it on the server."); dlg.close();
+            render(); ctx.notify("Opened the copy kept on this computer. It is saved to the server automatically."); dlg.close();
           });
-          lbtn("Save to the server", async () => {
+          add("Save to the server", async () => {
             const r = await sendJob(session!, { ...d.job, status: "draft" });
             removeLocal(d.id); if (cur.openedLocal === d.id) cur.openedLocal = null;
-            local = listLocal(session!.id);
+            local = listLocal(me);
             ctx.notify(`Saved as ${r.id}`);
             jobs = await listJobs(session!).catch(() => jobs);
             draw();
           }, "on");
-          lbtn("Delete", () => { if (confirm("Delete this copy from this computer? It is not on the server.")) { removeLocal(d.id); local = listLocal(session!.id); draw(); } }, "danger");
+          add("Delete", () => { if (confirm("Delete this copy from this computer? It is not on the server.")) { removeLocal(d.id); local = listLocal(me); draw(); } }, "danger");
           body.append(row);
         }
-        body.append(Object.assign(document.createElement("h3"), { textContent: "On the server" }));
-      }
-      if (!jobs.length) body.append(Object.assign(document.createElement("p"), { textContent: "You haven't saved anything on the server yet." }));
-      for (const j of jobs) {
-        const row = document.createElement("div");
-        row.className = "filerow";
-        const est = j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : "";
-        const reason = j.statusReason && j.status !== "done" ? ` (${j.statusReason})` : "";
-        const info = document.createElement("span");
-        const place = queued.get(j.id);
-        const where = j.status === "approved" ? queueText(j.ticket ?? place?.ticket, place?.position, place?.aheadS) : j.ticket != null ? `Ticket ${j.ticket}` : "";
-        info.textContent = `${where ? where + " · " : ""}${j.id} · ${j.preset.id} · ${new Date(j.createdAt).toLocaleString()}${est} · ${STATUS_TEXT[j.status] ?? j.status}${reason}`;
-        row.append(info);
-        const btn = (label: string, run: () => Promise<void> | void) => {
-          const b = document.createElement("button");
-          b.textContent = label;
-          b.addEventListener("click", async () => {
-            b.disabled = true;
-            try { await run(); } catch (e) { ctx.notify(handle(e)); }
-            b.disabled = false;
-          });
-          row.append(b);
-        };
-        btn(j.status === "draft" ? "Open" : "Open a copy", () => open(j, () => dlg.close()));
-        if (j.status === "draft") btn("Send for cutting", async () => { const r = await submitJob(session!, j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
-        if (["draft", "submitted", "approved"].includes(j.status)) btn("Cancel", async () => { const r = await cancelJob(session!, j.id); j.status = r.status; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
-        body.append(row);
       }
     };
+
+    function draw(): void {
+      const nBrowser = ctx.tabs.listOpen().filter((t) => t.shapes > 0 || t.jobId).length + ctx.tabs.listClosed(me).length + local.length;
+      tabsBar.replaceChildren(...([["server", `On the server (${jobs.length})`], ["browser", `On this computer (${nBrowser})`]] as const).map(([v, label]) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(view === v));
+        b.className = view === v ? "on" : "";
+        b.addEventListener("click", () => { view = v; draw(); });
+        return b;
+      }));
+      body.replaceChildren();
+      if (view === "server") drawServer(); else drawBrowser();
+    }
     draw();
     document.body.append(dlg);
     dlg.addEventListener("close", () => dlg.remove());

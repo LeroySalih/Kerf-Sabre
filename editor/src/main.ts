@@ -32,7 +32,7 @@ import { loadMachineProfiles } from "./machine";
 import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
 import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
-import { Workspace, blankMeta, matches as matchesMeta, readMirror, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
+import { Workspace, blankMeta, matches as matchesMeta, addClosed, readClosed, readMirror, removeClosed, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
 import { emptyState } from "./doc";
 import { cleanPoints, splinePath } from "./spline";
 import { offsetPath, type OffsetCorner, type OffsetSide } from "./offset";
@@ -1774,6 +1774,11 @@ function closeTab(id: number): void {
   const t = ws.get(id);
   if (!t) return;
   if (tabDirty(t) && !confirm(`"${t.name}" has changes that are not saved. Close it anyway?`)) return;
+  const owner = server?.owner();
+  if (owner && owner !== "offline") { // keep the file in this browser: My files > On this computer can open it again
+    const live = id === ws.activeId;
+    addClosed(owner, { name: t.name, renamed: t.renamed, state: live ? doc.state : t.snap.state, meta: live ? metaNow() : t.meta });
+  }
   const next = ws.close(id);
   if (next) showTab(next); else renderTabs(true);
 }
@@ -1910,6 +1915,27 @@ function restoreTabs(owner: string): boolean {
   return true;
 }
 
+/** A file kept in this browser when its tab was closed, opened again in a tab. Only the signed-in person's own files can be reached. */
+function openClosed(owner: string, id: string): boolean {
+  if (!server || server.owner() !== owner) return false;
+  const f = readClosed(owner).find((x) => x.id === id);
+  if (!f) return false;
+  const live = metaNow();
+  const hit = f.meta.jobId ? ws.tabs.find((x) => (x.id === ws.activeId ? live : x.meta).jobId === f.meta.jobId) : undefined;
+  if (hit) { switchTab(hit.id); removeClosed(owner, id); return true; } // that file is already open: never two versions
+  const wasPristine = ws.pristine(doc.state.objects.length === 0), before = ws.activeId;
+  void server.flushNow();
+  parkActive();
+  syncNames();
+  const t = ws.add(f.name, { state: f.state, undo: [], redo: [] }, f.meta);
+  t.renamed = f.renamed;
+  showTab(t);
+  if (wasPristine) ws.close(before); // the empty tab we were on is not needed any more
+  removeClosed(owner, id);
+  renderTabs(true);
+  return true;
+}
+
 window.addEventListener("pagehide", () => { persistTabs(); void server?.flushNow(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { persistTabs(); void server?.flushNow(); } });
 
@@ -1960,6 +1986,11 @@ server = initServerUi({
     othersDirty: () => ws.tabs.some((t) => t.id !== ws.activeId && tabDirty(t)),
     changed: () => scheduleTabs(),
     restore: (owner: string) => restoreTabs(owner),
+    listOpen: () => { syncNames(); return ws.tabs.map((t) => ({ tabId: t.id, name: t.name, shapes: (t.id === ws.activeId ? doc.state : t.snap.state).objects.length, jobId: (t.id === ws.activeId ? metaNow() : t.meta).jobId, dirty: tabDirty(t) })); },
+    showTabById: (id: number) => switchTab(id),
+    listClosed: (owner: string) => (server && server.owner() === owner ? readClosed(owner) : []),
+    openClosed: (owner: string, id: string) => openClosed(owner, id),
+    deleteClosed: (owner: string, id: string) => { if (server?.owner() === owner) removeClosed(owner, id); },
     persist: () => { mirrorLast = ""; persistTabs(); },
   },
   presetsChanged: () => { fillMaterials(); refreshLayerUI(); },

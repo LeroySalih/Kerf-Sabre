@@ -125,3 +125,92 @@ describe("unsaved changes", () => {
     expect(uniqueName(["A", "A 2"], "A")).toBe("A 3");
   });
 });
+
+import { mirrorKey, parseMirror, readMirror, removeMirror, serializeMirror, writeMirror } from "../src/workspace";
+
+const memory = () => {
+  const m = new Map<string, string>();
+  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); }, removeItem: (k: string) => { m.delete(k); }, m };
+};
+
+describe("keeping the open tabs in the browser", () => {
+  function twoTabs(): { w: Workspace; live: Doc } {
+    const w = new Workspace();
+    const live = docWith(2);
+    w.active().name = "Lid";
+    w.add("Box", docWith(3).snapshot(), { ...blankMeta(), jobId: "job-7", savedKey: "k7" }).renamed = true;
+    return { w, live };
+  }
+
+  it("round-trips every tab, using the live page for the one showing", () => {
+    const { w, live } = twoTabs();
+    const text = serializeMirror(w, { state: live.state, meta: { ...blankMeta(), jobId: "job-1" } });
+    const m = parseMirror(text)!;
+    expect(m.tabs.map((t) => t.name)).toEqual(["Lid", "Box"]);
+    expect(m.tabs[0]!.state.objects).toHaveLength(2); // the live page, not the stale parked snapshot
+    expect(m.tabs[0]!.meta.jobId).toBe("job-1");
+    expect(m.tabs[1]!.state.objects).toHaveLength(3);
+    expect(m.tabs[1]).toMatchObject({ renamed: true, meta: { jobId: "job-7", savedKey: "k7" } });
+    expect(m.active).toBe(0);
+  });
+
+  it("keeps groups, text specs and settings (it is not the lossy job format)", () => {
+    const d = docWith(2);
+    d.group([1, 2]);
+    d.state.objects[0]!.settings = { powerPct: 50, speedMmPerS: 5 };
+    const w = new Workspace();
+    const m = parseMirror(serializeMirror(w, { state: d.state, meta: blankMeta() }))!;
+    expect(m.tabs[0]!.state.objects.map((o) => o.group)).toEqual([1, 1]);
+    expect(m.tabs[0]!.state.objects[0]!.settings).toEqual({ powerPct: 50, speedMmPerS: 5 });
+  });
+
+  it("ignores anything damaged or foreign instead of half-loading it", () => {
+    expect(parseMirror(null)).toBeNull();
+    expect(parseMirror("not json")).toBeNull();
+    expect(parseMirror(JSON.stringify({ v: 2, tabs: [] }))).toBeNull();
+    expect(parseMirror(JSON.stringify({ v: 1, tabs: [] }))).toBeNull();
+    const { w, live } = twoTabs();
+    const bad = JSON.parse(serializeMirror(w, { state: live.state, meta: blankMeta() }));
+    bad.tabs[1].state.objects[0].matrix = [1, 2, 3];
+    expect(parseMirror(JSON.stringify(bad))).toBeNull();
+    bad.tabs[1].state.objects[0].matrix = [1, 0, 0, 1, 0, 0];
+    bad.tabs[1].state.objects[0].layer = "engrave";
+    expect(parseMirror(JSON.stringify(bad))).toBeNull();
+  });
+
+  it("is stored per person, so one pupil never gets another's tabs back", () => {
+    const store = memory();
+    const { w, live } = twoTabs();
+    expect(writeMirror("P001", serializeMirror(w, { state: live.state, meta: blankMeta() }), store)).toBe(true);
+    expect(readMirror("P001", store)?.tabs).toHaveLength(2);
+    expect(readMirror("P002", store)).toBeNull();
+    expect(store.m.has(mirrorKey("P001"))).toBe(true);
+    removeMirror("P001", store);
+    expect(readMirror("P001", store)).toBeNull();
+  });
+
+  it("reports a full browser instead of throwing", () => {
+    const full = { getItem: () => null, setItem: () => { throw new Error("quota"); }, removeItem: () => undefined };
+    expect(writeMirror("P001", "{}", full)).toBe(false);
+    expect(writeMirror("P001", "{}", null)).toBe(false);
+  });
+
+  it("puts the saved tabs back: replacing an untouched workspace, or joining work already open", () => {
+    const { w, live } = twoTabs();
+    const m = parseMirror(serializeMirror(w, { state: live.state, meta: { ...blankMeta(), jobId: "job-1" } }))!;
+
+    const fresh = new Workspace();
+    expect(fresh.pristine(true)).toBe(true);
+    const shown = fresh.absorb(m, true);
+    expect(fresh.names()).toEqual(["Lid", "Box"]);
+    expect(shown.name).toBe("Lid");
+    expect(fresh.activeId).toBe(shown.id);
+    expect(fresh.pristine(false)).toBe(false);
+
+    const busy = new Workspace();
+    busy.add("Other", docWith(1).snapshot(), { ...blankMeta(), jobId: "job-7" }); // job-7 is already open here
+    const stay = busy.absorb(m, false);
+    expect(busy.names()).toEqual(["Untitled", "Other", "Lid"]); // job-7 was not added a second time
+    expect(stay).toBe(busy.active());
+  });
+});

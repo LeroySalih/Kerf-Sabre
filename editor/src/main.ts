@@ -32,7 +32,7 @@ import { loadMachineProfiles } from "./machine";
 import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
 import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
-import { Workspace, blankMeta, matches as matchesMeta, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
+import { Workspace, blankMeta, matches as matchesMeta, readMirror, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
 import { emptyState } from "./doc";
 import { cleanPoints, splinePath } from "./spline";
 import { offsetPath, type OffsetCorner, type OffsetSide } from "./offset";
@@ -943,6 +943,7 @@ window.addEventListener("keydown", (e) => {
   else if ((e.key === "Delete" || e.key === "Backspace") && deleteSelectedNode()) { e.preventDefault(); }
   else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSelected(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); void server?.flushNow(); notify("Your changes are saved for you, as you work."); }
   else if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) setGimbal(!showGimbal);
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); (e.shiftKey ? doc.redo() : doc.undo()) && (selected.clear(), selectedDims.clear(), draw()); }
@@ -1746,12 +1747,14 @@ function switchTab(id: number): void {
   if (id === ws.activeId) return;
   const t = ws.get(id);
   if (!t) return;
+  void server?.flushNow(); // the tab we are leaving goes to the server now
   parkActive();
   showTab(t);
 }
 
 /** An empty file in a new tab, on the same material. */
 function newTab(): void {
+  void server?.flushNow();
   parkActive();
   syncNames();
   showTab(ws.add("Untitled", { state: { ...emptyState(), materialId: doc.state.materialId }, undo: [], redo: [] }, blankMeta()));
@@ -1776,6 +1779,7 @@ function closeTab(id: number): void {
 }
 
 function duplicateTab(): void {
+  void server?.flushNow();
   parkActive();
   syncNames();
   const t = ws.duplicate(ws.active());
@@ -1848,6 +1852,7 @@ function renderTabs(force = false): void {
     item.append(main, x);
     return item;
   }));
+  if (force) persistTabs();
   const here = ws.tabs.length;
   (document.getElementById("tab-dup") as HTMLButtonElement).disabled = false;
   document.getElementById("tab-count")!.textContent = here > 1 ? `${here} files open` : "";
@@ -1855,8 +1860,58 @@ function renderTabs(force = false): void {
 
 function scheduleTabs(): void {
   if (tabTimer !== undefined) return;
-  tabTimer = setTimeout(() => { tabTimer = undefined; renderTabs(); }, 300);
+  tabTimer = setTimeout(() => { tabTimer = undefined; renderTabs(); server?.noteChange(); persistTabs(); }, 300);
 }
+
+// ---- keeping the open tabs in this browser (see workspace.ts: Mirror) ----
+/** Whose tabs are on screen and mirrored. Null until their saved tabs have been looked for, so a refresh can never overwrite them with an empty page. */
+let mirrorOwner: string | null = null;
+let mirrorLast = "";
+
+function persistTabs(): void {
+  if (!server || mirrorOwner === null || server.owner() !== mirrorOwner) return;
+  if (ws.pristine(doc.state.objects.length === 0)) { // nothing worth keeping
+    if (mirrorLast !== "") { removeMirror(mirrorOwner); mirrorLast = ""; }
+    server.setLocalOk(true);
+    return;
+  }
+  const text = serializeMirror(ws, { state: doc.state, meta: metaNow() });
+  const sig = text.slice(text.indexOf('"active"')); // everything but the time stamp
+  if (sig === mirrorLast) return;
+  const ok = writeMirror(mirrorOwner, text);
+  if (ok) mirrorLast = sig;
+  server.setLocalOk(ok);
+}
+
+/** An empty page and one empty tab (sign-out, or tabs left on screen by someone whose session ran out). */
+function wipeTabs(): void {
+  doc.reset(); ws.reset();
+  selected = new Set(); selectedDims = new Set(); dimDraft = null;
+  server?.setFile(blankMeta());
+  fillMaterials(); refreshLayerUI(); draw(); renderTabs(true);
+}
+
+/** Bring back the tabs this person had open. Returns true if there were any. */
+function restoreTabs(owner: string): boolean {
+  const before = mirrorOwner;
+  if (before !== null && before !== owner && before !== "offline") wipeTabs(); // someone else's tabs are still showing
+  if (before === "offline" && owner !== "offline") removeMirror("offline"); // that work now belongs to this person (saved under their ID from here on)
+  mirrorOwner = owner;
+  mirrorLast = "";
+  const m = readMirror(owner);
+  if (!m) { persistTabs(); return false; }
+  const replace = ws.pristine(doc.state.objects.length === 0);
+  if (!replace) parkActive();
+  const show = ws.absorb(m, replace);
+  if (replace) showTab(show); else renderTabs(true);
+  const n = m.tabs.length;
+  notify(`Brought back your ${n === 1 ? "open file" : `${n} open files`}.`);
+  persistTabs();
+  return true;
+}
+
+window.addEventListener("pagehide", () => { persistTabs(); void server?.flushNow(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { persistTabs(); void server?.flushNow(); } });
 
 on("tab-new", () => newTab());
 on("tab-dup", () => duplicateTab());
@@ -1888,7 +1943,7 @@ server = initServerUi({
     refreshLayerUI();
     fit();
   },
-  clear: () => { doc.reset(); ws.reset(); selected = new Set(); selectedDims = new Set(); dimDraft = null; server?.setFile(blankMeta()); fillMaterials(); refreshLayerUI(); draw(); renderTabs(true); },
+  clear: () => { mirrorOwner = null; mirrorLast = ""; wipeTabs(); },
   tabs: {
     show: (ref: FileRef) => {
       const live = metaNow(); // the tab showing now keeps its live state in the panel
@@ -1904,6 +1959,8 @@ server = initServerUi({
     },
     othersDirty: () => ws.tabs.some((t) => t.id !== ws.activeId && tabDirty(t)),
     changed: () => scheduleTabs(),
+    restore: (owner: string) => restoreTabs(owner),
+    persist: () => { mirrorLast = ""; persistTabs(); },
   },
   presetsChanged: () => { fillMaterials(); refreshLayerUI(); },
 });

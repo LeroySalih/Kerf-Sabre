@@ -251,3 +251,4 @@ td.cell.st-todo { background: #f9fafb; }
 .ftab .ftab-name { padding-left: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .ftab .ftab-x { padding: 6px 8px; color: var(--muted); }
 .ftab .ftab-x:hover { color: #dc2626; }
+#srv-save-state.bad { color: #b45309; font-weight: 600; }

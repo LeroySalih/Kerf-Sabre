@@ -108,6 +108,29 @@ export class Workspace {
     return next;
   }
 
+  /** True when there is nothing to lose: one empty, unsaved tab. */
+  pristine(activeEmpty: boolean): boolean {
+    return this.tabs.length === 1 && activeEmpty && !this.tabs[0]!.meta.jobId;
+  }
+
+  /** Show the tabs kept in the browser. Into an untouched workspace they replace it; otherwise they are added after the tabs already open (a file already open is not added twice). Returns the tab to show. */
+  absorb(m: Mirror, replace: boolean): FileTab {
+    const incoming = m.tabs.map((t) => ({ t, tab: this.make(t.name, { state: t.state, undo: [], redo: [] }, t.meta) }));
+    if (replace) this.tabs = [];
+    let active: FileTab | undefined;
+    incoming.forEach(({ t, tab }, i) => {
+      const dup = this.tabs.find((x) => (tab.meta.jobId && x.meta.jobId === tab.meta.jobId) || (tab.meta.openedLocal && x.meta.openedLocal === tab.meta.openedLocal));
+      if (dup) { if (i === m.active) active = dup; return; }
+      tab.renamed = t.renamed;
+      this.tabs.push(tab);
+      if (i === m.active) active = tab;
+    });
+    if (!this.tabs.length) this.tabs.push(this.make("Untitled", { state: emptyState(), undo: [], redo: [] }, blankMeta()));
+    const show = replace ? active ?? this.tabs[0]! : this.active();
+    this.activeId = show.id;
+    return show;
+  }
+
   /** Back to one empty tab (sign-out: the next pupil must find nothing). */
   reset(): FileTab {
     this.tabs = [];
@@ -133,4 +156,73 @@ export function snapshotOf(data: ClipData, materialId: string): DocSnapshot {
   d.state.materialId = materialId;
   d.pasteIn(data, 0, 0);
   return d.snapshot();
+}
+
+
+// ---- keeping the open tabs in this browser ----
+// Every change is mirrored to local storage, keyed by who is signed in, so the tabs come back after a refresh or when the
+// same person signs in again. Only pupil IDs are stored, never names. Undo history is not kept (it is big and a refresh ends it).
+
+export interface MirrorTab { name: string; renamed?: boolean; state: DocState; meta: FileMeta }
+export interface Mirror { v: 1; savedAt: string; active: number; tabs: MirrorTab[] }
+
+export const mirrorKey = (owner: string): string => `kerf.workspace.${owner}`;
+const MAX_TABS = 30;
+
+type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+const defaultStore = (): Store | null => { try { return globalThis.localStorage ?? null; } catch { return null; } };
+
+/** The tabs as text. `live` is the page showing now (its snapshot in the workspace is stale). */
+export function serializeMirror(ws: Workspace, live: { state: DocState; meta: FileMeta }, now: Date = new Date()): string {
+  const tabs: MirrorTab[] = ws.tabs.map((t) => {
+    const isLive = t.id === ws.activeId;
+    return { name: t.name, renamed: t.renamed, state: isLive ? live.state : t.snap.state, meta: isLive ? live.meta : t.meta };
+  });
+  const m: Mirror = { v: 1, savedAt: now.toISOString(), active: Math.max(0, ws.tabs.findIndex((t) => t.id === ws.activeId)), tabs };
+  return JSON.stringify(m);
+}
+
+const isNum = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+const isPoint = (p: unknown): boolean => !!p && isNum((p as { x?: unknown }).x) && isNum((p as { y?: unknown }).y);
+const validObject = (o: unknown): boolean => {
+  const x = o as { id?: unknown; layer?: unknown; matrix?: unknown; path?: { start?: unknown; segs?: unknown; closed?: unknown } } | null;
+  return !!x && isNum(x.id) && (x.layer === "cut" || x.layer === "score" || x.layer === "ignore")
+    && Array.isArray(x.matrix) && x.matrix.length === 6 && x.matrix.every(isNum)
+    && !!x.path && isPoint(x.path.start) && Array.isArray(x.path.segs) && typeof x.path.closed === "boolean"
+    && x.path.segs.every((g: { t?: unknown; to?: unknown }) => !!g && (g.t === "l" || g.t === "a" || g.t === "c") && isPoint(g.to));
+};
+
+/** Read what serializeMirror wrote. Anything unexpected gives null (a damaged or foreign entry is ignored, never half-loaded). */
+export function parseMirror(text: string | null): Mirror | null {
+  if (!text) return null;
+  try {
+    const m = JSON.parse(text) as Mirror;
+    if (m?.v !== 1 || !Array.isArray(m.tabs) || !m.tabs.length || m.tabs.length > MAX_TABS) return null;
+    const tabs: MirrorTab[] = [];
+    for (const t of m.tabs) {
+      if (!t || typeof t.name !== "string" || !t.state || !Array.isArray(t.state.objects) || !t.state.objects.every(validObject)) return null;
+      const meta = t.meta ?? blankMeta();
+      const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+      tabs.push({
+        name: t.name.slice(0, 60), renamed: t.renamed === true,
+        state: { ...emptyState(), ...t.state },
+        meta: { jobId: str(meta.jobId), origin: meta.origin?.mode === "absolute" || meta.origin?.mode === "current-position" ? meta.origin : DEFAULT_ORIGIN, savedKey: typeof meta.savedKey === "string" ? meta.savedKey : "", openedLocal: str(meta.openedLocal), sourceId: str(meta.sourceId) },
+      });
+    }
+    return { v: 1, savedAt: String(m.savedAt), active: isNum(m.active) && m.active >= 0 && m.active < tabs.length ? m.active : 0, tabs };
+  } catch { return null; }
+}
+
+export const readMirror = (owner: string, store: Store | null = defaultStore()): Mirror | null => {
+  try { return parseMirror(store?.getItem(mirrorKey(owner)) ?? null); } catch { return null; }
+};
+
+/** Write the mirror. False if the browser would not take it (storage full or blocked). */
+export function writeMirror(owner: string, text: string, store: Store | null = defaultStore()): boolean {
+  if (!store) return false;
+  try { store.setItem(mirrorKey(owner), text); return true; } catch { return false; }
+}
+
+export function removeMirror(owner: string, store: Store | null = defaultStore()): void {
+  try { store?.removeItem(mirrorKey(owner)); } catch { /* nothing to do */ }
 }

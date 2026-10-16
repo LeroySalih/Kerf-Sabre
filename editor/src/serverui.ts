@@ -8,7 +8,7 @@ import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
-import { DEFAULT_ORIGIN, fileKey, type FileMeta, type FileRef } from "./workspace";
+import { DEFAULT_ORIGIN, blankMeta, fileKey, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
@@ -38,6 +38,10 @@ export interface ServerUiContext {
     othersDirty: () => boolean;
     /** The server panel's view of the file changed (saved, sent, opened): refresh the tab labels. */
     changed: () => void;
+    /** Bring back the tabs kept in this browser for this owner (a pupil ID, or "offline"). True if there were any. */
+    restore: (owner: string) => boolean;
+    /** Write the open tabs to this browser now. */
+    persist: () => void;
   };
 }
 
@@ -47,28 +51,33 @@ const problem = (e: unknown): string => (e instanceof Error ? e.message : String
 export interface ServerUiHandle {
   session: () => Session | null;
   /** The file in the tab that is showing, and a way to give the panel another tab's file. */
+  /** Who the open tabs belong to: the signed-in ID, or "offline". */
+  owner: () => string;
+  /** The file in the tab showing now (the live object: saves write to it), and a way to give the panel another tab's file. */
   getFile: () => FileMeta;
   setFile: (m: FileMeta) => void;
   isDirty: () => boolean;
+  /** The page may have changed: schedule a save to the server. */
+  noteChange: () => void;
+  /** Save the file showing now without waiting. */
+  flushNow: () => Promise<void>;
+  /** Tell the panel whether the copy kept in this browser worked (false when the browser's storage is full). */
+  setLocalOk: (ok: boolean) => void;
 }
 
 export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   let session = loadSession();
   let offline = false;
-  /** The draft on the server that Save updates; null until the first Save (or after the design was sent). */
-  let jobId: string | null = null;
-  let origin: Origin = DEFAULT_ORIGIN;
-  let savedKey = "";
-  /** The sent file the page was opened as a copy of (so opening it again finds this tab). */
-  let sourceId: string | null = null;
+  /** The file in the tab that is showing (swapped by `setFile` when another tab is shown; saves hold on to the object they started on). */
+  let cur: FileMeta = blankMeta();
   /** The class activity new saves are for (null: none). */
   let activity: { id: string; title: string } | null = null;
   const defaultBase = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
 
   /** A fingerprint of the page, to tell whether there is anything unsaved. */
   const key = () => fileKey({ materialId: ctx.materialId(), objects: ctx.objects(), dimensions: ctx.dimensions() });
-  const dirty = () => ctx.objects().length > 0 && key() !== savedKey;
-  const markSaved = () => { savedKey = key(); };
+  const dirty = () => ctx.objects().length > 0 && key() !== cur.savedKey;
+  const markSaved = (f: FileMeta = cur, k: string = key()) => { f.savedKey = k; };
   const confirmDiscard = (what: string) => !(dirty() || ctx.tabs.othersDirty()) || confirm(`You have changes that are not saved. ${what} anyway?`);
 
   const render = () => {
@@ -82,8 +91,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     act.hidden = !(session?.role === "pupil" && activity);
     act.replaceChildren(...(activity ? [document.createTextNode(`Activity: ${activity.title} `), Object.assign(document.createElement("button"), { textContent: "×", title: "Stop saving files for this activity", onclick: () => { activity = null; render(); } })] : []));
     ($("srv-admin") as HTMLAnchorElement).hidden = session?.role !== "teacher" && session?.role !== "admin";
-    $("srv-file").textContent = signedIn && jobId ? `Editing ${jobId}` : "";
+    $("srv-file").textContent = signedIn && cur.jobId ? `Editing ${cur.jobId}` : "";
     ctx.tabs.changed();
+    showSaveState();
   };
 
   /** Keeps a DINO sign-in renewed while it is the current session. */
@@ -93,7 +103,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     if (session?.sso) void endSignIn("editor"); // a DINO session: end the connection there too
     else if (session?.expiresAt) void logout(session); // a class-login session: end it on the server too
     renewer?.stop(); renewer = null;
-    session = null; saveSession(null); jobId = null; render(); };
+    session = null; saveSession(null); cur.jobId = null; render(); };
   const keepAlive = (next: Session, tokens: Tokens) => {
     renewer?.stop();
     renewer = new Renewer("editor", next, tokens, (why) => { dropSession(); ctx.notify(why); });
@@ -125,7 +135,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     enterRole();
     if (session.role === "station") return;
     ctx.notify(`Signed in as ${session.id}`);
-    if (session.role === "pupil") void files(true);
+    const restored = ctx.tabs.restore(session.id); // the tabs this person had open last time
+    if (session.role === "pupil" && !restored) void files(true);
   }
 
   /** The sign-in page has two ways in: class code + pupil ID + PIN (pupils), or a token (teachers, laser stations). */
@@ -177,9 +188,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     } catch (e) { err.textContent = problem(e); }
   }
 
-  const currentJob = () => buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin, submit: false });
-  /** The local copy the page was opened from (so it is removed once the design reaches the server). */
-  let openedLocal: string | null = null;
+  const currentJob = () => buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin: cur.origin, submit: false });
 
   /** What went wrong, in words, with the server's own list of problems when it gave one. */
   const explain = (e: unknown): string[] => [handle(e), ...(e instanceof ServerError && e.details ? e.details.slice(0, 5).map((d) => `${d.path || "the job"}: ${d.message}`) : [])];
@@ -193,28 +202,83 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       : "It could not be kept on this computer either (the browser's storage is full or blocked). Use Export DXF to keep your work."];
   }
 
-  /** Make sure there is a draft on the server holding the current design. Returns its id. */
-  async function saveCurrent(): Promise<string> {
-    const job = currentJob();
-    if (jobId) {
-      try { await saveDraft(session!, jobId, job); markSaved(); return jobId; } catch (e) {
-        if (!(e instanceof ServerError && (e.status === 409 || e.status === 404))) throw e; // the draft was sent or cancelled meanwhile: start a new one
-        jobId = null;
+  /** Saves of one file run one after the other, and write to the file they started on even if another tab is showing by then. */
+  const chain = new WeakMap<FileMeta, Promise<unknown>>();
+
+  /** Make sure there is a draft on the server holding the design as it is now. Returns its id. */
+  function saveCurrent(): Promise<string> {
+    const f = cur, job = currentJob(), k = key(), s = session!; // taken now: the page may change while we wait
+    const run = (chain.get(f) ?? Promise.resolve()).catch(() => undefined).then(async (): Promise<string> => {
+      if (f.jobId) {
+        try { await saveDraft(s, f.jobId, job); markSaved(f, k); ctx.tabs.changed(); return f.jobId; } catch (e) {
+          if (!(e instanceof ServerError && (e.status === 409 || e.status === 404))) throw e; // the draft was sent or cancelled meanwhile: start a new one
+          f.jobId = null;
+        }
       }
-    }
-    const r = await sendJob(session!, job);
-    jobId = r.id;
-    if (openedLocal) { removeLocal(openedLocal); openedLocal = null; } // it reached the server: the local copy is no longer needed
-    markSaved();
-    render();
-    return r.id;
+      const r = await sendJob(s, job);
+      f.jobId = r.id;
+      if (f.openedLocal) { removeLocal(f.openedLocal); f.openedLocal = null; } // it reached the server: the local copy is no longer needed
+      markSaved(f, k);
+      render();
+      return r.id;
+    });
+    chain.set(f, run.catch(() => undefined));
+    return run;
   }
 
-  async function save(): Promise<void> {
-    const why = ctx.blocker();
-    if (why && !ctx.objects().length) { ctx.notify(why); return; }
-    try { const id = await saveCurrent(); ctx.notify(`Saved as ${id}`); } catch (e) { await infoDialog("Not saved to the server", keepLocally(e)); }
+  // ---- autosave: every change goes to the server a moment later (and to this browser at once, see main.ts) ----
+  const AUTOSAVE_MS = 1500;
+  let autoTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryMs = 0;
+  let saving = 0;
+  let localOk = true;
+  type SaveState = "idle" | "saving" | "saved" | "failed";
+  let saveState: SaveState = "idle";
+  const showSaveState = () => {
+    const el = $("srv-save-state");
+    const extra = localOk ? "" : " Too big to keep on this computer as well.";
+    el.hidden = false;
+    if (!session) { el.textContent = offline ? `Kept on this computer.${extra}` : ""; el.className = ""; return; }
+    if (session.role === "station") { el.hidden = true; return; }
+    el.className = saveState === "failed" || !localOk ? "bad" : "";
+    el.textContent = saveState === "saving" ? "Saving…"
+      : saveState === "failed" ? `Not on the server yet: kept on this computer, trying again.${extra}`
+      : saveState === "saved" ? `All changes saved.${extra}`
+      : ctx.objects().length ? `Not saved yet.${extra}` : extra.trim();
+  };
+
+  /** Save the page to the server now if there is anything new. Never throws: a failure is shown and retried. */
+  async function autosave(): Promise<void> {
+    clearTimeout(autoTimer); autoTimer = undefined;
+    if (!session || session.role === "station" || !ctx.objects().length || key() === cur.savedKey) { showSaveState(); return; }
+    saving++; saveState = "saving"; showSaveState();
+    try {
+      await saveCurrent();
+      retryMs = 0;
+      saveState = "saved";
+    } catch (e) {
+      saveState = "failed";
+      if (e instanceof ServerError && e.status === 401) dropSession();
+      else { retryMs = Math.min(retryMs ? retryMs * 2 : 5000, 60000); autoTimer = setTimeout(() => void autosave(), retryMs); }
+    } finally {
+      saving--;
+      if (!saving && saveState === "saving") saveState = "idle";
+      showSaveState();
+      if (!autoTimer && dirty()) noteChange(); // edited while we were saving
+    }
   }
+
+  /** Called often (by main.ts, a few times a second after anything is drawn): schedule a save when the page differs from the last saved version. */
+  function noteChange(): void {
+    if (!session || session.role === "station") { showSaveState(); return; }
+    if (!dirty()) { if (saveState === "saved") showSaveState(); return; }
+    if (autoTimer) clearTimeout(autoTimer);
+    if (saveState !== "failed") { saveState = "idle"; showSaveState(); }
+    autoTimer = setTimeout(() => void autosave(), AUTOSAVE_MS);
+  }
+
+  /** Save the file showing now without waiting, e.g. before switching tabs or signing out. */
+  const flushNow = (): Promise<void> => autosave();
 
   async function send(): Promise<void> {
     const why = ctx.blocker();
@@ -226,18 +290,18 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       ? ` You already have ${waiting.length === 1 ? "a file" : `${waiting.length} files`} waiting${waiting.some((j) => j.ticket != null) ? ` (ticket ${waiting.map((j) => j.ticket).filter((t) => t != null).join(", ")})` : ""}: sending this replaces ${waiting.length === 1 ? "it" : "them"}, and you go to the back of the queue.`
       : "";
     const v = await openDialog("Send for cutting", [
-      { key: "place", label: "Place it", type: "select", value: origin.mode === "absolute" ? "bed" : "head", options: [{ value: "head", label: "Where the laser head is at the station" }, { value: "bed", label: "Exactly where it is on this bed" }],
+      { key: "place", label: "Place it", type: "select", value: cur.origin.mode === "absolute" ? "bed" : "head", options: [{ value: "head", label: "Where the laser head is at the station" }, { value: "bed", label: "Exactly where it is on this bed" }],
         hint: "At the station you line your material up with the laser head, so 'where the laser head is' is usually what you want." },
-      { key: "anchor", label: "Laser head goes at its", type: "select", value: origin.mode === "current-position" ? origin.anchor : "bottom-left", options: ANCHORS.map((a) => ({ value: a.value, label: a.label })) },
+      { key: "anchor", label: "Laser head goes at its", type: "select", value: cur.origin.mode === "current-position" ? cur.origin.anchor : "bottom-left", options: ANCHORS.map((a) => ({ value: a.value, label: a.label })) },
     ], { ok: "Send", intro: `You are ${session!.id}. Your design is saved, then cleaned and checked on the server. A teacher sees it in the queue, approves it and chooses which laser cuts it.${replaceNote}` });
     if (!v) return;
-    origin = v.place === "bed" ? { mode: "absolute" } : { mode: "current-position", anchor: v.anchor as Anchor };
+    cur.origin = v.place === "bed" ? { mode: "absolute" } : { mode: "current-position", anchor: v.anchor as Anchor };
     const button = $("srv-send") as HTMLButtonElement;
     button.disabled = true;
     try {
       const id = await saveCurrent();
       const r = await submitJob(session!, id);
-      jobId = null; // it is now in the queue: further changes are a new file
+      cur.jobId = null; // it is now in the queue: further changes are a new file
       render();
       const est = r.estimate;
       const facts = [`File number ${r.id}`, STATUS_TEXT[r.status] ?? r.status];
@@ -249,7 +313,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       if (est?.percentUsed !== undefined) facts.push(`Uses ${est.percentUsed}% of the sheet${est.costSar != null ? `, about ${est.costSar} SAR` : ""}`);
       await infoDialog("Sent", [...facts, ...(r.warnings ?? []).map((w) => `Note: ${w}`)]);
     } catch (e) {
-      if (jobId) await infoDialog("Not sent", [...explain(e), "Your design is still saved as a draft in My files."]); // it did reach the server as a draft
+      if (cur.jobId) await infoDialog("Not sent", [...explain(e), "Your design is still saved as a draft in My files."]); // it did reach the server as a draft
       else await infoDialog("Not sent", keepLocally(e));
     } finally {
       button.disabled = false;
@@ -260,10 +324,10 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     if (ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) { ctx.notify(`${j.id} is already open: switched to its tab.`); close(); return; } // never two versions of one file
     ctx.tabs.openBlank();
     ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
-    origin = j.origin ?? DEFAULT_ORIGIN;
-    jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
-    sourceId = j.status === "draft" ? null : j.id;
-    openedLocal = null;
+    cur.origin = j.origin ?? DEFAULT_ORIGIN;
+    cur.jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
+    cur.sourceId = j.status === "draft" ? null : j.id;
+    cur.openedLocal = null;
     activity = null;
     if (j.activityId && session?.role === "pupil") {
       activity = { id: j.activityId, title: "…" };
@@ -313,12 +377,12 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
             if (ctx.tabs.show({ localId: d.id })) { ctx.notify("That copy is already open: switched to its tab."); dlg.close(); return; }
             ctx.tabs.openBlank();
             ctx.load(fromJobObjects(d.job.objects), d.job.preset.id, (d.job.dimensions ?? []).map(fromJobDimension));
-            jobId = null; sourceId = null; origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; openedLocal = d.id;
+            cur.jobId = null; cur.sourceId = null; cur.origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; cur.openedLocal = d.id;
             markSaved(); render(); ctx.notify("Opened the copy kept on this computer. Save to put it on the server."); dlg.close();
           });
           lbtn("Save to the server", async () => {
             const r = await sendJob(session!, { ...d.job, status: "draft" });
-            removeLocal(d.id); if (openedLocal === d.id) openedLocal = null;
+            removeLocal(d.id); if (cur.openedLocal === d.id) cur.openedLocal = null;
             local = listLocal(session!.id);
             ctx.notify(`Saved as ${r.id}`);
             jobs = await listJobs(session!).catch(() => jobs);
@@ -351,8 +415,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
           row.append(b);
         };
         btn(j.status === "draft" ? "Open" : "Open a copy", () => open(j, () => dlg.close()));
-        if (j.status === "draft") btn("Send for cutting", async () => { const r = await submitJob(session!, j.id); j.status = r.status; j.warnings = r.warnings; if (jobId === j.id) jobId = null; render(); draw(); });
-        if (["draft", "submitted", "approved"].includes(j.status)) btn("Cancel", async () => { const r = await cancelJob(session!, j.id); j.status = r.status; if (jobId === j.id) jobId = null; render(); draw(); });
+        if (j.status === "draft") btn("Send for cutting", async () => { const r = await submitJob(session!, j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
+        if (["draft", "submitted", "approved"].includes(j.status)) btn("Cancel", async () => { const r = await cancelJob(session!, j.id); j.status = r.status; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
         body.append(row);
       }
     };
@@ -362,9 +426,11 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     dlg.showModal();
   }
 
-  function signOut(): void {
+  async function signOut(): Promise<void> {
     if (session?.role === "station") { closeStation(); dropSession(); offline = false; render(); return; }
-    if (!confirmDiscard("Sign out")) return;
+    await flushNow(); // whatever is new goes to the server first
+    if ((dirty() || ctx.tabs.othersDirty()) && !confirm("Some changes could not be saved to the server. They are kept on this computer and will be here when you sign in again as the same person. Sign out anyway?")) return;
+    ctx.tabs.persist(); // the open tabs stay on this computer for the next time this pupil signs in
     dropSession();
     ctx.clear();
     markSaved();
@@ -381,9 +447,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   $("gate-url").addEventListener("change", () => void refreshAuthConfig());
   try { ($("gate-class") as HTMLInputElement).value = localStorage.getItem("kerf.classCode") ?? ""; } catch { /* fine */ }
   ($("gate-url") as HTMLInputElement).value = defaultBase;
-  $("gate-offline").addEventListener("click", () => { offline = true; render(); });
+  $("gate-offline").addEventListener("click", () => { offline = true; render(); ctx.tabs.restore("offline"); });
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
-  $("srv-save").addEventListener("click", () => (session ? void save() : (offline = false, render())));
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
   $("srv-activities").addEventListener("click", () => {
     if (session?.role !== "pupil") return;
@@ -397,15 +462,15 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
           if (!ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) {
             ctx.tabs.openBlank();
             ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
-            origin = j.origin ?? DEFAULT_ORIGIN;
-            jobId = j.status === "draft" ? j.id : null;
-            sourceId = j.status === "draft" ? null : j.id;
-            openedLocal = null;
+            cur.origin = j.origin ?? DEFAULT_ORIGIN;
+            cur.jobId = j.status === "draft" ? j.id : null;
+            cur.sourceId = j.status === "draft" ? null : j.id;
+            cur.openedLocal = null;
             markSaved();
           }
         } else if (!ctx.objects().length) {
           ctx.load([], a.presetId ?? null, []);
-          jobId = null;
+          cur.jobId = null;
           markSaved();
         }
         render();
@@ -440,14 +505,20 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   void dinoStart();
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
-    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); if (session?.role === "pupil") void files(true); }).catch((e) => {
-      if (e instanceof ServerError && e.status === 401) dropSession();
+    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); const restored = !!session && session.role !== "station" && ctx.tabs.restore(session.id); if (session?.role === "pupil" && !restored) void files(true); }).catch((e) => {
+      if (e instanceof ServerError && e.status === 401) { dropSession(); return; }
+      // the server cannot be reached right now: the tabs kept on this computer still come back, and saving carries on trying
+      if (session && session.role !== "station") { ctx.tabs.restore(session.id); ctx.notify("The server cannot be reached. Your work is kept on this computer and will be saved when it is back."); }
     });
   }
   return {
     session: () => session,
-    getFile: () => ({ jobId, origin, savedKey, openedLocal, sourceId }),
-    setFile: (m) => { jobId = m.jobId; origin = m.origin; savedKey = m.savedKey; openedLocal = m.openedLocal; sourceId = m.sourceId; render(); },
+    owner: () => session?.id ?? "offline",
+    getFile: () => cur,
+    setFile: (m) => { cur = m; saveState = "idle"; render(); showSaveState(); },
     isDirty: dirty,
+    noteChange,
+    flushNow,
+    setLocalOk: (ok) => { if (ok !== localOk) { localOk = ok; showSaveState(); } },
   };
 }

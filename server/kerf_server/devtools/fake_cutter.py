@@ -41,7 +41,7 @@ async def run(args: argparse.Namespace) -> None:
                 await asyncio.sleep(1)
 
         def fetch_gcode(path: str) -> str:
-            req = urllib.request.Request(base + path, headers={"Authorization": f"Bearer {args.token}"})
+            req = urllib.request.Request(base + path, headers={"Authorization": f"Bearer {args.token}", "User-Agent": "kerf-practice-cutter"})  # Cloudflare answers 403 to the default Python-urllib agent
             return urllib.request.urlopen(req).read().decode()
 
         async def cut(msg: dict) -> None:

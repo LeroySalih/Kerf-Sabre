@@ -255,3 +255,13 @@ describe("files closed in the browser", () => {
     expect(readClosed("P001", store)).toEqual([]);
   });
 });
+
+import { designName } from "../src/workspace";
+describe("tab names", () => {
+  it("are short and readable, never the long job id", () => {
+    expect(designName(new Date(2026, 9, 16, 14, 2))).toBe("Design 16 Oct 14:02");
+    expect(designName(new Date(2026, 0, 3, 9, 5), true)).toBe("Copy of design 3 Jan 09:05");
+    expect(designName("not a date")).toBe("Design");
+    expect(designName(new Date(2026, 9, 16, 14, 2).toISOString())).toBe("Design 16 Oct 14:02");
+  });
+});

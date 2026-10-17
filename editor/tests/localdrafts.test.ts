@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addLocal, listLocal, removeLocal } from "../src/localdrafts";
 import type { JobDoc } from "../src/job";
 
-const job = (pupil = "P001", n = 1): JobDoc => ({ schemaVersion: "0.2.23", id: "draft", pupilId: pupil, createdAt: "2026-10-15T09:00:00Z", status: "draft", preset: { id: "ply-3mm", version: 1 }, station: null, origin: { mode: "absolute" },
+const job = (pupil = "P001", n = 1): JobDoc => ({ schemaVersion: "0.2.24", id: "draft", pupilId: pupil, createdAt: "2026-10-15T09:00:00Z", status: "draft", preset: { id: "ply-3mm", version: 1 }, station: null, origin: { mode: "absolute" },
   objects: Array.from({ length: n }, (_, i) => ({ id: `o${i}`, layer: "cut" as const, closed: true, start: [0, 0] as [number, number], segments: [{ type: "line" as const, to: [10, 0] as [number, number] }], matrix: [1, 0, 0, 1, 0, 0] as [number, number, number, number, number, number] })) });
 
 class Mem {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.23
+  version: 0.2.24
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -737,6 +737,23 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/take:
+    post:
+      summary: Teacher, admin or technician. Make this laser (body station) the one that cuts a waiting file that was meant for another laser. Keeps its place in the queue.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [station]
+              properties:
+                station: {type: string}
+      responses:
+        "200": {description: OK}
+        "409": {description: not_approved}
   /jobs/{jobId}/assign:
     post:
       summary: Station mode selects a job; resolves per-laser preset overrides and tells the Cutter to start.

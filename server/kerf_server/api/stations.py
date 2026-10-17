@@ -102,6 +102,18 @@ def place_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = De
     return {"bounds": run.place(s, cfg, who, sj.get_visible(s, job_id, who), station, body.get("matrix"), body.get("skipQueue") is True)}
 
 
+@router.post("/jobs/{job_id}/take")
+def take_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
+    """Take over a waiting file that was meant for another laser: it becomes this laser's (same place in the queue)."""
+    station = body.get("station")
+    if not isinstance(station, str):
+        raise ApiError(422, "invalid", "Say which station takes the file.")
+    known(s, who, station)
+    j = run.take_over(s, who, sj.get_visible(s, job_id, who), station)
+    s.flush()
+    return {"id": j.id, "station": j.station}
+
+
 @router.post("/jobs/{job_id}/assign")
 async def assign_job(job_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher")), cfg: Settings = Depends(get_settings)):
     station = body.get("station")

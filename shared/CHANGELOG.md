@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.24 - another laser takes over a file (additive)
+- `openapi.yaml`: `POST /jobs/{jobId}/take` (teacher, admin, technician; body `{station}`): a waiting (`approved`) file that was assigned to, or being framed on, another laser becomes this laser's. It keeps its place in the queue; a frame made on the other laser is forgotten, so it must be framed again here. `409 not_approved` for a file that is not waiting. Event `taken_over` records from/to.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.24`.
+
 ## 0.2.23 - disconnect a Cutter from the Station page (additive)
 - `openapi.yaml`: `POST /stations/{stationId}/disconnect` (teacher, admin, technician): closes the Cutter's WebSocket with code **4001**; the Cutter stays disconnected until someone starts it again. `409 station_offline` when none is connected, `409 station_busy` while it is cutting or not idle.
 - WebSocket close codes the Cutter must **not** reconnect after: `4000` (another Cutter connected as this laser and replaced it), `4001` (disconnected by staff), `4401` (token refused), `4403` (new: a Cutter that says it is a different laser than its token's; each station token is for one laser). Any other drop still reconnects.

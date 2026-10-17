@@ -317,3 +317,29 @@ class TestDisconnect:
     def test_a_pupil_or_a_station_token_cannot(self, client, tokens):
         assert client.post(f"{API}/stations/station-1/disconnect", headers=auth(tokens["pupil"])).status_code == 403
         assert client.post(f"{API}/stations/station-1/disconnect", headers=auth(tokens["station"])).status_code == 403
+
+
+class TestTakeOver:
+    def pinned(self, client, tokens):
+        jid = post(client, tokens, status="submitted").json()["id"]
+        assert client.post(f"{API}/jobs/{jid}/approve", json={"station": "station-2"}, headers=auth(tokens["teacher"])).status_code == 200
+        return jid
+
+    def test_a_laser_cannot_start_a_file_meant_for_another_until_it_is_taken_over(self, client, tokens):
+        jid = self.pinned(client, tokens)
+        sh = auth(tokens["station"])
+        with FakeCutter(client, tokens["station"]) as c:
+            c.status()
+            wait_for(lambda: st(client, tokens)["online"] or None)
+            r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1", "skipQueue": True}, headers=sh)
+            assert r.status_code == 409 and r.json()["code"] == "wrong_station"
+            t = client.post(f"{API}/jobs/{jid}/take", json={"station": "station-1"}, headers=auth(tokens["teacher"]))
+            assert t.status_code == 200 and t.json()["station"] == "station-1"
+            assert client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=sh).status_code == 202
+
+    def test_only_staff_may_take_over_and_only_a_waiting_file(self, client, tokens):
+        jid = self.pinned(client, tokens)
+        assert client.post(f"{API}/jobs/{jid}/take", json={"station": "station-1"}, headers=auth(tokens["pupil"])).status_code == 403
+        assert client.post(f"{API}/jobs/{jid}/take", json={"station": "station-9"}, headers=auth(tokens["teacher"])).status_code == 404
+        client.post(f"{API}/jobs/{jid}/cancel", headers=auth(tokens["pupil"]))
+        assert client.post(f"{API}/jobs/{jid}/take", json={"station": "station-1"}, headers=auth(tokens["teacher"])).status_code == 409

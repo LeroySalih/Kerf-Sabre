@@ -7,7 +7,7 @@ import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
 import { findPreset, presetLabel } from "./presets";
 import {
-  STATUS_TEXT, ServerError, disconnectStation, pupilLabel, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, disconnectStation, pupilLabel, takeJob, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -103,8 +103,10 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     render();
   }
 
-  /** Can this file be put on this laser? (Waiting, not meant for another laser, not being set up on another.) */
-  const takeable = (e: QueueEntry): boolean => e.status === "approved" && !!e.jobId && (!e.station || e.station === stationId) && (!e.framedOn || e.framedOn === stationId);
+  /** Can this file be looked at here? (Any waiting file; one meant for another laser can be taken over.) */
+  const takeable = (e: QueueEntry): boolean => e.status === "approved" && !!e.jobId;
+  /** Meant for, or being set up on, another laser: it has to be taken over before this laser can frame or cut it. */
+  const foreign = (e: QueueEntry): boolean => (!!e.station && e.station !== stationId) || (!!e.framedOn && e.framedOn !== stationId);
   const headEntry = (): QueueEntry | undefined => data.queue.find((e) => e.next && e.status === "approved");
   /** The file on show: the one clicked, else the one that is next. */
   const focusEntry = (): QueueEntry | undefined => {
@@ -217,12 +219,21 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     const out: Node[] = [];
     if (lastJob) out.push(h("p", { class: lastJob.ok ? "st-ok" : "st-error", role: "status" }, `${lastJob.id}: ${lastJob.text}`, button("OK", () => { lastJob = null; render(); })));
     const step = stepState(next, st, stationId, confirmed);
-    if (!next?.jobId) { out.push(h("h2", {}, "Nothing waiting"), h("p", {}, step.say)); return out; }
+    if (!next?.jobId) { out.push(h("h2", {}, "Nothing waiting"), h("p", {}, step.say), ...(data.queue.some(takeable) ? [h("p", { class: "hint" }, "Files meant for another laser are in the queue. Click one to look at it or take it over.")] : [])); return out; }
     const job = jobCache.get(next.jobId);
     const preset = findPreset(next.presetId ?? job?.preset.id);
     const material = preset ? `${presetLabel(preset)}` : next.presetId ?? "the chosen material";
     const size = job ? sizeOf(job.objects) : null;
     const jumping = next.jobId !== headEntry()?.jobId;
+    if (foreign(next)) {
+      const from = next.station && next.station !== stationId ? next.station : next.framedOn;
+      out.push(h("h2", {}, `Ticket ${next.ticket}${next.pupilId ? ` · ${pupilLabel(next.pupilId, next.pupilName)}` : ""}`),
+        h("p", { class: "st-note" }, `This file is for ${from}. If ${stationId} should cut it instead, take it over: it keeps its place in the queue and ${from} will no longer offer it.`),
+        h("div", { class: "st-actions" },
+          button(`Take over for ${stationId}`, () => void guard(async () => { await takeJob(session, next.jobId!, stationId); picked = next.jobId!; say(`${stationId} now has ticket ${next.ticket}.`); }), busy ? "disabled" : "on"),
+          button("Reject with a note…", () => void rejectWithNote(next), "danger")));
+      return out;
+    }
     out.push(h("h2", {}, `${jumping ? "Selected" : "Next"}: ticket ${next.ticket}${next.pupilId ? ` · ${pupilLabel(next.pupilId, next.pupilName)}` : ""}`));
     if (jumping) out.push(h("p", { class: "st-note" }, `This is not the next file in the queue${headEntry() ? ` (ticket ${headEntry()!.ticket} is)` : ""}. Cutting it now takes it ahead of the others.`, button("Back to the next file", () => { picked = null; confirmed = false; void refresh(); }, "link")));
     const info = h("div", { class: "st-info" });

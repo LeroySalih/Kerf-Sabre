@@ -65,6 +65,22 @@ def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, ski
     return b
 
 
+def take_over(s: Session, who, j: Job, station_id: str) -> Job:
+    """A technician (or teacher) makes this laser the one that cuts a waiting file that was meant for another laser (or was being set up on one).
+    The file keeps its place in the queue; its frame on the other laser is forgotten, so it must be framed here."""
+    if sp.get_machine(s, j.school_id, station_id) is None:
+        raise ApiError(404, "not_found", f"There is no laser '{station_id}'.")
+    if j.status != "approved":
+        raise ApiError(409, "not_approved", f"This job is {j.status}; only a waiting file can be taken over.")
+    was = j.station
+    if j.station != station_id or (j.framed_station and j.framed_station != station_id):
+        if j.framed_station != station_id:
+            j.framed_station = j.framed_at = j.framed_bounds = None
+        j.station = station_id
+        sj.event(s, j.id, who.id, "taken_over", {"from": was, "to": station_id})
+    return j
+
+
 def place(s: Session, cfg: Settings, who, j: Job, station_id: str, matrix: Any, skip_queue: bool = False) -> dict[str, Any]:
     """The pupil lined the design up on the camera picture: move it (a rigid transform, no stretching) and fix it to exact bed
     positions. The job becomes absolute and must still fit the bed. Only the job whose turn it is can be placed."""

@@ -22,7 +22,9 @@ PYTHON_VERSION, PY_TAG = "3.11.9", "311"
 EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 BASE = ["pyserial==3.5", "websockets==15.0.1"]
 CAMERA = ["numpy==1.26.4", "opencv-python-headless==4.9.0.80"]
-PTH = f"python{PY_TAG}.zip\n.\nLib\\site-packages\nimport site\n"
+# Paths in a ._pth file are relative to the file, i.e. to the python\ folder. ".." is the kerf-cutter folder, where the kerf_cutter package lives:
+# without it `python -m kerf_cutter` is "No module named kerf_cutter" (a ._pth install adds neither the current folder nor the script folder for -m).
+PTH = f"python{PY_TAG}.zip\n.\n..\nLib\\site-packages\nimport site\n"
 
 
 def version() -> str:

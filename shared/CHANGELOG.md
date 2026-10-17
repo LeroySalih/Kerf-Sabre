@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.23 - disconnect a Cutter from the Station page (additive)
+- `openapi.yaml`: `POST /stations/{stationId}/disconnect` (teacher, admin, technician): closes the Cutter's WebSocket with code **4001**; the Cutter stays disconnected until someone starts it again. `409 station_offline` when none is connected, `409 station_busy` while it is cutting or not idle.
+- WebSocket close codes the Cutter must **not** reconnect after: `4000` (another Cutter connected as this laser and replaced it), `4001` (disconnected by staff), `4401` (token refused), `4403` (new: a Cutter that says it is a different laser than its token's; each station token is for one laser). Any other drop still reconnects.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.23`.
+
 ## 0.2.22 - Cutter kinds named by laser (rename)
 - `openapi.yaml`: the Cutter download `kind` value `real` is now **`creality-falcon`** (the Creality Falcon Cutter, which drives Falcon lasers over GRBL). `practice` is unchanged. `GET /cutter/kinds` is keyed by the new value, `POST /cutter/package` takes and returns it, and the download is `kerf-cutter-creality-falcon.zip` (the build still makes `cutter/build/kerf-cutter.zip`). A later Cutter for another laser type (the GCC Mercury III) gets its own value.
 - **Migration:** only the Admin site used `kind`; it moves to the new value in the same change. Any other caller sending `kind: "real"` now gets `422 invalid`.

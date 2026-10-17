@@ -124,6 +124,25 @@ async def control(station_id: str, request: Request, body: dict[str, Any] = Body
     return {"sent": cmd}
 
 
+@router.post("/stations/{station_id}/disconnect", status_code=204)
+async def disconnect(station_id: str, request: Request, who: Principal = Depends(require("teacher", "technician"))):
+    """Disconnect the Cutter from the Server (close code 4001). The Cutter stays disconnected until someone starts it again. Not while it is cutting."""
+    own_station(request, who, station_id)
+    hub = request.app.state.hub
+    live = hub.get(station_id)
+    if live.ws is None:
+        raise ApiError(409, "station_offline", f"No Cutter is connected to {station_id}.")
+    if live.current_job or (live.state or "Idle") not in ("Idle", "Alarm", "Door"):
+        raise ApiError(409, "station_busy", f"{station_id} is busy ({live.current_job or live.state}). Stop the job first.")
+    hub.server_log(station_id, "WARNING", f"Cutter disconnected from the Server by {who.id}")
+    ws, live.ws, live.state = live.ws, None, None  # offline from now on, without waiting for the socket's own close to come back
+    try:
+        await ws.close(code=4001)
+    except Exception:  # already gone
+        pass
+    return Response(status_code=204)
+
+
 @router.get("/stations/{station_id}/camera")
 def camera(station_id: str, request: Request, who: Principal = Depends(require("station", "teacher"))):
     own_station(request, who, station_id)

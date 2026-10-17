@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.22
+  version: 0.2.23
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -974,6 +974,14 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /stations/{stationId}/disconnect:
+    post:
+      summary: Teacher, admin or technician. Disconnect the Cutter (WebSocket close code 4001); it stays off until started again. 409 while it is cutting.
+      parameters:
+        - {name: stationId, in: path, required: true, schema: {type: string}}
+      responses:
+        "204": {description: Disconnected}
+        "409": {description: station_offline or station_busy}
   /stations/{stationId}/camera:
     get:
       summary: Latest camera frame for monitoring (never stored or recorded)

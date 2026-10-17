@@ -7,7 +7,7 @@
   "required": ["schemaVersion", "id", "name", "placeholder", "bed", "grbl", "airAssist", "camera"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": {"const": "0.2.22"},
+    "schemaVersion": {"const": "0.2.23"},
     "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
     "name": {"type": "string", "minLength": 1},
     "model": {"type": ["string", "null"], "description": "Falcon model, null until confirmed"},

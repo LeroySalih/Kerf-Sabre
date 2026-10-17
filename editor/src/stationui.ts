@@ -7,7 +7,7 @@ import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
 import { findPreset, presetLabel } from "./presets";
 import {
-  STATUS_TEXT, ServerError, pupilLabel, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, disconnectStation, pupilLabel, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -128,6 +128,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       h("span", { class: `st-dot ${st?.online ? "on" : "off"}` }, st?.online ? `Connected · ${st.state ?? "…"}` : "Cutter not connected"),
       h("span", { class: "spacer" }),
       ...(st?.cameraAvailable ? [button(st.calibrated ? "Recalibrate camera" : "Calibrate camera", () => void calibrate(), st.calibrated ? "" : "on")] : []),
+      ...(st?.online && session.role !== "station" && !st.currentJobId ? [button("Disconnect Cutter", () => { if (confirm(`Disconnect the Cutter from ${stationId}? It stays disconnected until someone starts it again on its PC.`)) void guard(() => disconnectStation(session, stationId)); })] : []),
       ...(opts.onOtherStation ? [button("Other stations", () => opts.onOtherStation!())] : []),
       ...(session.role === "admin" || session.role === "teacher" ? [h("a", { class: "btnlink", href: "/" }, "Editor")] : []),
       ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []),

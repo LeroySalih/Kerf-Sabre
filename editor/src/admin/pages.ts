@@ -7,7 +7,7 @@ import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
-  addStaff, classActivities, classPupils, controlStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
+  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
   listJobsByStatus, pupilLabel, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
@@ -242,6 +242,7 @@ const stations: Page = {
           ...(st.currentJobId ? [el("p", {}, `Cutting ${st.currentJobId}${pct !== null ? ` · ${pct}%` : ""}`)] : []),
           el("p", {}, el("span", { class: `ad-tag ${st.calibrated ? "ok" : "warn"}` }, st.calibrated ? "camera calibrated" : "camera not calibrated")),
           el("div", { class: "row" },
+            ...(st.online && !st.currentJobId ? [btn("Disconnect Cutter", () => { if (confirm(`Disconnect the Cutter from ${st.id}? It stays disconnected until someone starts it again on its PC.`)) void attempt(() => disconnectStation(s, st.id), redraw); })] : []),
             ...(st.online ? [btn("Pause", () => send("pause")), btn("Resume", () => send("resume")), btn("Stop", () => { if (confirm(`Stop ${st.id}?`)) send("stop"); }, "danger")] : [])),
           el("div", { class: "row" },
             btn("Edit", () => void (async () => {

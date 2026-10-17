@@ -302,3 +302,18 @@ class TestATokenIsForOneLaser:
             with pytest.raises(WebSocketDisconnect) as e:
                 ws.receive_json()
             assert e.value.code == 4403
+
+
+class TestDisconnect:
+    def test_a_technician_disconnects_an_idle_cutter(self, client, tokens):
+        h = auth(tokens["teacher"])
+        with FakeCutter(client, tokens["station"]) as c:
+            c.status()
+            wait_for(lambda: st(client, tokens)["online"] or None)
+            assert client.post(f"{API}/stations/station-1/disconnect", headers=h).status_code == 204
+            wait_for(lambda: None if st(client, tokens)["online"] else True)
+        assert client.post(f"{API}/stations/station-1/disconnect", headers=h).status_code == 409
+
+    def test_a_pupil_or_a_station_token_cannot(self, client, tokens):
+        assert client.post(f"{API}/stations/station-1/disconnect", headers=auth(tokens["pupil"])).status_code == 403
+        assert client.post(f"{API}/stations/station-1/disconnect", headers=auth(tokens["station"])).status_code == 403

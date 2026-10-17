@@ -22,6 +22,10 @@ def default_connect(url: str, token: str):
         return websockets.connect(url, extra_headers=headers, max_size=2**22, ping_interval=20, ping_timeout=20)
 
 
+#: Close codes after which the Cutter must not reconnect by itself.
+STAY_AWAY_CODES = {4000: "another Cutter connected as this laser and replaced this one", 4001: "disconnected from the Server page", 4401: "the token was refused", 4403: "this token is for a different laser"}
+
+
 class ServerLink:
     def __init__(self, cfg: Config, log: CutterLog, on_message: Callable[[dict[str, Any]], Awaitable[None]], on_connected: Callable[[], Awaitable[None]],
                  on_disconnected: Callable[[], None] | None = None, connect=default_connect, sleep=asyncio.sleep):
@@ -70,6 +74,10 @@ class ServerLink:
                 raise
             except Exception as exc:  # noqa: BLE001 - refused, dropped, DNS, proxy: all the same to us: wait and try again
                 self.log.warning("ws_error", error=f"{type(exc).__name__}: {exc}")
+                code = getattr(getattr(exc, "rcvd", None), "code", None)
+                if code in STAY_AWAY_CODES:  # the Server asked us to stop (or another Cutter took this laser): reconnecting would only fight
+                    self.log.warning("ws_stay_away", code=code, why=STAY_AWAY_CODES[code])
+                    self._stop = True
             finally:
                 was = self.ws is not None
                 self.ws = None

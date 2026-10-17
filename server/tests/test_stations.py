@@ -270,3 +270,13 @@ class TestProgress:
             assert p == {"jobId": jid, "line": 40, "totalLines": 100, "estimatedS": 60.0, "actualS": 24.0}
             c.send({"type": "result", "station": "station-1", "jobId": jid, "outcome": "done"})
             wait_for(lambda: st(client, tokens)["progress"] is None)
+
+
+class TestFrameSaysWhereTheHeadIs:
+    def test_a_design_that_runs_off_the_bed_names_the_head_position(self, client, tokens):
+        jid = approved_job(client, tokens, origin={"mode": "current-position", "anchor": "bottom-left"})
+        with FakeCutter(client, tokens["station"]) as c:
+            c.status(mpos=(390.0, 405.0, 0.0))
+            wait_for(lambda: st(client, tokens)["mpos"] == [390.0, 405.0, 0.0])
+            r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=auth(tokens["station"]))
+            assert r.status_code == 422 and "does not fit" in r.json()["message"] and "X 390, Y 405" in r.json()["message"]

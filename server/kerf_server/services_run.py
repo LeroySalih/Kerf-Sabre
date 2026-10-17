@@ -58,7 +58,12 @@ def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, ski
     head = head_of(live)
     if j.origin["mode"] == "current-position" and head is None:
         raise ApiError(409, "position_unknown", "The laser has not reported where its head is yet. Wait a moment and try again.")
-    r = sj.make_gcode(s, j, machine, head)  # raises 422 if it does not fit this bed
+    try:
+        r = sj.make_gcode(s, j, machine, head)  # raises 422 if it does not fit this bed
+    except ApiError as exc:
+        if head is not None and j.origin["mode"] == "current-position" and exc.status == 422:  # say where the design was being placed from
+            raise ApiError(exc.status, exc.code, f"{exc.message} It is placed from where the laser head is: X {head[0]:.0f}, Y {head[1]:.0f} mm on the bed. Move the head nearer the bed's origin corner and Frame again.", exc.details) from exc
+        raise
     b = bounds_doc(r.bounds)
     j.framed_station, j.framed_at, j.framed_bounds = station_id, utcnow(), b
     sj.event(s, j.id, who.id, "framed", {"station": station_id, "bounds": b})

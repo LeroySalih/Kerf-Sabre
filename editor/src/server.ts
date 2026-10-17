@@ -158,7 +158,7 @@ export const deleteMachine = (s: Session, id: string, f?: Fetch) => request<null
 
 /**
  * The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server.
- * The real Cutter is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
+ * The Creality Falcon Cutter (kind "real") is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
  */
 export function cutterCommand(url: string, token: string, station: string, kind: CutterKind = "real", shell: "windows" | "unix" = "windows"): string {
   const q = (v: string) => (/^[A-Za-z0-9_.:/@-]+$/.test(v) ? v : `"${v.replace(/(["\\$`])/g, "\\$1")}"`);

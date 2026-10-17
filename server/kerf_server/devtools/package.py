@@ -14,8 +14,8 @@ REAL_NAME = "kerf-cutter.zip"
 README = """BISAK Kerf Cutter: PRACTICE version
 ===================================
 
-This is NOT the real Cutter. It behaves like a laser for testing (it connects to the Kerf Server, reports a camera
-picture and "cuts" jobs) but it never touches a laser or a serial port. The real Cutter is not finished yet.
+This is NOT the Creality Falcon Cutter. It behaves like a laser for testing (it connects to the Kerf Server, reports a camera
+picture and "cuts" jobs) but it never touches a laser or a serial port. The Creality Falcon Cutter is the one that runs a real laser.
 
 What you need: Python 3.11 or newer, then once:   python -m pip install websockets
 
@@ -62,7 +62,7 @@ def real_zip(settings) -> Path | None:
 
 
 def available(settings) -> dict[str, str | None]:
-    """Which kinds can be offered: kind -> file name, or None when it cannot (the real Cutter has not been built here)."""
+    """Which kinds can be offered: kind -> file name, or None when it cannot (the Creality Falcon Cutter has not been built here)."""
     return {"practice": PRACTICE_NAME, "real": REAL_NAME if real_zip(settings) is not None else None}
 
 

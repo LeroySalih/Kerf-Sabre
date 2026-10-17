@@ -190,7 +190,7 @@ async function cutterSoftware(s: Session, station: string): Promise<void> {
   const { dlg, show } = modal("kdialog");
   const kind = el("select", { "aria-label": "Which Cutter" },
     new Option("Practice Cutter: behaves like a laser, cuts nothing", "practice"),
-    new Option(kinds.real.available ? "Real Cutter: runs a laser from a Windows PC" : "Real Cutter (not built on this server yet)", "real")) as HTMLSelectElement;
+    new Option(kinds.real.available ? "Creality Falcon Cutter: runs a Creality Falcon laser from a Windows PC" : "Creality Falcon Cutter (not built on this server yet)", "real")) as HTMLSelectElement;
   (kind.options[1] as HTMLOptionElement).disabled = !kinds.real.available;
   const url = el("input", { type: "text", value: s.baseUrl || location.origin, "aria-label": "Server address", style: "min-width:22em" }) as HTMLInputElement;
   const out = el("div");
@@ -201,7 +201,7 @@ async function cutterSoftware(s: Session, station: string): Promise<void> {
       const base = (url.value.trim() || location.origin).replace(/\/+$/, "");
       const real = p.kind === "real";
       out.replaceChildren(
-        el("h3", {}, `1. Download (${real ? "real" : "practice"} Cutter for ${p.station})`),
+        el("h3", {}, `1. Download (${real ? "Creality Falcon" : "practice"} Cutter for ${p.station})`),
         el("p", {}, el("a", { class: "btnlink", href: `${base}${p.downloadPath}`, download: p.fileName }, `Download ${p.fileName}`), el("span", { class: "hint" }, `  Works for an hour (until ${new Date(p.expiresAt).toLocaleTimeString()}). The file holds no token.`)),
         el("h3", {}, "2. On the PC"),
         ...bullets(real

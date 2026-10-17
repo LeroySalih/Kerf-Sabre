@@ -5,7 +5,7 @@ Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal scho
 ## Components
 - **BISAK Kerf Editor** (`editor/`): TypeScript PWA. Design mode (pupils) and Station mode (laser PCs).
 - **BISAK Kerf Server** (`server/`): Python. DXF clean-up, G-code, presets, queue, log collection.
-- **BISAK Kerf Cutter** (`cutter/`): Python station agent. GRBL serial, camera, logs. Outbound connection only.
+- **BISAK Kerf Cutter** (`cutter/`): Python station agent. GRBL serial, camera, logs. Outbound connection only. This is the **Creality Falcon Cutter** (what the Admin site calls it; the API kind is still `real`). The GCC Mercury III (station 5) is not GRBL and will be a separate Cutter.
 - `shared/`: versioned JSON schemas and API contract. `spike/`: throwaway connectivity spike. `fixtures/dxf/`: real Onshape DXFs.
 
 ## Running it

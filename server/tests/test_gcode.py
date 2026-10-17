@@ -248,3 +248,26 @@ def test_ignore_layer_is_left_out_of_the_gcode_the_size_and_the_fit_check():
 def test_a_job_of_only_ignored_shapes_is_refused():
     with pytest.raises(GcodeError, match="nothing to cut"):
         generate(job([rect_obj("g", 0, 0, 10, 10, layer="ignore")]), preset(), MACHINE)
+
+
+def test_a_head_off_the_bed_is_named_not_blamed_on_the_design():
+    j = job([star_obj(70, 185, 60, 25)], {"mode": "current-position", "anchor": "bottom-left"})
+    with pytest.raises(GcodeError) as e:
+        generate(j, preset(), MACHINE, head=(-3.0, 4.0))
+    assert "X -3.0, Y 4.0" in str(e.value) and "outside the bed" in str(e.value) and "Home the laser" in str(e.value)
+
+
+def test_a_small_design_too_close_to_the_far_edge_says_which_edge():
+    j = job([rect_obj("a", 0, 0, 120, 100)], {"mode": "current-position", "anchor": "bottom-left"})
+    bw, bh = MACHINE["bed"]["widthMm"], MACHINE["bed"]["heightMm"]
+    with pytest.raises(GcodeError) as e:
+        generate(j, preset(), MACHINE, head=(bw - 50, bh - 10))
+    msg = str(e.value)
+    assert "120 x 100 mm" in msg and "right and top edge" in msg and "left and down" in msg
+    generate(j, preset(), MACHINE, head=(10, 10))  # and the same design fits when the head is well inside
+
+
+def test_an_absolute_job_keeps_the_plain_message():
+    j = job([rect_obj("a", 0, 0, 5000, 10)])
+    with pytest.raises(GcodeError, match="does not fit on this laser's bed"):
+        generate(j, preset(), MACHINE)

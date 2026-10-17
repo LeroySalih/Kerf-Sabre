@@ -72,6 +72,25 @@ def probe_head(job: dict[str, Any]) -> Point:
     return (PROBE_MARGIN_MM + (x1 - x0) * fx, PROBE_MARGIN_MM + (y1 - y0) * fy)
 
 
+def _fit_message(at_head: bool, head: Point | None, box: tuple[float, float, float, float], bed: tuple[float, float], eps: float) -> str:
+    """Why a design does not fit. For a job placed at the laser head, say where the head is: a head that is off the bed (not homed, or a
+    position the laser reports outside its bed) looks like 'the design is too big' to a pupil who can see it is small."""
+    bw, bh = bed
+    base = f"The design does not fit on this laser's bed ({bw:g} x {bh:g} mm)."
+    if not at_head or head is None:
+        return base
+    hx, hy = head
+    if hx < -eps or hy < -eps or hx > bw + eps or hy > bh + eps:
+        return (f"The laser head reports its position as X {hx:.1f}, Y {hy:.1f} mm, which is outside the bed ({bw:g} x {bh:g} mm). "
+                "Home the laser, or move the head onto your material, then try again.")
+    x0, y0, x1, y1 = box
+    over = [name for name, bad in (("right", x1 > bw + eps), ("top", y1 > bh + eps)) if bad]
+    if over:
+        return (f"The design is {x1 - x0:.0f} x {y1 - y0:.0f} mm and the laser head is at X {hx:.0f}, Y {hy:.0f} mm, so it would run past the {' and '.join(over)} edge "
+                f"of the bed ({bw:g} x {bh:g} mm). Move the head further {'left' if 'right' in over else ''}{' and ' if len(over) == 2 else ''}{'down' if 'top' in over else ''}.")
+    return base
+
+
 def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any], *, head: Point | None = None) -> Result:
     """`head` is the laser's current position (bed mm); needed when the job's origin mode is current-position."""
     rp = resolve(preset, machine["id"])
@@ -99,7 +118,7 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
     bw, bh = machine["bed"]["widthMm"], machine["bed"]["heightMm"]
     eps = 0.01 + rp.kerf_mm / 2  # the kerf offset may nudge an edge-aligned part just past the bed edge
     if bx0 < -eps or by0 < -eps or bx1 > bw + eps or by1 > bh + eps:
-        raise GcodeError(f"The design does not fit on this laser's bed ({bw:g} x {bh:g} mm).")
+        raise GcodeError(_fit_message(origin["mode"] == "current-position", head, (bx0, by0, bx1, by1), (bw, bh), eps))
     if rp.untested:
         warnings.append("This material has not been test-gridded on this laser yet. Run a material test first.")
 

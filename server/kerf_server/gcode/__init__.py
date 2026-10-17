@@ -91,6 +91,18 @@ def _fit_message(at_head: bool, head: Point | None, box: tuple[float, float, flo
     return base
 
 
+HEAD_SLACK_MM = 1.0
+
+
+def _snap(v: float, size: float) -> float:
+    """Pull a head position that is just outside [0, size] back onto the edge."""
+    if -HEAD_SLACK_MM <= v < 0:
+        return 0.0
+    if size < v <= size + HEAD_SLACK_MM:
+        return float(size)
+    return v
+
+
 def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any], *, head: Point | None = None) -> Result:
     """`head` is the laser's current position (bed mm); needed when the job's origin mode is current-position."""
     rp = resolve(preset, machine["id"])
@@ -103,6 +115,10 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
     if origin["mode"] == "current-position":
         if head is None:
             raise GcodeError("The laser's position is not known yet. Move the laser head to the corner of your material first.")
+        # GRBL reports a head parked on the origin as a hair below zero (X -0.04); a design lined up on that corner would then hang a
+        # fraction of a millimetre off the bed. A head within HEAD_SLACK_MM of an edge is treated as being on it.
+        bw_, bh_ = machine["bed"]["widthMm"], machine["bed"]["heightMm"]
+        head = (_snap(head[0], bw_), _snap(head[1], bh_))
         x0, y0, x1, y1 = _bbox(paths)
         fx, fy = ANCHORS[origin["anchor"]]
         dx, dy = head[0] - (x0 + (x1 - x0) * fx), head[1] - (y0 + (y1 - y0) * fy)

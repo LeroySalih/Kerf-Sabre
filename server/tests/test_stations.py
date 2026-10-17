@@ -279,4 +279,15 @@ class TestFrameSaysWhereTheHeadIs:
             c.status(mpos=(390.0, 405.0, 0.0))
             wait_for(lambda: st(client, tokens)["mpos"] == [390.0, 405.0, 0.0])
             r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=auth(tokens["station"]))
-            assert r.status_code == 422 and "does not fit" in r.json()["message"] and "X 390, Y 405" in r.json()["message"]
+            assert r.status_code == 422 and "head is at X 390, Y 405" in r.json()["message"]
+
+
+class TestHeadParkedOnTheOrigin:
+    def test_a_head_a_hair_below_zero_still_frames(self, client, tokens):
+        jid = approved_job(client, tokens, origin={"mode": "current-position", "anchor": "bottom-left"})
+        with FakeCutter(client, tokens["station"]) as c:
+            c.status(mpos=(-0.04, -0.03, 0.0))
+            wait_for(lambda: st(client, tokens)["mpos"] == [-0.04, -0.03, 0.0])
+            r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=auth(tokens["station"]))
+            assert r.status_code == 202, r.text
+            assert r.json()["bounds"]["minX"] >= -0.2

@@ -52,7 +52,7 @@ describe("pupil IDs", () => {
 describe("cutterCommand", () => {
   it("the real Cutter starts with run_cutter.bat and the address, token and laser", () => {
     expect(cutterCommand("http://192.168.1.20:8000/", "ks_abc-DEF_123", "station-1")).toBe("run_cutter.bat --url http://192.168.1.20:8000 --token ks_abc-DEF_123 --station station-1");
-    expect(cutterCommand("https://kerf.school/api/v1", "ks_x", "bsk-laser-2", "real", "windows")).toBe("run_cutter.bat --url https://kerf.school --token ks_x --station bsk-laser-2");
+    expect(cutterCommand("https://kerf.school/api/v1", "ks_x", "bsk-laser-2", "creality-falcon", "windows")).toBe("run_cutter.bat --url https://kerf.school --token ks_x --station bsk-laser-2");
   });
   it("the practice Cutter is a Python script: python on Windows, python3 elsewhere", () => {
     expect(cutterCommand("http://h:8000", "ks_x", "station-1", "practice", "windows")).toBe("python fake_cutter.py --url http://h:8000 --token ks_x --station station-1");

@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.22 - Cutter kinds named by laser (rename)
+- `openapi.yaml`: the Cutter download `kind` value `real` is now **`creality-falcon`** (the Creality Falcon Cutter, which drives Falcon lasers over GRBL). `practice` is unchanged. `GET /cutter/kinds` is keyed by the new value, `POST /cutter/package` takes and returns it, and the download is `kerf-cutter-creality-falcon.zip` (the build still makes `cutter/build/kerf-cutter.zip`). A later Cutter for another laser type (the GCC Mercury III) gets its own value.
+- **Migration:** only the Admin site used `kind`; it moves to the new value in the same change. Any other caller sending `kind: "real"` now gets `422 invalid`.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.22`.
+
 ## 0.2.21 - staff see pupils' names (additive)
 - **Privacy rule change (decided by the school):** Kerf now keeps a display *name* for a signed-in person, taken from DINO's `userinfo` (`name`, `profile` scope) when they sign in. Never an email. It is shown to **staff of the same school only** (teacher, admin, technician), never to other pupils, never in logs, and deleted when the pupil is removed from a class. Everything else still uses IDs.
 - `openapi.yaml`: new `POST /auth/profile` (any DINO sign-in; the server asks DINO itself with the caller's token and stores the name; `{name}` or `{name: null}`, never an error if DINO cannot be reached). Optional `pupilName` on `QueueEntry` and on job lists for staff, `displayName` on class pupils and the progress grid.

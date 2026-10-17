@@ -143,7 +143,7 @@ export const placeJob = (s: Session, id: string, station: string, matrix: number
 export interface MarksRequest { centerX: number; centerY: number; sizeMm: number; spacingMm: number; count: 1 | 4; layer: "score" | "cut"; presetId: string }
 /** A job of known squares to cut (approved and pinned to this laser), for calibrating its camera. Teacher only. */
 export const createCalibrationMarks = (s: Session, station: string, body: MarksRequest, f?: Fetch) => request<{ jobId: string; squares: { square: number; corners: [number, number][] }[] }>(s, "POST", `/stations/${encodeURIComponent(station)}/calibration-marks`, body, f);
-export type CutterKind = "practice" | "real";
+export type CutterKind = "practice" | "creality-falcon";
 export interface CutterPackage { station: string; token: string; kind: CutterKind; downloadPath: string; fileName: string; expiresAt: string }
 /** A fresh token for one laser's Cutter and a short-lived download link for the Cutter software. School admins only. */
 export const makeCutterPackage = (s: Session, station: string, kind: CutterKind = "practice", f?: Fetch) => request<CutterPackage>(s, "POST", "/cutter/package", { station, kind }, f);
@@ -158,12 +158,12 @@ export const deleteMachine = (s: Session, id: string, f?: Fetch) => request<null
 
 /**
  * The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server.
- * The Creality Falcon Cutter (kind "real") is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
+ * The Creality Falcon Cutter (kind "creality-falcon") is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
  */
-export function cutterCommand(url: string, token: string, station: string, kind: CutterKind = "real", shell: "windows" | "unix" = "windows"): string {
+export function cutterCommand(url: string, token: string, station: string, kind: CutterKind = "creality-falcon", shell: "windows" | "unix" = "windows"): string {
   const q = (v: string) => (/^[A-Za-z0-9_.:/@-]+$/.test(v) ? v : `"${v.replace(/(["\\$`])/g, "\\$1")}"`);
   const args = `--url ${q(normaliseBase(url))} --token ${q(token)} --station ${q(station)}`;
-  if (kind === "real") return `run_cutter.bat ${args}`;
+  if (kind === "creality-falcon") return `run_cutter.bat ${args}`;
   return `${shell === "windows" ? "python" : "python3"} fake_cutter.py ${args}`;
 }
 export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }

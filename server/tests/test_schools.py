@@ -256,9 +256,9 @@ class TestCutterDownload:
 
     def test_the_real_cutter_is_refused_until_it_is_built(self, client, world):
         a = world["alpha"]
-        assert client.get(f"{API}/cutter/kinds", headers=a["admin"]).json()["real"]["available"] is False
+        assert client.get(f"{API}/cutter/kinds", headers=a["admin"]).json()["creality-falcon"]["available"] is False
         assert client.get(f"{API}/cutter/kinds", headers=a["teacher"]).status_code == 403
-        r = client.post(f"{API}/cutter/package", json={"station": "alpha-laser", "kind": "real"}, headers=a["admin"])
+        r = client.post(f"{API}/cutter/package", json={"station": "alpha-laser", "kind": "creality-falcon"}, headers=a["admin"])
         assert r.status_code == 409 and r.json()["code"] == "cutter_not_built"
         assert client.post(f"{API}/cutter/package", json={"station": "alpha-laser", "kind": "bogus"}, headers=a["admin"]).status_code == 422
 
@@ -315,9 +315,9 @@ def test_a_placeholder_machine_in_an_older_database_gets_the_real_profile(tmp_pa
         app = create_app(Settings.from_env(data_dir=tmp_path / "d", cutter_zip=built))
         with TestClient(app) as c:
             admin = {"Authorization": "Bearer " + issue_token(app.state.db, "admin", "A1")}
-            assert c.get(f"{API}/cutter/kinds", headers=admin).json() == {"practice": {"available": True, "fileName": "kerf-cutter-practice.zip"}, "real": {"available": True, "fileName": "kerf-cutter.zip"}}
-            r = c.post(f"{API}/cutter/package", json={"station": "station-1", "kind": "real"}, headers=admin).json()
-            assert r["kind"] == "real" and r["fileName"] == "kerf-cutter.zip"
+            assert c.get(f"{API}/cutter/kinds", headers=admin).json() == {"practice": {"available": True, "fileName": "kerf-cutter-practice.zip"}, "creality-falcon": {"available": True, "fileName": "kerf-cutter-creality-falcon.zip"}}
+            r = c.post(f"{API}/cutter/package", json={"station": "station-1", "kind": "creality-falcon"}, headers=admin).json()
+            assert r["kind"] == "creality-falcon" and r["fileName"] == "kerf-cutter-creality-falcon.zip"
             z = c.get(r["downloadPath"])
             assert z.status_code == 200 and "kerf-cutter/run_cutter.bat" in zipfile.ZipFile(io.BytesIO(z.content)).namelist()
             p = c.post(f"{API}/cutter/package", json={"station": "station-1", "kind": "practice"}, headers=admin).json()  # both kinds stay on offer

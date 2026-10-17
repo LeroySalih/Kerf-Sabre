@@ -190,8 +190,8 @@ async function cutterSoftware(s: Session, station: string): Promise<void> {
   const { dlg, show } = modal("kdialog");
   const kind = el("select", { "aria-label": "Which Cutter" },
     new Option("Practice Cutter: behaves like a laser, cuts nothing", "practice"),
-    new Option(kinds.real.available ? "Creality Falcon Cutter: runs a Creality Falcon laser from a Windows PC" : "Creality Falcon Cutter (not built on this server yet)", "real")) as HTMLSelectElement;
-  (kind.options[1] as HTMLOptionElement).disabled = !kinds.real.available;
+    new Option(kinds["creality-falcon"].available ? "Creality Falcon Cutter: runs a Creality Falcon laser from a Windows PC" : "Creality Falcon Cutter (not built on this server yet)", "creality-falcon")) as HTMLSelectElement;
+  (kind.options[1] as HTMLOptionElement).disabled = !kinds["creality-falcon"].available;
   const url = el("input", { type: "text", value: s.baseUrl || location.origin, "aria-label": "Server address", style: "min-width:22em" }) as HTMLInputElement;
   const out = el("div");
   const row = (label: string, cmd: string) => el("div", { class: "ad-cmd" }, el("div", { class: "hint" }, label), el("div", { class: "ad-token" }, cmd), btn("Copy", () => void navigator.clipboard?.writeText(cmd)));
@@ -199,17 +199,17 @@ async function cutterSoftware(s: Session, station: string): Promise<void> {
     try {
       const p = await makeCutterPackage(s, station, kind.value as CutterKind);
       const base = (url.value.trim() || location.origin).replace(/\/+$/, "");
-      const real = p.kind === "real";
+      const falcon = p.kind === "creality-falcon";
       out.replaceChildren(
-        el("h3", {}, `1. Download (${real ? "Creality Falcon" : "practice"} Cutter for ${p.station})`),
+        el("h3", {}, `1. Download (${falcon ? "Creality Falcon" : "practice"} Cutter for ${p.station})`),
         el("p", {}, el("a", { class: "btnlink", href: `${base}${p.downloadPath}`, download: p.fileName }, `Download ${p.fileName}`), el("span", { class: "hint" }, `  Works for an hour (until ${new Date(p.expiresAt).toLocaleTimeString()}). The file holds no token.`)),
         el("h3", {}, "2. On the PC"),
-        ...bullets(real
+        ...bullets(falcon
           ? ["Unzip it anywhere (the Desktop is fine) and close LightBurn, LaserGRBL and any Creality software: only one program can use the laser's USB port.", "Open a Command Prompt in the unzipped <kerf-cutter> folder."]
           : ["Unzip it, and open a terminal (Command Prompt on Windows) in the unzipped <kerf-cutter> folder.", "Install Python 3.11 or newer if it is not there, then once: <python -m pip install websockets>",
              "Mac with Python from python.org: if the command stops with CERTIFICATE_VERIFY_FAILED, run this once (or double-click it in Finder; use your Python's version number), then run the command again: </Applications/Python\\ 3.12/Install\\ Certificates.command>"]),
         el("h3", {}, "3. Run this command"),
-        ...(real ? [row("Windows (first time; it is remembered after that, so later you just double-click run_cutter.bat)", cutterCommand(base, p.token, p.station, "real"))]
+        ...(falcon ? [row("Windows (first time; it is remembered after that, so later you just double-click run_cutter.bat)", cutterCommand(base, p.token, p.station, "creality-falcon"))]
                  : [row("Windows", cutterCommand(base, p.token, p.station, "practice", "windows")), row("Mac or Linux", cutterCommand(base, p.token, p.station, "practice", "unix"))]),
         el("p", { class: "hint" }, `The token is shown only now and lets whoever has it connect as ${p.station}: keep it private. If it gets out, revoke ${p.station} on the Staff page and make a new one. Each time you press the button a new token is made; the old ones keep working until revoked.`),
         el("p", { class: "hint" }, "Then open the Editor on that PC and sign in with the same token. The station shows as online here."));

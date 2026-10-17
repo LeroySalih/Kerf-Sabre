@@ -32,11 +32,11 @@ def make_package(request: Request, body: dict[str, Any] = Body(...), who: Princi
     if not isinstance(station, str):
         raise ApiError(422, "invalid", "Say which laser this Cutter is for.")
     kind = body.get("kind", "practice")
-    if kind not in ("practice", "real"):
-        raise ApiError(422, "invalid", "kind must be 'practice' or 'real'.")
+    if kind not in package.KINDS:
+        raise ApiError(422, "invalid", "kind must be 'practice' or 'creality-falcon'.")
     known(s, who, station)
     if package.available(cfg)[kind] is None:
-        raise ApiError(409, "cutter_not_built", "The real Cutter has not been built on this server yet. Run python3 cutter/build_cutter.py on the server, or use the practice Cutter.")
+        raise ApiError(409, "cutter_not_built", "The Creality Falcon Cutter has not been built on this server yet. Run python3 cutter/build_cutter.py on the server, or use the practice Cutter.")
     token = ss.add_staff(request.app.state.db, who.school, "station", station, "cutter download")
     links: dict[str, float] = request.app.state.download_links
     now = time.time()

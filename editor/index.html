@@ -23,42 +23,28 @@
     <div id="station" hidden></div>
     <div id="app">
       <header id="topbar">
-        <span class="brand">BISAK Kerf</span>
-        <div class="group" role="group" aria-label="File">
-          <button id="imp" title="Import a DXF file">Import DXF</button>
-          <input id="file" type="file" accept=".dxf" hidden />
-          <button id="exp-dxf">Export DXF</button>
-          <button id="exp-svg">Export SVG</button>
-        </div>
-        <div class="group" role="group" aria-label="Server">
-          <button id="srv-send" title="Save, then send this design to the server to be cleaned, checked and queued for a laser">Send for cutting</button>
-          <button id="srv-files" title="Your files on the server: open one, send it, or cancel it">My files</button>
-          <button id="srv-activities" hidden title="Activities set by your teacher">Activities</button>
-          <a id="srv-admin" class="btnlink" href="/admin/" hidden title="Classes, pupils, activities, the queue and lasers">Admin site</a>
-          <button id="srv-signin">Sign in</button>
-          <span id="srv-status" role="status"></span>
-          <span id="srv-file" class="hint"></span>
-          <span id="srv-save-state" class="hint" role="status"></span>
-          <span id="srv-activity" class="hint" hidden></span>
-        </div>
-        <div class="group" role="group" aria-label="History">
-          <button id="undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-          <button id="redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
-        </div>
-        <div class="group" role="group" aria-label="Edit">
-          <button id="copy" title="Copy (Ctrl/Cmd+C)">Copy</button>
-          <button id="paste" title="Paste (Ctrl/Cmd+V)">Paste</button>
-          <button id="dup" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
-          <button id="del" title="Delete">Delete</button>
-        </div>
-        <div class="group" role="group" aria-label="View">
-          <label><input id="grid" type="checkbox" checked /> 1 cm grid</label>
-          <label title="Show or hide the dimensions. Hidden dimensions are still saved"><input id="show-dims" type="checkbox" checked /> Dimensions</label>
-          <label title="Snap to endpoints, midpoints, centres, intersections and the grid. Hold Alt/Option to disable."><input id="snap" type="checkbox" checked /> Snap</label>
-        </div>
-        <div class="group menu" id="tools-menu">
-          <button id="tools-btn" aria-haspopup="true" aria-expanded="false">Tools &#9662;</button>
-          <div class="menu-list" id="tools-list" role="menu" hidden>
+        <div class="bar1">
+          <span class="brand">BISAK Kerf</span>
+          <div class="menu" id="files-menu">
+            <button class="menu-btn" id="files-btn" aria-haspopup="true" aria-expanded="false">Files &#9662;</button>
+            <div class="menu-list" role="menu" hidden>
+              <button role="menuitem" id="imp" title="Import a DXF file">Import DXF&hellip;</button>
+              <input id="file" type="file" accept=".dxf" hidden />
+              <hr />
+              <button role="menuitem" id="exp-dxf" title="Download the design as a DXF file (the Ignore layer is left out)">Export DXF</button>
+              <button role="menuitem" id="exp-svg" title="Download the design as an SVG file (the Ignore layer is left out)">Export SVG</button>
+            </div>
+          </div>
+          <div class="menu" id="cutting-menu">
+            <button class="menu-btn" id="cutting-btn" aria-haspopup="true" aria-expanded="false">Cutting &#9662;</button>
+            <div class="menu-list" role="menu" hidden>
+              <button role="menuitem" id="srv-send" title="Send this design to the server to be cleaned, checked and queued for a laser">Send for cutting&hellip;</button>
+            </div>
+          </div>
+          <div class="menu" id="tools-menu">
+            <button class="menu-btn" id="tools-btn" aria-haspopup="true" aria-expanded="false">Tools &#9662;</button>
+            <div class="menu-list" id="tools-list" role="menu" hidden>
+
             <button role="menuitem" data-menu="linear-repeat" title="Copies in a grid: columns and rows, with gaps">Linear repeat&hellip;</button>
             <button role="menuitem" data-menu="circular-array" title="Copies around a centre point">Circular array&hellip;</button>
             <hr />
@@ -70,11 +56,43 @@
             <button role="menuitem" data-menu="tab-move" title="Move or copy the selected shapes to another tab">Move selection to tab&hellip;</button>
             <hr />
             <button role="menuitem" data-menu="finger-box" title="Panels for a box with interlocking finger joints, open-topped or with a lid">Finger-joint box&hellip;</button>
+            </div>
+          </div>
+          <span class="spacer"></span>
+          <span id="srv-activity" class="hint" hidden></span>
+          <span id="srv-save-state" class="hint" role="status"></span>
+          <span id="srv-file" class="hint" hidden></span>
+          <div class="menu" id="user-menu">
+            <button class="menu-btn" id="srv-status" aria-haspopup="true" aria-expanded="false" title="Sign in">Sign in</button>
+            <div class="menu-list right" role="menu" hidden>
+              <button role="menuitem" id="srv-files" title="Your files on the server and on this computer: open one, send it, or cancel it">My files&hellip;</button>
+              <button role="menuitem" id="srv-activities" hidden title="Activities set by your teacher">Activities&hellip;</button>
+              <a role="menuitem" id="srv-admin" class="btnlink" href="/admin/" hidden title="Classes, pupils, activities, the queue and lasers">Admin site</a>
+              <hr />
+              <button role="menuitem" id="srv-signin">Sign out</button>
+            </div>
           </div>
         </div>
-        <span class="spacer"></span>
-        <span id="warn" role="status"></span>
-        <label title="The size of the sheet you are designing on. A teacher chooses which laser cuts it">Bed <select id="bed"></select></label>
+        <div class="bar2">
+          <div class="group" role="group" aria-label="History">
+            <button id="undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+            <button id="redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+          </div>
+          <div class="group" role="group" aria-label="Edit">
+            <button id="copy" title="Copy (Ctrl/Cmd+C)">Copy</button>
+            <button id="paste" title="Paste (Ctrl/Cmd+V)">Paste</button>
+            <button id="dup" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
+            <button id="del" title="Delete">Delete</button>
+          </div>
+          <div class="group" role="group" aria-label="View">
+            <label><input id="grid" type="checkbox" checked /> 1 cm grid</label>
+            <label title="Show or hide the dimensions. Hidden dimensions are still saved"><input id="show-dims" type="checkbox" checked /> Dimensions</label>
+            <label title="Snap to endpoints, midpoints, centres, intersections and the grid. Hold Alt/Option to disable."><input id="snap" type="checkbox" checked /> Snap</label>
+          </div>
+          <span class="spacer"></span>
+          <span id="warn" role="status"></span>
+          <label title="The size of the sheet you are designing on. A teacher chooses which laser cuts it">Bed <select id="bed"></select></label>
+        </div>
       </header>
 
       <div id="filetabs" aria-label="Open files">

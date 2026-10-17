@@ -40,7 +40,8 @@ input[type="number"], input[type="text"] { height: 28px; padding: 0 6px; border:
 label { display: inline-flex; align-items: center; gap: 4px; }
 
 /* ---- top bar ---- */
-#topbar { grid-area: top; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#topbar { grid-area: top; display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#topbar .bar1, #topbar .bar2 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
 #topbar .brand { font-weight: 700; letter-spacing: 0.2px; }
 #topbar .group { display: flex; gap: 4px; align-items: center; }
 #topbar .group + .group { padding-left: 14px; border-left: 1px solid var(--line); }
@@ -257,3 +258,12 @@ td.cell.st-todo { background: #f9fafb; }
 .ftab .ftab-x:hover { color: #dc2626; }
 #srv-save-state.bad { color: #b45309; font-weight: 600; }
 .kdialog .seg { grid-template-columns: repeat(2, 1fr); margin: 8px 0; }
+
+/* ---- top bar menus (Files, Cutting, Tools, and the signed-in person) ---- */
+.menu-btn { font-weight: 600; }
+.menu-btn[aria-expanded="true"] { background: #eef0f3; }
+.menu-list.right { left: auto; right: 0; }
+.menu-list a.btnlink { display: block; height: 30px; line-height: 30px; padding: 0 12px; text-align: left; border: 0; border-radius: 4px; background: transparent; color: inherit; text-decoration: none; }
+.menu-list a.btnlink:hover { background: #eef0f3; }
+.menu-list button { padding: 0 12px; }
+#srv-status { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

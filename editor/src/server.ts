@@ -3,7 +3,9 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean }
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
+  /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
+  name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
 /** The size of the design itself (not the bed), in mm. */
 export interface Extent { widthMm: number; heightMm: number }
@@ -141,7 +143,7 @@ export const placeJob = (s: Session, id: string, station: string, matrix: number
 export interface MarksRequest { centerX: number; centerY: number; sizeMm: number; spacingMm: number; count: 1 | 4; layer: "score" | "cut"; presetId: string }
 /** A job of known squares to cut (approved and pinned to this laser), for calibrating its camera. Teacher only. */
 export const createCalibrationMarks = (s: Session, station: string, body: MarksRequest, f?: Fetch) => request<{ jobId: string; squares: { square: number; corners: [number, number][] }[] }>(s, "POST", `/stations/${encodeURIComponent(station)}/calibration-marks`, body, f);
-export type CutterKind = "practice" | "real";
+export type CutterKind = "practice" | "creality-falcon";
 export interface CutterPackage { station: string; token: string; kind: CutterKind; downloadPath: string; fileName: string; expiresAt: string }
 /** A fresh token for one laser's Cutter and a short-lived download link for the Cutter software. School admins only. */
 export const makeCutterPackage = (s: Session, station: string, kind: CutterKind = "practice", f?: Fetch) => request<CutterPackage>(s, "POST", "/cutter/package", { station, kind }, f);
@@ -156,12 +158,12 @@ export const deleteMachine = (s: Session, id: string, f?: Fetch) => request<null
 
 /**
  * The command that starts the Cutter on a laser PC. The address must be the one the laser PC uses to reach the server.
- * The real Cutter is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
+ * The Creality Falcon Cutter (kind "creality-falcon") is a Windows folder started by run_cutter.bat; the practice one is a Python script that runs anywhere.
  */
-export function cutterCommand(url: string, token: string, station: string, kind: CutterKind = "real", shell: "windows" | "unix" = "windows"): string {
+export function cutterCommand(url: string, token: string, station: string, kind: CutterKind = "creality-falcon", shell: "windows" | "unix" = "windows"): string {
   const q = (v: string) => (/^[A-Za-z0-9_.:/@-]+$/.test(v) ? v : `"${v.replace(/(["\\$`])/g, "\\$1")}"`);
   const args = `--url ${q(normaliseBase(url))} --token ${q(token)} --station ${q(station)}`;
-  if (kind === "real") return `run_cutter.bat ${args}`;
+  if (kind === "creality-falcon") return `run_cutter.bat ${args}`;
   return `${shell === "windows" ? "python" : "python3"} fake_cutter.py ${args}`;
 }
 export interface MachineInfo { id: string; name: string; bed: { widthMm: number; heightMm: number; originCorner: string } }
@@ -211,4 +213,11 @@ export function queueText(ticket: number | null | undefined, position: number | 
 export const pupilLabel = (id?: string | null, name?: string | null): string => (name?.trim() || id || "");
 
 /** Ask the server to remember this person's display name (it asks DINO itself). Best effort: the ID is shown if it fails. */
-export const sendProfile = (s: Session, f?: Fetch): Promise<unknown> => request<{ name: string | null }>(s, "POST", "/auth/profile", undefined, f).catch(() => null);
+export const sendProfile = (s: Session, f?: Fetch): Promise<{ name: string | null } | null> => request<{ name: string | null }>(s, "POST", "/auth/profile", undefined, f).catch(() => null);
+
+/** What the top bar calls the signed-in person: their name, or (if DINO could not say) a shortened ID. */
+export function personLabel(s: Pick<Session, "id" | "name">): string {
+  const name = s.name?.trim();
+  if (name) return name;
+  return s.id.length > 12 ? `${s.id.slice(0, 8)}\u2026` : s.id;
+}

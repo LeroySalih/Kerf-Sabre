@@ -1361,16 +1361,29 @@ canvas.addEventListener("wheel", (e) => {
   draw();
 }, { passive: false });
 
-// ---- Tools menu (less-used tools) ----
-const toolsBtn = document.getElementById("tools-btn") as HTMLButtonElement;
-const toolsList = document.getElementById("tools-list") as HTMLElement;
-function setToolsMenu(open: boolean): void {
-  toolsList.hidden = !open;
-  toolsBtn.setAttribute("aria-expanded", String(open));
+// ---- top bar menus: Files, Cutting, Tools and the signed-in person ----
+const menuEls = [...document.querySelectorAll<HTMLElement>("#topbar .menu")];
+function closeMenus(except?: HTMLElement): void {
+  for (const m of menuEls) {
+    if (m === except) continue;
+    m.querySelector<HTMLElement>(".menu-list")!.hidden = true;
+    m.querySelector<HTMLElement>(".menu-btn")!.setAttribute("aria-expanded", "false");
+  }
 }
-toolsBtn.addEventListener("click", (e) => { e.stopPropagation(); setToolsMenu(toolsList.hasAttribute("hidden")); });
-document.addEventListener("click", (e) => { if (!toolsList.hasAttribute("hidden") && !(e.target as Element).closest("#tools-menu")) setToolsMenu(false); });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !toolsList.hasAttribute("hidden")) { setToolsMenu(false); toolsBtn.focus(); } }, true);
+for (const m of menuEls) {
+  const btn = m.querySelector<HTMLButtonElement>(".menu-btn")!, list = m.querySelector<HTMLElement>(".menu-list")!;
+  btn.addEventListener("click", (e) => {
+    if (btn.dataset.direct) { closeMenus(); return; } // e.g. "Sign in" when nobody is signed in: the button itself is the action
+    e.stopPropagation();
+    const open = list.hidden;
+    closeMenus(open ? m : undefined);
+    list.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  });
+  list.addEventListener("click", (e) => { if ((e.target as Element).closest("button, a")) closeMenus(); }); // choosing an item closes the menu
+}
+document.addEventListener("click", (e) => { if (!(e.target as Element).closest("#topbar .menu")) closeMenus(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && menuEls.some((m) => !m.querySelector<HTMLElement>(".menu-list")!.hidden)) { closeMenus(); } }, true);
 /** Add generated shapes as one group, bounding box bottom-left at (20, 20) mm on the bed, ready to move. */
 function insertGenerated(items: TestItem[], what: string): void {
   const paths = items.map((i) => i.path);
@@ -1718,8 +1731,8 @@ on("round-all", roundAllSelected);
 const menuActions: Record<string, () => void> = { "linear-repeat": () => void linearRepeatDialog(), "circular-array": () => void circularArrayDialog(), "test-grid": () => void materialTestGridDialog(), "kerf-test": () => void kerfTestDialog(), "box-net": () => void boxNetDialog(), "finger-box": () => void fingerBoxDialog(), "tab-dup": () => duplicateTab(), "tab-move": () => void moveToTabDialog() };
 on("act-linear", () => menuActions["linear-repeat"]!());
 on("act-circular", () => menuActions["circular-array"]!());
-toolsList.querySelectorAll<HTMLButtonElement>("[data-menu]").forEach((b) =>
-  b.addEventListener("click", () => { setToolsMenu(false); (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
+document.querySelectorAll<HTMLButtonElement>("#tools-list [data-menu]").forEach((b) =>
+  b.addEventListener("click", () => { (menuActions[b.dataset.menu!] ?? (() => notify("Not built yet.")))(); }),
 );
 
 // ---- file tabs ----
@@ -1753,21 +1766,10 @@ function switchTab(id: number): void {
 }
 
 /** An empty file in a new tab, on the same material. */
-function newTab(): void {
+function newTab(name = "Untitled"): void {
   void server?.flushNow();
   parkActive();
-  syncNames();
-  showTab(ws.add("Untitled", { state: { ...emptyState(), materialId: doc.state.materialId }, undo: [], redo: [] }, blankMeta()));
-}
-
-/** Tabs named after their file on the server, unless the pupil renamed them. */
-function syncNames(): void {
-  for (const t of ws.tabs) {
-    if (t.renamed) continue;
-    const m = t.id === ws.activeId ? metaNow() : t.meta;
-    const want = m.jobId ?? (m.sourceId ? `Copy of ${m.sourceId}` : null);
-    if (want && t.name !== want) t.name = uniqueName(ws.tabs.filter((x) => x !== t).map((x) => x.name), want);
-  }
+  showTab(ws.add(name, { state: { ...emptyState(), materialId: doc.state.materialId }, undo: [], redo: [] }, blankMeta()));
 }
 
 function closeTab(id: number): void {
@@ -1786,7 +1788,6 @@ function closeTab(id: number): void {
 function duplicateTab(): void {
   void server?.flushNow();
   parkActive();
-  syncNames();
   const t = ws.duplicate(ws.active());
   showTab(t);
   notify(`Made "${t.name}": a second file with the same shapes. Save it to keep it.`);
@@ -1807,7 +1808,6 @@ async function renameTab(id: number): Promise<void> {
 async function moveToTabDialog(): Promise<void> {
   const ids = doc.expand(selected);
   if (!ids.length) { notify("Select the shapes to move first."); return; }
-  syncNames();
   const others = ws.tabs.filter((t) => t.id !== ws.activeId);
   const v = await openDialog("Move shapes to another tab", [
     { key: "target", label: "To", type: "select", value: "new", options: [{ value: "new", label: "A new tab" }, ...others.map((t) => ({ value: String(t.id), label: t.name }))] },
@@ -1832,7 +1832,6 @@ async function moveToTabDialog(): Promise<void> {
 let tabsSig = "";
 /** Redraw the tab strip (skipped when nothing about it changed, unless forced). */
 function renderTabs(force = false): void {
-  syncNames();
   const sig = JSON.stringify([ws.activeId, ws.tabs.map((t) => [t.id, t.name, tabDirty(t)])]);
   if (!force && sig === tabsSig) return;
   tabsSig = sig;
@@ -1926,7 +1925,6 @@ function openClosed(owner: string, id: string): boolean {
   const wasPristine = ws.pristine(doc.state.objects.length === 0), before = ws.activeId;
   void server.flushNow();
   parkActive();
-  syncNames();
   const t = ws.add(f.name, { state: f.state, undo: [], redo: [] }, f.meta);
   t.renamed = f.renamed;
   showTab(t);
@@ -1978,15 +1976,21 @@ server = initServerUi({
       switchTab(hit.id);
       return true;
     },
-    openBlank: () => {
+    openBlank: (name: string) => {
       const m = metaNow();
-      if (!doc.state.objects.length && !m.jobId && !m.sourceId && !m.openedLocal) return; // an empty, unsaved tab is reused
-      newTab();
+      if (!doc.state.objects.length && !m.jobId && !m.sourceId && !m.openedLocal) { // an empty, unsaved tab is reused, and takes the file's name
+        const t = ws.active();
+        t.name = uniqueName(ws.tabs.filter((x) => x !== t).map((x) => x.name), name);
+        t.renamed = false;
+        renderTabs(true);
+        return;
+      }
+      newTab(name);
     },
     othersDirty: () => ws.tabs.some((t) => t.id !== ws.activeId && tabDirty(t)),
     changed: () => scheduleTabs(),
     restore: (owner: string) => restoreTabs(owner),
-    listOpen: () => { syncNames(); return ws.tabs.map((t) => ({ tabId: t.id, name: t.name, shapes: (t.id === ws.activeId ? doc.state : t.snap.state).objects.length, jobId: (t.id === ws.activeId ? metaNow() : t.meta).jobId, dirty: tabDirty(t) })); },
+    listOpen: () => ws.tabs.map((t) => ({ tabId: t.id, name: t.name, shapes: (t.id === ws.activeId ? doc.state : t.snap.state).objects.length, jobId: (t.id === ws.activeId ? metaNow() : t.meta).jobId, dirty: tabDirty(t) })),
     showTabById: (id: number) => switchTab(id),
     listClosed: (owner: string) => (server && server.owner() === owner ? readClosed(owner) : []),
     openClosed: (owner: string, id: string) => openClosed(owner, id),

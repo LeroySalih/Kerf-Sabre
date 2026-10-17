@@ -1,5 +1,5 @@
 """The downloadable Cutter package. If the portable Cutter zip has been built (cutter/build_cutter.py -> cutter/build/kerf-cutter.zip, or KERF_CUTTER_ZIP)
-that is what is served ("real"); otherwise it is the PRETEND Cutter (it cuts nothing). The zip never contains a token: the token is only in the command
+that is what is served ("creality-falcon"); otherwise it is the PRETEND Cutter (it cuts nothing). The zip never contains a token: the token is only in the command
 the Admin site shows."""
 from __future__ import annotations
 
@@ -9,13 +9,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PRACTICE_NAME = "kerf-cutter-practice.zip"
-REAL_NAME = "kerf-cutter.zip"
+BUILT_NAME = "kerf-cutter.zip"  # what cutter/build_cutter.py makes
+FALCON_NAME = "kerf-cutter-creality-falcon.zip"  # what the Admin site hands out
+KINDS = ("practice", "creality-falcon")
 
 README = """BISAK Kerf Cutter: PRACTICE version
 ===================================
 
-This is NOT the real Cutter. It behaves like a laser for testing (it connects to the Kerf Server, reports a camera
-picture and "cuts" jobs) but it never touches a laser or a serial port. The real Cutter is not finished yet.
+This is NOT the Creality Falcon Cutter. It behaves like a laser for testing (it connects to the Kerf Server, reports a camera
+picture and "cuts" jobs) but it never touches a laser or a serial port. The Creality Falcon Cutter is the one that runs a real laser.
 
 What you need: Python 3.11 or newer, then once:   python -m pip install websockets
 
@@ -55,24 +57,24 @@ def build_zip() -> bytes:
     return buf.getvalue()
 
 
-def real_zip(settings) -> Path | None:
+def falcon_zip(settings) -> Path | None:
     """The built portable Cutter, if there is one."""
-    p = settings.cutter_zip or Path(settings.shared_dir).parent / "cutter" / "build" / REAL_NAME
+    p = settings.cutter_zip or Path(settings.shared_dir).parent / "cutter" / "build" / BUILT_NAME
     return p if p.is_file() else None
 
 
 def available(settings) -> dict[str, str | None]:
-    """Which kinds can be offered: kind -> file name, or None when it cannot (the real Cutter has not been built here)."""
-    return {"practice": PRACTICE_NAME, "real": REAL_NAME if real_zip(settings) is not None else None}
+    """Which kinds can be offered: kind -> file name, or None when it cannot (the Creality Falcon Cutter has not been built here)."""
+    return {"practice": PRACTICE_NAME, "creality-falcon": FALCON_NAME if falcon_zip(settings) is not None else None}
 
 
 def file_name(kind: str) -> str:
-    return REAL_NAME if kind == "real" else PRACTICE_NAME
+    return FALCON_NAME if kind == "creality-falcon" else PRACTICE_NAME
 
 
 def read(settings, name: str) -> bytes | None:
     """The bytes of the download called `name`, or None if there is no such download."""
     if name == PRACTICE_NAME:
         return build_zip()
-    real = real_zip(settings) if name == REAL_NAME else None
-    return real.read_bytes() if real is not None else None
+    built = falcon_zip(settings) if name == FALCON_NAME else None
+    return built.read_bytes() if built is not None else None

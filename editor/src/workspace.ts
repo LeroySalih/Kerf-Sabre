@@ -37,6 +37,15 @@ export const fileKey = (s: Pick<DocState, "materialId" | "dimensions"> & { objec
 /** True if the tab holds something that is not saved. An empty tab has nothing to lose. */
 export const isDirty = (state: DocState, savedKey: string): boolean => state.objects.length > 0 && fileKey(state) !== savedKey;
 
+/** A short, readable tab name for a file that has no name of its own: "Design 16 Oct 14:02" (never the long job id). */
+export function designName(when: string | Date, copy = false): string {
+  const d = typeof when === "string" ? new Date(when) : when;
+  if (Number.isNaN(d.getTime())) return copy ? "Copy of design" : "Design";
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()]!;
+  const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+  return `${copy ? "Copy of design" : "Design"} ${d.getDate()} ${mon} ${hh}:${mm}`;
+}
+
 /** `base`, or `base 2`, `base 3`... so no two tabs share a name. */
 export function uniqueName(taken: string[], base: string): string {
   if (!taken.includes(base)) return base;

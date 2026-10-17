@@ -15,7 +15,8 @@ def test_build_layout(tmp_path):
     zip_path = build_spike.build(out, fake, skip_wheels=True)
     names = set(zipfile.ZipFile(zip_path).namelist())
     assert {"kerf-spike/spike.py", "kerf-spike/run_spike.bat", "kerf-spike/README.txt",
-            "kerf-spike/python/python.exe", "kerf-spike/python/python311._pth"} <= names
+            "kerf-spike/python/python.exe", "kerf-spike/python/python311._pth",
+            "kerf-spike/mercury_probe.py", "kerf-spike/run_mercury_probe.bat", "kerf-spike/README_MERCURY.txt"} <= names
     z = zipfile.ZipFile(zip_path)
     pth = z.read("kerf-spike/python/python311._pth").decode()
     assert "Lib\\site-packages" in pth and "\nimport site" in pth.replace("\r", "")
@@ -30,3 +31,9 @@ def test_launcher_explains_itself_and_falls_back_to_installed_python():
     assert r"..\spike.py" in bat                           # works from the source folder too
     for message in (":nospike", ":nopython", ":noserial"):  # and says what to do instead of a bare 'path not found'
         assert message in bat
+
+
+def test_the_mercury_launcher_runs_its_own_script_with_the_bundled_python():
+    bat = (Path(__file__).resolve().parents[1] / "package" / "run_mercury_probe.bat").read_text()
+    assert r".\python\python.exe" in bat and "mercury_probe.py" in bat and "run_spike" not in bat.replace("kerf-spike", "")
+    assert "import serial" not in bat  # the probe does not need pyserial

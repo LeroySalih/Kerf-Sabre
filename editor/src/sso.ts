@@ -100,7 +100,12 @@ export async function finishSignIn(app: App, search: string, loc: { origin: stri
 async function sessionFor(_app: App, baseUrl: string, tokens: Tokens, f: Fetch): Promise<Session> {
   const me = await request<{ role: string; id: string; school?: string | null }>({ baseUrl, token: tokens.accessToken }, "GET", "/auth/me", undefined, f);
   const s: Session = { baseUrl, token: tokens.accessToken, role: me.role, id: me.id, school: me.school, sso: true };
-  void sendProfile(s, f); // so staff see a name, not an ID (the server asks DINO; nothing is kept in this browser)
+  // So staff see a name, not an ID (the server asks DINO). The name comes back too: it is kept in memory only, for the top bar.
+  void sendProfile(s, f).then((r) => {
+    if (!r?.name) return;
+    s.name = r.name;
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("kerf-profile")); // the top bar redraws
+  });
   return s;
 }
 

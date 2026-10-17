@@ -8,11 +8,11 @@ import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts
 import type { Dimension } from "./dimensions";
 import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
-import { DEFAULT_ORIGIN, blankMeta, fileKey, type ClosedFile, type FileMeta, type FileRef } from "./workspace";
+import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
-  STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
+  STATUS_TEXT, ServerError, personLabel, cancelJob, getJob, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -32,8 +32,8 @@ export interface ServerUiContext {
   tabs: {
     /** Switch to the tab holding this file, if there is one. */
     show: (ref: FileRef) => boolean;
-    /** Get a blank page for a file about to be loaded: a new tab, or the current one if it is empty and unsaved. */
-    openBlank: () => void;
+    /** Get a blank page for a file about to be loaded, named `name`: a new tab, or the current one if it is empty and unsaved. */
+    openBlank: (name: string) => void;
     /** Is there anything unsaved in a tab that is not showing? */
     othersDirty: () => boolean;
     /** The server panel's view of the file changed (saved, sent, opened): refresh the tab labels. */
@@ -90,8 +90,16 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   const render = () => {
     const signedIn = !!session;
     $("gate").hidden = signedIn || offline;
-    $("srv-status").textContent = signedIn ? `Signed in: ${session!.id}` : "Working offline";
-    $("srv-signin").textContent = signedIn ? "Sign out" : "Sign in";
+    const person = $("srv-status") as HTMLButtonElement; // the signed-in person's menu (My files, Activities, Admin site, Sign out)
+    if (signedIn) {
+      delete person.dataset.direct;
+      person.title = `Signed in as ${personLabel(session!)}`;
+      person.replaceChildren(Object.assign(document.createElement("span"), { textContent: personLabel(session!) }), document.createTextNode(" \u25be"));
+    } else {
+      person.dataset.direct = "1"; // nobody to show a menu for: the button itself signs in
+      person.title = offline ? "Working offline: nothing is saved to the server. Click to sign in." : "Sign in";
+      person.textContent = "Sign in";
+    }
     ($("srv-files") as HTMLButtonElement).hidden = false; // everyone signed in has files of their own (staff look at pupils' files on the Admin site)
     ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil";
     const act = $("srv-activity") as HTMLElement;
@@ -319,7 +327,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   function open(j: JobSummary, close: () => void): void {
     if (ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) { ctx.notify(`${j.id} is already open: switched to its tab.`); close(); return; } // never two versions of one file
-    ctx.tabs.openBlank();
+    ctx.tabs.openBlank(designName(j.createdAt, j.status !== "draft"));
     ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
     cur.origin = j.origin ?? DEFAULT_ORIGIN;
     cur.jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
@@ -420,7 +428,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
           const { row, add } = mkRow(`${new Date(d.savedAt).toLocaleString()} · ${plural(d.job.objects.length, "shape")} · ${d.job.preset.id} · kept because: ${d.reason || "the server did not take it"}`);
           add("Open", () => {
             if (ctx.tabs.show({ localId: d.id })) { ctx.notify("That copy is already open: switched to its tab."); dlg.close(); return; }
-            ctx.tabs.openBlank();
+            ctx.tabs.openBlank(designName(d.savedAt));
             ctx.load(fromJobObjects(d.job.objects), d.job.preset.id, (d.job.dimensions ?? []).map(fromJobDimension));
             cur.jobId = null; cur.sourceId = null; cur.origin = d.job.origin ?? DEFAULT_ORIGIN; activity = null; cur.openedLocal = d.id;
             render(); ctx.notify("Opened the copy kept on this computer. It is saved to the server automatically."); dlg.close();
@@ -479,6 +487,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); ctx.tabs.restore("offline"); });
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
+  window.addEventListener("kerf-profile", () => render()); // the person's name arrived from DINO
+  $("srv-status").addEventListener("click", () => { if (!session) { offline = false; render(); } });
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
   $("srv-activities").addEventListener("click", () => {
     if (session?.role !== "pupil") return;
@@ -490,7 +500,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
         if (a.jobId) {
           const j = await getJob(s, a.jobId);
           if (!ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) {
-            ctx.tabs.openBlank();
+            ctx.tabs.openBlank(a.title);
             ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
             cur.origin = j.origin ?? DEFAULT_ORIGIN;
             cur.jobId = j.status === "draft" ? j.id : null;

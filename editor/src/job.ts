@@ -38,7 +38,7 @@ export interface JobObject {
 }
 
 export interface JobDoc {
-  schemaVersion: "0.2.21";
+  schemaVersion: "0.2.22";
   id: string;
   pupilId: string;
   createdAt: string;
@@ -95,7 +95,7 @@ export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[];
   const objects = opts.objects.map(toJobObject).filter((o): o is JobObject => o !== null);
   if (!objects.length) throw new Error("There is nothing to send.");
   return {
-    schemaVersion: "0.2.21",
+    schemaVersion: "0.2.22",
     id: "draft", // the server gives every job its own id
     pupilId: opts.pupilId,
     createdAt: (opts.now ?? new Date()).toISOString(),

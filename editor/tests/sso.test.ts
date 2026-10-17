@@ -19,7 +19,7 @@ class MemStorage implements Storage {
 
 type Call = { url: string; method: string; body: string; auth: string | null };
 /** A fake DINO + Kerf server. */
-function fakeNet(opts: { tokenStatus?: number; me?: unknown } = {}) {
+function fakeNet(opts: { tokenStatus?: number; me?: unknown; name?: string | null } = {}) {
   const calls: Call[] = [];
   let n = 0;
   const f = (async (url: string, init: RequestInit = {}) => {
@@ -32,11 +32,36 @@ function fakeNet(opts: { tokenStatus?: number; me?: unknown } = {}) {
     }
     if (url === cfg.revokeUrl) return new Response("", { status: 200 });
     if (url.endsWith("/api/v1/auth/me")) return new Response(JSON.stringify(opts.me ?? { role: "pupil", id: "u-1", school: "main" }), { status: 200 });
+    if (url.endsWith("/api/v1/auth/profile")) return new Response(JSON.stringify({ name: opts.name === undefined ? "Ada Lovelace" : opts.name }), { status: 200 });
     if (url.endsWith("/api/v1/auth/config")) return new Response(JSON.stringify({ mode: "both", sso: cfg }), { status: 200 });
     return new Response("{}", { status: 404 });
   }) as unknown as typeof fetch;
   return { f, calls };
 }
+
+async function signedInWith(net: ReturnType<typeof fakeNet>, st: MemStorage) {
+  let went = "";
+  await beginSignIn("editor", "", cfg, loc, (u) => { went = u; }, st);
+  const r = (await finishSignIn("editor", `?code=C&state=${new URL(went).searchParams.get("state")}`, loc, net.f, st, 0))!;
+  return { session: r.session };
+}
+
+describe("the person's name", () => {
+  it("is kept on the session, in memory, once DINO has said it (never an email)", async () => {
+    const st = new MemStorage();
+    const net = fakeNet({ name: "Ada Lovelace" });
+    const { session } = await signedInWith(net, st);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(session.name).toBe("Ada Lovelace");
+    expect(JSON.stringify([...Array(st.length)].map((_, i) => st.getItem(st.key(i)!)))).not.toContain("Ada"); // not written to the tab's storage
+  });
+  it("is left empty when DINO cannot say", async () => {
+    const net = fakeNet({ name: null });
+    const { session } = await signedInWith(net, new MemStorage());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(session.name).toBeUndefined();
+  });
+});
 
 describe("PKCE and URLs", () => {
   it("matches the RFC 7636 example", async () => {

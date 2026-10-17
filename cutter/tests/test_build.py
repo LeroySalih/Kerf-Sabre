@@ -30,7 +30,7 @@ def test_the_zip_has_python_the_cutter_the_launchers_and_the_readme(tmp_path):
     z = zipfile.ZipFile(out)
     assert not any("__pycache__" in n or n.endswith(".pyc") for n in names)
     assert b"\r\n" in z.read("kerf-cutter/run_cutter.bat") and b"python\\python.exe -m kerf_cutter %*" in z.read("kerf-cutter/run_cutter.bat")
-    assert z.read("kerf-cutter/python/python311._pth").decode().splitlines() == ["python311.zip", ".", "Lib\\site-packages", "import site"]  # "." so kerf_cutter imports
+    assert z.read("kerf-cutter/python/python311._pth").decode().splitlines() == ["python311.zip", ".", "..", "Lib\\site-packages", "import site"]
     assert z.read("kerf-cutter/VERSION.txt").decode().strip() == f"kerf-cutter {bc.version()}"
     assert b"cutter.json" not in b"".join(z.read(n) for n in names if n.endswith(".py")) or True
 
@@ -42,3 +42,17 @@ def test_updating_by_unzipping_over_a_folder_keeps_the_settings_file(tmp_path):
         z.writestr("python.exe", b"MZ")
     out = bc.build(tmp_path / "out", embed, skip_wheels=True)
     assert not any(n.endswith("cutter.json") for n in zipfile.ZipFile(out).namelist())  # the zip never carries (or overwrites) cutter.json
+
+
+def test_python_can_find_kerf_cutter_from_its_search_path(tmp_path):
+    """The ._pth paths are relative to the python\\ folder; `python -m kerf_cutter` only works if one of them leads to the folder holding kerf_cutter
+    (a real failure on a station PC: "No module named kerf_cutter")."""
+    fake = tmp_path / "embed.zip"
+    with zipfile.ZipFile(fake, "w") as z:
+        z.writestr("python.exe", "x")
+    load().build(tmp_path / "b", fake, skip_wheels=True)
+    stage = tmp_path / "b" / "kerf-cutter"
+    py = stage / "python"
+    lines = (py / "python311._pth").read_text().splitlines()
+    roots = [(py / ln.replace("\\", "/")).resolve() for ln in lines if ln and not ln.startswith(("import", "#"))]
+    assert any((root / "kerf_cutter" / "__main__.py").is_file() for root in roots), roots

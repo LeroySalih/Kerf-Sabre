@@ -12,7 +12,7 @@ import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type F
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
-  STATUS_TEXT, ServerError, cancelJob, getJob, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
+  STATUS_TEXT, ServerError, personLabel, cancelJob, getJob, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -93,8 +93,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     const person = $("srv-status") as HTMLButtonElement; // the signed-in person's menu (My files, Activities, Admin site, Sign out)
     if (signedIn) {
       delete person.dataset.direct;
-      person.title = `Signed in as ${session!.id}`;
-      person.replaceChildren(Object.assign(document.createElement("span"), { textContent: session!.id }), document.createTextNode(" \u25be"));
+      person.title = `Signed in as ${personLabel(session!)}`;
+      person.replaceChildren(Object.assign(document.createElement("span"), { textContent: personLabel(session!) }), document.createTextNode(" \u25be"));
     } else {
       person.dataset.direct = "1"; // nobody to show a menu for: the button itself signs in
       person.title = offline ? "Working offline: nothing is saved to the server. Click to sign in." : "Sign in";
@@ -487,6 +487,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); ctx.tabs.restore("offline"); });
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
+  window.addEventListener("kerf-profile", () => render()); // the person's name arrived from DINO
   $("srv-status").addEventListener("click", () => { if (!session) { offline = false; render(); } });
   $("srv-send").addEventListener("click", () => (session ? void send() : (offline = false, render())));
   $("srv-activities").addEventListener("click", () => {

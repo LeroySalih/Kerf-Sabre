@@ -265,3 +265,14 @@ describe("tab names", () => {
     expect(designName(new Date(2026, 9, 16, 14, 2).toISOString())).toBe("Design 16 Oct 14:02");
   });
 });
+
+
+import { personLabel } from "../src/server";
+describe("the person's label in the top bar", () => {
+  it("is their name, or a shortened ID when DINO could not say", () => {
+    expect(personLabel({ id: "50304a54-2c10-44a1-8c87-b3535a960e28", name: "Ada Lovelace" })).toBe("Ada Lovelace");
+    expect(personLabel({ id: "50304a54-2c10-44a1-8c87-b3535a960e28", name: "  " })).toBe("50304a54\u2026");
+    expect(personLabel({ id: "50304a54-2c10-44a1-8c87-b3535a960e28" })).toBe("50304a54\u2026");
+    expect(personLabel({ id: "P001" })).toBe("P001");
+  });
+});

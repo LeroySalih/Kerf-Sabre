@@ -3,7 +3,9 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean }
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
+  /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
+  name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
 /** The size of the design itself (not the bed), in mm. */
 export interface Extent { widthMm: number; heightMm: number }
@@ -211,4 +213,11 @@ export function queueText(ticket: number | null | undefined, position: number | 
 export const pupilLabel = (id?: string | null, name?: string | null): string => (name?.trim() || id || "");
 
 /** Ask the server to remember this person's display name (it asks DINO itself). Best effort: the ID is shown if it fails. */
-export const sendProfile = (s: Session, f?: Fetch): Promise<unknown> => request<{ name: string | null }>(s, "POST", "/auth/profile", undefined, f).catch(() => null);
+export const sendProfile = (s: Session, f?: Fetch): Promise<{ name: string | null } | null> => request<{ name: string | null }>(s, "POST", "/auth/profile", undefined, f).catch(() => null);
+
+/** What the top bar calls the signed-in person: their name, or (if DINO could not say) a shortened ID. */
+export function personLabel(s: Pick<Session, "id" | "name">): string {
+  const name = s.name?.trim();
+  if (name) return name;
+  return s.id.length > 12 ? `${s.id.slice(0, 8)}\u2026` : s.id;
+}

@@ -291,3 +291,14 @@ class TestHeadParkedOnTheOrigin:
             r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=auth(tokens["station"]))
             assert r.status_code == 202, r.text
             assert r.json()["bounds"]["minX"] >= -0.2
+
+
+class TestATokenIsForOneLaser:
+    def test_a_cutter_that_names_another_laser_is_closed(self, client, tokens):
+        import pytest
+        from starlette.websockets import WebSocketDisconnect
+        with client.websocket_connect(f"{API}/ws/cutter", headers=auth(tokens["station"])) as ws:
+            ws.send_json({"type": "hello", "station": "station-2", "cutterVersion": "x"})
+            with pytest.raises(WebSocketDisconnect) as e:
+                ws.receive_json()
+            assert e.value.code == 4403

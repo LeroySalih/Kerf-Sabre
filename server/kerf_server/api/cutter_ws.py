@@ -61,8 +61,13 @@ async def cutter_socket(ws: WebSocket):
         while True:
             m = await ws.receive_json()
             live.last_seen = utcnow()
-            if not isinstance(m, dict) or m.get("station", who.id) != who.id:
-                hub.server_log(who.id, "WARNING", "dropped a message for another station or of the wrong shape")
+            if isinstance(m, dict) and isinstance(m.get("station"), str) and m["station"] != who.id:
+                # a token belongs to one laser: a Cutter started with another laser's ID would silently act as this one (and fight its Cutter)
+                hub.server_log(who.id, "WARNING", f"closed a Cutter that said it is {m['station'][:40]!r}: this token is for {who.id}")
+                await ws.close(code=4403)
+                return
+            if not isinstance(m, dict):
+                hub.server_log(who.id, "WARNING", "dropped a message of the wrong shape")
                 continue
             kind = m.get("type")
             if kind == "hello":

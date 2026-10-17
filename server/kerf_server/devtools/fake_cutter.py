@@ -127,6 +127,8 @@ def main() -> None:
         code = getattr(getattr(exc, "rcvd", None), "code", None)
         if code == 4000:
             raise SystemExit(f"[fake cutter] Another Cutter connected as {args.station} and replaced this one. Only one Cutter can run per laser: close the other one (an older Terminal window, or the real Cutter), then start this again.")
+        if code == 4403:
+            raise SystemExit(f"[fake cutter] This token belongs to a different laser than {args.station}. Make a token for {args.station}: Admin > Stations > Cutter software, choose {args.station}.")
         if code == 4401:
             raise SystemExit("[fake cutter] The server refused the token. Download a new Cutter from Admin > Stations > Cutter software.")
         raise

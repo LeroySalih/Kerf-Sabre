@@ -118,7 +118,18 @@ def main() -> None:
     ap.add_argument("--y", type=float, default=100.0, help="head position Y to report (mm)")
     ap.add_argument("--frame-s", type=float, default=2.0, help="how long framing takes")
     ap.add_argument("--marks-after-cut", action="store_true", help="after the first cut, send a camera picture that shows four 40 mm squares scored at bed (140,140), (260,140), (140,260), (260,260) (for trying or documenting camera calibration)")
-    asyncio.run(run(ap.parse_args()))
+    args = ap.parse_args()
+    try:
+        asyncio.run(run(args))
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:  # the server closes with 4000 when another Cutter connects as the same laser
+        code = getattr(getattr(exc, "rcvd", None), "code", None)
+        if code == 4000:
+            raise SystemExit(f"[fake cutter] Another Cutter connected as {args.station} and replaced this one. Only one Cutter can run per laser: close the other one (an older Terminal window, or the real Cutter), then start this again.")
+        if code == 4401:
+            raise SystemExit("[fake cutter] The server refused the token. Download a new Cutter from Admin > Stations > Cutter software.")
+        raise
 
 
 if __name__ == "__main__":

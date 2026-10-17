@@ -71,6 +71,9 @@ def build(out: Path, embed_zip: Path, skip_wheels: bool = False, no_camera: bool
         old.unlink()
     (py / f"python{PY_TAG}._pth").write_text(PTH, encoding="ascii", newline="\r\n")
     (stage / "spike.py").write_bytes((HERE / "spike.py").read_bytes())
+    (stage / "mercury_probe.py").write_bytes((HERE / "mercury_probe.py").read_bytes())  # spike 2: how station 5's Mercury III is connected
+    (stage / "run_mercury_probe.bat").write_bytes(crlf(HERE / "package" / "run_mercury_probe.bat"))
+    (stage / "README_MERCURY.txt").write_bytes(crlf(HERE / "package" / "README_MERCURY.txt"))
     (stage / "run_spike.bat").write_bytes(crlf(HERE / "package" / "run_spike.bat"))
     (stage / "README.txt").write_bytes(crlf(HERE / "package" / "README.txt"))
 

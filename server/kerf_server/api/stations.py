@@ -121,7 +121,12 @@ async def assign_job(job_id: str, request: Request, body: dict[str, Any] = Body(
         raise ApiError(422, "invalid", "Say which station to cut on.")
     own_station(request, who, station)
     app = request.app
-    return await run.start(app.state.db, app.state.hub, cfg, who, job_id, station, body.get("materialConfirmed") is True, body.get("allowUntested") is True, body.get("skipQueue") is True)
+    run.note(app.state.hub, station, "INFO", f"start requested by {who.role} {who.id}: materialConfirmed={body.get('materialConfirmed') is True}, skipQueue={body.get('skipQueue') is True}", job_id)
+    try:
+        return await run.start(app.state.db, app.state.hub, cfg, who, job_id, station, body.get("materialConfirmed") is True, body.get("allowUntested") is True, body.get("skipQueue") is True)
+    except ApiError as exc:
+        run.note(app.state.hub, station, "WARNING", f"start refused for {who.role} {who.id}: {exc.code}: {exc.message}", job_id)
+        raise
 
 
 @router.post("/stations/{station_id}/control", status_code=202)

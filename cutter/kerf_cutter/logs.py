@@ -22,10 +22,12 @@ def utc_now() -> str:
 
 
 class CutterLog:
-    def __init__(self, directory: Path | str, station: str, level: str = "INFO", max_bytes: int = 10_000_000, backups: int = 10, clock=time.monotonic):
+    def __init__(self, directory: Path | str, station: str, level: str = "INFO", max_bytes: int = 10_000_000, backups: int = 10, clock=time.monotonic, echo=None):
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.station = station
+        #: A text stream (stdout) that gets a readable line for every event and EVERY serial command and reply, whatever the file level.
+        self.echo = echo
         self.level = LEVELS.get(level.upper(), 20)
         self._debug_until: float | None = None
         self.clock = clock
@@ -63,11 +65,30 @@ class CutterLog:
             self._debug_until, self.level = None, LEVELS["INFO"]  # remote DEBUG switches itself off
         return self.level
 
+    def _echo(self, line: dict[str, Any]) -> None:
+        """One readable line on stdout: `12:34:56.789 TX  G1 X10 Y10 S500`, or `12:34:56.789 INFO frame_start job_id=... bounds=...`."""
+        if self.echo is None:
+            return
+        when = line["timestamp"][11:23]
+        if line["event"] == "serial":
+            out = f"{when} {line['dir']:<2} {line['data']}"
+        else:
+            rest = " ".join(f"{k}={v}" for k, v in line.items() if k not in ("timestamp", "level", "station", "event") and v is not None)
+            out = f"{when} {line['level']:<7} {line['event']} {rest}".rstrip()
+        try:
+            print(out, file=self.echo, flush=True)
+        except Exception:  # a closed console must never stop a cut
+            self.echo = None
+
     def log(self, level: str, event: str, job_id: str | None = None, **detail: Any) -> None:
         n = LEVELS.get(level.upper(), 20)
-        if n < self._effective_level():
+        wanted = n >= self._effective_level()
+        if not wanted and not (self.echo is not None and event == "serial"):
             return
         line = {"timestamp": utc_now(), "level": level.upper(), "station": self.station, "job_id": job_id, "event": event, **self._clean(detail)}
+        self._echo(line)
+        if not wanted:
+            return  # raw serial traffic with the level at INFO: shown on the console only
         text = json.dumps(line, separators=(",", ":"), default=str)
         with self._lock:
             self._logger.log(logging.INFO, text)

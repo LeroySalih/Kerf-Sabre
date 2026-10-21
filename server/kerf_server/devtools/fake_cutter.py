@@ -23,6 +23,9 @@ import urllib.request
 async def run(args: argparse.Namespace) -> None:
     import websockets  # installed with uvicorn[standard]
 
+    def say(text: str) -> None:
+        print(f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} {text}", flush=True)
+
     base = args.url.rstrip("/")
     ws_url = base.replace("http", "ws", 1) + "/api/v1/ws/cutter"
     state = {"state": "Idle", "job": None, "paused": False, "stop": False}
@@ -51,14 +54,22 @@ async def run(args: argparse.Namespace) -> None:
             except Exception as exc:
                 await send({"type": "ack", "jobId": job_id, "accepted": False, "reason": f"could not download the G-code: {exc}"})
                 return
+            gcode_lines = [ln for ln in text.splitlines() if ln.strip()]
             lines = text.count("\n")
+            say(f"downloaded the G-code for {job_id}: {len(gcode_lines)} lines")
             await send({"type": "ack", "jobId": job_id, "accepted": True})
             state.update(state="Run", job=job_id, paused=False, stop=False)
             total_s = max(msg.get("estimatedS") or 5.0, 1.0) / args.speed
             t0, done_s = time.time(), 0.0
             print(f"[fake cutter] cutting {job_id}: {lines} lines, ~{total_s:.0f}s")
+            shown = 0
             while done_s < total_s and not state["stop"]:
                 await asyncio.sleep(0.5)
+                upto = int(len(gcode_lines) * min((done_s + 0.5) / total_s, 1)) if not state["paused"] else shown
+                for ln in gcode_lines[shown:upto]:
+                    say(f"TX {ln}")  # what the real Cutter would send to the laser
+                    say("RX ok")
+                shown = max(shown, upto)
                 if not state["paused"]:
                     done_s += 0.5
                 await send({"type": "progress", "jobId": job_id, "line": int(lines * min(done_s / total_s, 1)), "totalLines": lines,
@@ -86,6 +97,7 @@ async def run(args: argparse.Namespace) -> None:
         try:
             async for raw in ws:
                 msg = json.loads(raw)
+                say("SERVER -> " + json.dumps({k: v for k, v in msg.items() if k != "gcode"})[:300])
                 if msg.get("type") == "run_job":
                     asyncio.create_task(cut(msg))
                 elif msg.get("type") == "control":
@@ -94,6 +106,9 @@ async def run(args: argparse.Namespace) -> None:
                     if cmd == "frame":
                         b = msg["bounds"]
                         state["state"] = "Jog"  # tracing the outline with the laser off
+                        for cmd_line in ("G21", "G90", f"G0 X{b['minX']:g} Y{b['minY']:g} S0", f"G0 X{b['maxX']:g} Y{b['minY']:g} S0", f"G0 X{b['maxX']:g} Y{b['maxY']:g} S0", f"G0 X{b['minX']:g} Y{b['maxY']:g} S0", f"G0 X{b['minX']:g} Y{b['minY']:g} S0"):
+                            say(f"TX {cmd_line}")
+                            say("RX ok")
                         await asyncio.sleep(args.frame_s)
                         state["state"] = "Idle"
                     elif cmd == "stop":

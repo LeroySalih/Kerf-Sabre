@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import timedelta
 from typing import Any
 
@@ -16,6 +17,7 @@ from .errors import ApiError
 from .models import GcodeRow, Job
 from .stations import Hub, Live
 
+log = logging.getLogger("kerf.run")
 IDLE_GRACE_S = 15  # a running job may not look idle for longer than this without a result
 HEAD_TOLERANCE_MM = 1.0
 
@@ -53,14 +55,30 @@ def head_of(live: Live):
     return (live.mpos[0], live.mpos[1]) if live.mpos else None
 
 
+def note(hub: Hub, station_id: str, level: str, text: str, job_id: str | None = None) -> None:
+    """One line about what the Server decided, in the station's log (where the Cutter's own lines are) and on the Server's console."""
+    log.log(getattr(logging, level), "%s %s%s", station_id, f"{job_id} " if job_id else "", text)
+    hub.server_log(station_id, level, text, job_id)
+
+
 def frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, skip_queue: bool = False) -> dict[str, Any]:
+    try:
+        return _frame(s, hub, cfg, who, j, station_id, skip_queue)
+    except ApiError as exc:
+        note(hub, station_id, "WARNING", f"frame refused for {who.role} {who.id}: {exc.code}: {exc.message}", j.id)
+        raise
+
+
+def _frame(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: str, skip_queue: bool = False) -> dict[str, Any]:
     live, machine = prepare(s, hub, cfg, j, station_id, skip_queue and who.can_override_queue)
     head = head_of(live)
+    note(hub, station_id, "INFO", f"frame requested by {who.role} {who.id}: origin={j.origin}, head={head}, state={live.state}, skipQueue={skip_queue}", j.id)
     if j.origin["mode"] == "current-position" and head is None:
         raise ApiError(409, "position_unknown", "The laser has not reported where its head is yet. Wait a moment and try again.")
     r = sj.make_gcode(s, j, machine, head)  # raises 422 if it does not fit this bed
     b = bounds_doc(r.bounds)
     j.framed_station, j.framed_at, j.framed_bounds = station_id, utcnow(), b
+    note(hub, station_id, "INFO", f"frame ok: bounds={b}", j.id)
     sj.event(s, j.id, who.id, "framed", {"station": station_id, "bounds": b})
     return b
 
@@ -151,6 +169,7 @@ async def start(db, hub: Hub, cfg: Settings, who, job_id: str, station_id: str, 
             "type": "run_job", "jobId": j.id, "gcodeUrl": f"/api/v1/jobs/{j.id}/gcode?station={station_id}", "gcodeSha256": row.sha256,
             "totalLines": row.total_lines, "estimatedS": row.estimated_s, "bounds": b, "presetVersion": j.preset_version, "material": preset.get("material", ""),
         }
+    note(hub, station_id, "INFO", f"sending run_job: {msg['totalLines']} G-code lines, about {msg['estimatedS']} s, bounds={b}", job_id)
     live.current_job, live.progress = job_id, None
     fut = hub.expect_ack(station_id, job_id)
     try:

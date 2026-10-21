@@ -76,7 +76,9 @@ def _fit_message(at_head: bool, head: Point | None, box: tuple[float, float, flo
     """Why a design does not fit. For a job placed at the laser head, say where the head is: a head that is off the bed (not homed, or a
     position the laser reports outside its bed) looks like 'the design is too big' to a pupil who can see it is small."""
     bw, bh = bed
-    base = f"The design does not fit on this laser's bed ({bw:g} x {bh:g} mm)."
+    x0_, y0_, x1_, y1_ = box
+    base = (f"The design does not fit on this laser's bed ({bw:g} x {bh:g} mm). Its outline, with the kerf, would span X {x0_:.2f} to {x1_:.2f} and "
+            f"Y {y0_:.2f} to {y1_:.2f} mm" + (f", placed from the laser head at X {head[0]:.2f}, Y {head[1]:.2f}" if at_head and head is not None else "") + ".")
     if not at_head or head is None:
         return base
     hx, hy = head
@@ -92,6 +94,7 @@ def _fit_message(at_head: bool, head: Point | None, box: tuple[float, float, flo
 
 
 HEAD_SLACK_MM = 1.0
+NUDGE_MAX_MM = 2.0  # how far a head-placed design may be moved to stay on the bed
 
 
 def _snap(v: float, size: float) -> float:
@@ -132,6 +135,15 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
         raise GcodeError("There is nothing left to cut.")
     bx0, by0, bx1, by1 = _bbox(paths)
     bw, bh = machine["bed"]["widthMm"], machine["bed"]["heightMm"]
+    if origin["mode"] == "current-position":
+        # A design lined up on the bed's edge or corner can poke a fraction of a millimetre past it once the kerf is added (the sharp points
+        # of a star by 0.2 mm). Nudge it back onto the bed rather than refuse; the placement is only as exact as the head's position anyway.
+        sx = -bx0 if bx0 < 0 else (bw - bx1 if bx1 > bw else 0.0)
+        sy = -by0 if by0 < 0 else (bh - by1 if by1 > bh else 0.0)
+        if (sx or sy) and abs(sx) <= NUDGE_MAX_MM and abs(sy) <= NUDGE_MAX_MM and (bx1 - bx0) <= bw and (by1 - by0) <= bh:
+            paths = [_translate(p, sx, sy) for p in paths]
+            bx0, by0, bx1, by1 = _bbox(paths)
+            warnings.append(f"The design was moved {max(abs(sx), abs(sy)):.2f} mm to keep it on the bed.")
     eps = 0.01 + rp.kerf_mm / 2  # the kerf offset may nudge an edge-aligned part just past the bed edge
     if bx0 < -eps or by0 < -eps or bx1 > bw + eps or by1 > bh + eps:
         raise GcodeError(_fit_message(origin["mode"] == "current-position", head, (bx0, by0, bx1, by1), (bw, bh), eps))

@@ -343,3 +343,17 @@ class TestTakeOver:
         assert client.post(f"{API}/jobs/{jid}/take", json={"station": "station-9"}, headers=auth(tokens["teacher"])).status_code == 404
         client.post(f"{API}/jobs/{jid}/cancel", headers=auth(tokens["pupil"]))
         assert client.post(f"{API}/jobs/{jid}/take", json={"station": "station-1"}, headers=auth(tokens["teacher"])).status_code == 409
+
+
+class TestEdgeAlignedPointyDesign:
+    def test_a_star_lined_up_on_the_origin_corner_is_nudged_onto_the_bed(self, client, tokens):
+        import math
+        pts = [[60 + (60 if i % 2 == 0 else 24) * math.cos(math.pi / 2 + i * math.pi / 5), 60 + (60 if i % 2 == 0 else 24) * math.sin(math.pi / 2 + i * math.pi / 5)] for i in range(10)]
+        star = {"id": "s", "layer": "cut", "closed": True, "start": pts[0], "segments": [{"type": "line", "to": p} for p in pts[1:]] + [{"type": "line", "to": pts[0]}], "matrix": [1, 0, 0, 1, 0, 0]}
+        jid = approved_job(client, tokens, objects=[star], origin={"mode": "current-position", "anchor": "bottom-left"})
+        with FakeCutter(client, tokens["station"]) as c:
+            c.status(mpos=(0.0, 0.0, 0.0))
+            wait_for(lambda: st(client, tokens)["online"] or None)
+            r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=auth(tokens["station"]))
+            assert r.status_code == 202, r.text
+            assert r.json()["bounds"]["minX"] >= -0.01 and r.json()["bounds"]["minY"] >= -0.01

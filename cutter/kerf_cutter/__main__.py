@@ -26,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--url", help="the Kerf Server's address, e.g. http://192.168.1.20:8000 (saved)")
     ap.add_argument("--token", help="this laser's station token (saved; never logged)")
     ap.add_argument("--station", help="this laser's ID, e.g. station-1 (saved)")
+    ap.add_argument("--quiet", action="store_true", help="do not print every event and every serial command to the console (they are still in the log file)")
     ap.add_argument("--devices", action="store_true", help="list serial ports, find the laser, remember it")
     ap.add_argument("--assign", metavar="PORT", help="with --devices: use this port, e.g. COM5")
     ap.add_argument("--diag", action="store_true", help="write a diagnostic bundle and exit")
@@ -44,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             changed = True
     if changed or not path.exists():
         cfgmod.save(cfg, path)
-    log = CutterLog(path.resolve().parent / "logs", cfg.station, cfg.log_level)
+    log = CutterLog(path.resolve().parent / "logs", cfg.station, cfg.log_level, echo=None if args.quiet or args.diag or args.devices else sys.stdout)
     log.add_secret(cfg.token)
     try:
         if args.devices:

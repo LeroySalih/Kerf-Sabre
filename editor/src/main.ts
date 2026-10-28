@@ -50,6 +50,8 @@ const BED_KEY = "kerf.bed";
 let bed: BedSize = (() => { try { return parseBed(localStorage.getItem(BED_KEY)); } catch { return null; } })() ?? commonBed(laserBeds);
 let view: View;
 const doc = new Doc();
+/** Copies a pattern dialog (linear repeat, circular array) would make, drawn dashed while the dialog is open. Bed-space paths. */
+let patternPreview: Path[] = [];
 // File tabs (see workspace.ts): the tab showing lives in `doc`; the others are parked snapshots.
 const ws = new Workspace();
 let server: ServerUiHandle | null = null;
@@ -310,6 +312,34 @@ function drawOffsetPreview(): void {
   }
 }
 
+function drawPatternPreview(): void {
+  for (const p of patternPreview) {
+    const g = toPaperPath(p);
+    g.strokeColor = new paper.Color("#ea580c");
+    g.strokeWidth = 1.5;
+    g.dashArray = [5, 3];
+  }
+}
+
+const PREVIEW_MAX = 3000;
+/** Preview the copies a pattern would make: the selected shapes moved by each matrix. Null clears it. Returns the line shown in the dialog. */
+function previewPattern(src: DocObject[], matrices: Matrix[] | null): string {
+  patternPreview = [];
+  let note = "";
+  if (matrices) {
+    for (const m of matrices) {
+      for (const o of src) {
+        if (patternPreview.length >= PREVIEW_MAX) break;
+        patternPreview.push(transformPath(o.path, multiply(m, o.matrix)));
+      }
+    }
+    const total = matrices.length * src.length;
+    note = `${matrices.length} ${matrices.length === 1 ? "copy" : "copies"} will be added (shown dashed).${total > PREVIEW_MAX ? ` Only the first ${PREVIEW_MAX} shapes are previewed.` : ""}`;
+  }
+  draw();
+  return note;
+}
+
 function applyOffset(): void {
   if (!selected.size) { notify("Select the shapes or lines to offset first."); return; }
   const distance = parseFloat(offDist.value);
@@ -560,6 +590,7 @@ function draw(): void {
     if (mode === "crossing") box.dashArray = [5, 4];
   }
   drawOffsetPreview();
+  drawPatternPreview();
   if (showDims) for (const d of doc.state.dimensions) drawDimension(d, selectedDims.has(d.id), false);
   const ghost = dimGhost();
   if (ghost) drawDimension(ghost, false, true);
@@ -1486,13 +1517,22 @@ function repeatSelected(matrices: Matrix[], what: string): void {
 async function linearRepeatDialog(): Promise<void> {
   const b = selectionBounds(doc.state.objects, selected);
   if (!b) { notify("Select the shapes to repeat first."); return; }
+  const src = doc.expand(selected).map((id) => doc.get(id)).filter((o): o is DocObject => !!o);
   const v = await openDialog("Linear repeat", [
     { key: "countX", label: "Columns (to the right)", type: "number", value: 3, min: 1, max: 100, integer: true },
     { key: "countY", label: "Rows (upwards)", type: "number", value: 2, min: 1, max: 100, integer: true },
     { key: "gapX", label: "Gap between columns (mm)", type: "number", value: 5 },
     { key: "gapY", label: "Gap between rows (mm)", type: "number", value: 5 },
     { key: "rowShiftMm", label: "Shift each row sideways (mm)", type: "number", value: 0, hint: "Offsets every further row along X, for brick patterns" },
-  ], { intro: "Counts include the original. Gaps are the space between neighbouring shapes, edge to edge.", ok: "Repeat" });
+  ], {
+    intro: "Counts include the original. Gaps are the space between neighbouring shapes, edge to edge. The copies are previewed as you change the numbers: drag this window by its title to see them.", ok: "Repeat",
+    onChange: (vals) => {
+      if (!vals) return previewPattern(src, null);
+      const err = validateLinear(vals as unknown as LinearParams);
+      if (err) { previewPattern(src, null); return `\u26a0 ${err}`; }
+      return previewPattern(src, linearOffsets(b, vals as unknown as LinearParams).map((o): Matrix => translation(o.x, o.y)));
+    },
+  });
   if (!v) return;
   const p = v as unknown as LinearParams;
   const error = validateLinear(p);
@@ -1504,13 +1544,23 @@ async function circularArrayDialog(): Promise<void> {
   const b = selectionBounds(doc.state.objects, selected);
   if (!b) { notify("Select the shapes to repeat first."); return; }
   const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+  const src = doc.expand(selected).map((id) => doc.get(id)).filter((o): o is DocObject => !!o);
   const v = await openDialog("Circular array", [
     { key: "count", label: "Shapes around the circle", type: "number", value: 6, min: 2, max: 360, integer: true },
     { key: "sweepDeg", label: "Sweep (degrees)", type: "number", value: 360, min: -360, max: 360, hint: "360 = full circle. Negative goes clockwise." },
     { key: "centreX", label: "Centre X (mm)", type: "number", value: Math.round(cx * 100) / 100 },
     { key: "centreY", label: "Centre Y (mm)", type: "number", value: Math.round((cy - 40) * 100) / 100 },
     { key: "rotate", label: "Turn copies with the circle", type: "select", value: "yes", options: [{ value: "yes", label: "Yes" }, { value: "no", label: "No: keep them upright" }] },
-  ], { intro: "Counts include the original. The centre starts 40 mm below the selection: change it to put the circle where you want.", ok: "Make array" });
+  ], {
+    intro: "Counts include the original. The centre starts 40 mm below the selection: change it to put the circle where you want. The copies are previewed as you change the numbers: drag this window by its title to see them.", ok: "Make array",
+    onChange: (vals) => {
+      if (!vals) return previewPattern(src, null);
+      const q: CircularParams = { count: vals.count as number, sweepDeg: vals.sweepDeg as number, centre: { x: vals.centreX as number, y: vals.centreY as number }, rotate: vals.rotate === "yes" };
+      const err = validateCircular(q);
+      if (err) { previewPattern(src, null); return `\u26a0 ${err}`; }
+      return previewPattern(src, circularMatrices(b, q));
+    },
+  });
   if (!v) return;
   const p: CircularParams = { count: v.count as number, sweepDeg: v.sweepDeg as number, centre: { x: v.centreX as number, y: v.centreY as number }, rotate: v.rotate === "yes" };
   const error = validateCircular(p);

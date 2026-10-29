@@ -25,6 +25,7 @@ class JobRunner:
         self.on_progress, self.on_state, self.clock, self.sleep = on_progress, on_state, clock, sleep
         self._stop, self._paused = threading.Event(), threading.Event()
         self.line = 0
+        self.t0: float | None = None
 
     # ---- controls (any thread; realtime bytes skip the link lock so they act at once)
     def stop(self) -> None:
@@ -63,13 +64,17 @@ class JobRunner:
         self._halt()
         return "failed", message, round(self.clock() - t0, 1)
 
+    def progress(self) -> tuple[int, int, float]:
+        """(line being sent, total lines, seconds since the job started). Safe to call from another thread, at any moment, even while a line waits for GRBL."""
+        return self.line, len(self.lines), round(self.clock() - self.t0, 1) if self.t0 is not None else 0.0
+
     def _busy_limit(self) -> float:
         """The most a single line may wait for the machine to finish moving: the same allowance as the final wait for idle."""
         return max(60.0, self.estimated_s * 3 + 30)
 
     # ---- the run
     def run(self) -> Result:
-        t0 = self.clock()
+        t0 = self.t0 = self.clock()
         total = len(self.lines)
         last_progress = t0
         try:

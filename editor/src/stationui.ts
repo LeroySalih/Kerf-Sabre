@@ -197,7 +197,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     const out: Node[] = [
       h("h2", {}, e ? `Cutting: ticket ${e.ticket}${e.pupilId ? ` · ${pupilLabel(e.pupilId, e.pupilName)}` : ""}` : "Cutting"),
       bar,
-      h("p", {}, `${pct}%${p?.actualS !== undefined ? ` · ${formatClock(p.actualS)} of about ${formatClock(est)}` : ""}${paused ? " · PAUSED" : ""}`),
+      h("p", {}, p ? `${pct}%${p.actualS !== undefined ? ` · ${formatClock(p.actualS)} of about ${formatClock(est)}` : ""}${paused ? " · PAUSED" : ""}` : `Starting…${paused ? " · PAUSED" : ""}`),
       h("div", { class: "st-actions" },
         button(paused ? "Resume" : "Pause", () => void guard(() => controlStation(session, stationId, paused ? "resume" : "pause"))),
         button("Stop", () => { if (confirm("Stop cutting now? The job cannot be restarted from where it stopped.")) void guard(() => controlStation(session, stationId, "stop")); }, "danger")),

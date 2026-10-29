@@ -35,6 +35,11 @@ describe("progress", () => {
     expect(progressPct({ jobId: "j", line: 25, totalLines: 100 })).toBe(25);
     expect(progressPct({ jobId: "j", line: 500, totalLines: 100 })).toBe(100);
     expect(progressPct(null)).toBe(0);
+    // by time when the estimate is known: the lines are queued far ahead of the cutting
+    expect(progressPct({ jobId: "j", line: 36, totalLines: 38, estimatedS: 300, actualS: 135 })).toBe(45); // lines say 95%, the laser is under half way
+    expect(progressPct({ jobId: "j", line: 38, totalLines: 38, estimatedS: 300, actualS: 400 })).toBe(99); // never 100 until the job reports done
+    expect(progressPct({ jobId: "j", line: 0, totalLines: 38, estimatedS: 300, actualS: 0 })).toBe(0);
+    expect(progressPct({ jobId: "j", line: 19, totalLines: 38, estimatedS: 0, actualS: 10 })).toBe(50); // no estimate: lines
     expect(formatClock(75)).toBe("1:15");
     expect(formatClock(5)).toBe("0:05");
   });

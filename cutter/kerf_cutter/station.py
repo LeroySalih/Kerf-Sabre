@@ -23,6 +23,7 @@ from .grbl.state import decode, setting
 from .logs import CutterLog
 from .net import http
 from .net.client import ServerLink, default_connect
+from .progress import progress_ticker
 
 
 class Station:
@@ -212,8 +213,13 @@ class Station:
         self.set_state(state)
         await self.push_status()  # busy from this instant, not from the next poll
         runner = self.runner
-        outcome, message, actual = await asyncio.to_thread(runner.run)
-        self.runner = None
+        ticker = asyncio.create_task(progress_ticker(runner, lambda: self.runner is runner, self.server.send, job_id, estimated_s)) if state == "running" else None
+        try:
+            outcome, message, actual = await asyncio.to_thread(runner.run)
+        finally:
+            self.runner = None
+            if ticker is not None:
+                ticker.cancel()
         if self._loss_reason and outcome == "cancelled":
             outcome, message = "failed", self._loss_reason
         self.log.info("job_end", job_id=job_id, outcome=outcome, message=message, actual_s=actual)

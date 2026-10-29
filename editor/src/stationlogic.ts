@@ -29,7 +29,16 @@ export function stepState(entry: QueueEntry | undefined, station: StationInfo | 
   return { canFrame: true, canStart: true, framed, say: "Ready. Stand clear of the laser and press Start." };
 }
 
-export const progressPct = (p: StationInfo["progress"]): number => (p && p.totalLines > 0 ? Math.min(100, Math.round((100 * p.line) / p.totalLines)) : 0);
+/**
+ * How far a cut has got, 0 to 99 while it runs. By time against the estimate when both are known: the laser's lines are sent far ahead of the
+ * cutting (GRBL queues a short job in a second), so the line count says "nearly done" almost at once. Without an estimate it falls back to lines.
+ */
+export const progressPct = (p: StationInfo["progress"]): number => {
+  if (!p) return 0;
+  const est = p.estimatedS ?? 0;
+  if (est > 0 && typeof p.actualS === "number") return Math.max(0, Math.min(99, Math.round((100 * p.actualS) / est)));
+  return p.totalLines > 0 ? Math.min(100, Math.round((100 * p.line) / p.totalLines)) : 0;
+};
 
 export function formatClock(s: number): string {
   const m = Math.floor(s / 60), sec = Math.round(s % 60);

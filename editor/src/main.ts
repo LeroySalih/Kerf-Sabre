@@ -32,6 +32,7 @@ import { loadMachineProfiles } from "./machine";
 import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
 import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
+import { mergeRemoteTabs } from "./remotetabs";
 import { Workspace, blankMeta, matches as matchesMeta, addClosed, readClosed, readMirror, removeClosed, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
 import { emptyState } from "./doc";
 import { cleanPoints, splinePath } from "./spline";
@@ -1846,12 +1847,23 @@ function duplicateTab(): void {
 async function renameTab(id: number): Promise<void> {
   const t = ws.get(id);
   if (!t) return;
-  const v = await openDialog("Rename tab", [{ key: "name", label: "Name", type: "text", value: t.name }], { intro: "Only for telling your tabs apart: it is not saved with the file.", ok: "Rename" });
+  const v = await openDialog("Rename tab", [{ key: "name", label: "Name", type: "text", value: t.name }], { intro: "A name for you to find the file by. It is kept with the file and does not change the design.", ok: "Rename" });
   const name = v ? String(v.name).trim().slice(0, 40) : "";
   if (!name) return;
   t.name = uniqueName(ws.tabs.filter((x) => x !== t).map((x) => x.name), name);
   t.renamed = true;
+  const jobId = (t.id === ws.activeId ? metaNow() : t.meta).jobId;
+  if (jobId) server?.renameFile(jobId, t.name); // a file already on the server is renamed there too (a new one is saved under this name)
   renderTabs(true);
+}
+
+/** Close the tab showing a file that was deleted, without keeping a copy of it. */
+function dropFileTab(jobId: string): void {
+  const live = metaNow();
+  const t = ws.tabs.find((x) => (x.id === ws.activeId ? live : x.meta).jobId === jobId);
+  if (!t) return;
+  const next = ws.close(t.id);
+  if (next) showTab(next); else renderTabs(true);
 }
 
 /** Move or copy the selected shapes into a new tab or another open tab, e.g. to split a big import into separate files. */
@@ -1922,8 +1934,25 @@ function scheduleTabs(): void {
 let mirrorOwner: string | null = null;
 let mirrorLast = "";
 
+let restoring = false; // while the tabs are being looked for (this browser and the server), nothing is written: an empty page must not replace them
+let remoteSig = "";
+let remoteRetryAt = 0;
+
+/** Tell the server which files are open (tab order, names, the one showing) so another browser can show the same tabs. Only files that are on the server are listed. */
+function pushWorkspace(): void {
+  if (!server || mirrorOwner === null || mirrorOwner === "offline" || server.owner() !== mirrorOwner || restoring || Date.now() < remoteRetryAt) return;
+  const live = metaNow();
+  const tabs = ws.tabs.flatMap((t) => { const m = t.id === ws.activeId ? live : t.meta; return m.jobId ? [{ jobId: m.jobId, name: t.name, renamed: !!t.renamed }] : []; });
+  const w = { tabs, active: live.jobId };
+  const sig = JSON.stringify(w);
+  if (sig === remoteSig) return;
+  remoteSig = sig;
+  void server.saveWorkspace(w).then((ok) => { if (!ok) { remoteSig = ""; remoteRetryAt = Date.now() + 10_000; } });
+}
+
 function persistTabs(): void {
-  if (!server || mirrorOwner === null || server.owner() !== mirrorOwner) return;
+  if (!server || mirrorOwner === null || restoring || server.owner() !== mirrorOwner) return;
+  pushWorkspace();
   if (ws.pristine(doc.state.objects.length === 0)) { // nothing worth keeping
     if (mirrorLast !== "") { removeMirror(mirrorOwner); mirrorLast = ""; }
     server.setLocalOk(true);
@@ -1945,14 +1974,22 @@ function wipeTabs(): void {
   fillMaterials(); refreshLayerUI(); draw(); renderTabs(true);
 }
 
-/** Bring back the tabs this person had open. Returns true if there were any. */
-function restoreTabs(owner: string): boolean {
+/** Bring back the tabs this person had open, on this browser or another one (the server keeps the list). Returns true if there were any. */
+async function restoreTabs(owner: string): Promise<boolean> {
   const before = mirrorOwner;
   if (before !== null && before !== owner && before !== "offline") wipeTabs(); // someone else's tabs are still showing
   if (before === "offline" && owner !== "offline") removeMirror("offline"); // that work now belongs to this person (saved under their ID from here on)
   mirrorOwner = owner;
   mirrorLast = "";
-  const m = readMirror(owner);
+  remoteSig = "";
+  restoring = true;
+  let m = readMirror(owner);
+  try {
+    if (owner !== "offline" && server) {
+      const remote = await server.loadWorkspace();
+      if (remote && remote.tabs.length) m = (await mergeRemoteTabs({ local: m, remote, loadJob: (id) => server!.loadJob(id) })) ?? m;
+    }
+  } finally { restoring = false; }
   if (!m) { persistTabs(); return false; }
   const replace = ws.pristine(doc.state.objects.length === 0);
   if (!replace) parkActive();
@@ -1994,6 +2031,7 @@ server = initServerUi({
   objects: () => doc.state.objects,
   dimensions: () => doc.state.dimensions,
   materialId: () => doc.state.materialId,
+  fileName: () => { const n = ws.active().name; return /^Untitled( \d+)?$/.test(n) ? null : n.slice(0, 60); },
   blocker: () =>
     !doc.state.objects.length ? "Draw or import something first."
     : !canSubmit(doc.state.objects, bed) ? "Part of the design is off the bed (shown red). Move it onto the bed first."
@@ -2040,6 +2078,15 @@ server = initServerUi({
     othersDirty: () => ws.tabs.some((t) => t.id !== ws.activeId && tabDirty(t)),
     changed: () => scheduleTabs(),
     restore: (owner: string) => restoreTabs(owner),
+    setName: (jobId: string, name: string) => {
+      const live = metaNow();
+      const t = ws.tabs.find((x) => (x.id === ws.activeId ? live : x.meta).jobId === jobId);
+      if (!t) return;
+      t.name = uniqueName(ws.tabs.filter((x) => x !== t).map((x) => x.name), name);
+      t.renamed = true;
+      renderTabs(true);
+    },
+    closeFile: (jobId: string) => dropFileTab(jobId),
     listOpen: () => ws.tabs.map((t) => ({ tabId: t.id, name: t.name, shapes: (t.id === ws.activeId ? doc.state : t.snap.state).objects.length, jobId: (t.id === ws.activeId ? metaNow() : t.meta).jobId, dirty: tabDirty(t) })),
     showTabById: (id: number) => switchTab(id),
     listClosed: (owner: string) => (server && server.owner() === owner ? readClosed(owner) : []),

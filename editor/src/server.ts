@@ -19,7 +19,7 @@ export interface StationInfo {
   s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; calibrated?: boolean; lastSeen?: string | null;
   progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
 }
-export interface JobSummary { activityId?: string | null; pupilId?: string; pupilName?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface JobSummary { name?: string | null; activityId?: string | null; pupilId?: string; pupilName?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {
@@ -180,6 +180,17 @@ export async function cameraUrl(s: Session, station: string, f: Fetch = fetch): 
   } catch { return null; }
 }
 export const listJobs = (s: Session, f?: Fetch) => request<JobSummary[]>(s, "GET", "/jobs?mine=1", undefined, f); // always the signed-in person's own files (staff would otherwise get everyone's)
+/** Rename a file (its owner, any state). An empty name clears it. */
+export const renameJob = (s: Session, id: string, name: string | null, f?: Fetch) => request<{ id: string; name: string | null }>(s, "PUT", `/jobs/${encodeURIComponent(id)}/name`, { name }, f);
+/** Delete a file (its owner): drafts and cancelled or failed files. The server says why when it will not. */
+export const deleteJob = (s: Session, id: string, f?: Fetch) => request<null>(s, "DELETE", `/jobs/${encodeURIComponent(id)}`, undefined, f);
+
+/** The files a person has open (their tabs), kept on the server so another browser shows the same ones. */
+export interface WorkspaceTab { jobId: string; name?: string | null; renamed?: boolean }
+export interface RemoteWorkspace { tabs: WorkspaceTab[]; active: string | null; updatedAt: string | null }
+export const getWorkspace = (s: Session, f?: Fetch) => request<RemoteWorkspace>(s, "GET", "/workspace", undefined, f);
+export const putWorkspace = (s: Session, w: { tabs: WorkspaceTab[]; active: string | null }, f?: Fetch) => request<RemoteWorkspace>(s, "PUT", "/workspace", w, f);
+
 export const cancelJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/cancel`, undefined, f);
 export const submitJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/submit`, undefined, f);
 

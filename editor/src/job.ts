@@ -51,6 +51,8 @@ export interface JobDoc {
   dimensions?: JobDimension[];
   /** The class activity this file is for (null: not for any). */
   activityId?: string | null;
+  /** The pupil's own title for the file (the tab's name), if they gave it one. */
+  name?: string | null;
 }
 
 export type JobDimension =
@@ -91,7 +93,7 @@ export function toJobObject(o: DocObject): JobObject | null {
   return out;
 }
 
-export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[]; activityId?: string | null; pupilId: string; presetId: string; presetVersion?: number; origin: Origin; submit: boolean; now?: Date }): JobDoc {
+export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[]; activityId?: string | null; name?: string | null; pupilId: string; presetId: string; presetVersion?: number; origin: Origin; submit: boolean; now?: Date }): JobDoc {
   const objects = opts.objects.map(toJobObject).filter((o): o is JobObject => o !== null);
   if (!objects.length) throw new Error("There is nothing to send.");
   return {
@@ -105,6 +107,7 @@ export function buildJob(opts: { objects: DocObject[]; dimensions?: Dimension[];
     origin: opts.origin,
     objects,
     ...(opts.activityId !== undefined ? { activityId: opts.activityId } : {}),
+    ...(opts.name !== undefined ? { name: opts.name } : {}),
     ...(opts.dimensions?.length ? { dimensions: opts.dimensions.map(toJobDimension) } : {}),
   };
 }

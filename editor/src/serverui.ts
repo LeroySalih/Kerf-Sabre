@@ -12,7 +12,7 @@ import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type F
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
-  STATUS_TEXT, ServerError, personLabel, cancelJob, getJob, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
+  STATUS_TEXT, ServerError, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -20,6 +20,8 @@ export interface ServerUiContext {
   objects: () => DocObject[];
   dimensions: () => Dimension[];
   materialId: () => string;
+  /** The title to save the file under (the tab's name), or null while it is still called "Untitled". */
+  fileName: () => string | null;
   /** Why the design can't be sent right now (out of bounds, empty...), or null. */
   blocker: () => string | null;
   notify: (msg: string) => void;
@@ -39,7 +41,10 @@ export interface ServerUiContext {
     /** The server panel's view of the file changed (saved, sent, opened): refresh the tab labels. */
     changed: () => void;
     /** Bring back the tabs kept in this browser for this owner (a pupil ID, or "offline"). True if there were any. */
-    restore: (owner: string) => boolean;
+    restore: (owner: string) => Promise<boolean>;
+    /** A file was renamed or deleted in My files: keep any tab showing it in step. */
+    setName: (jobId: string, name: string) => void;
+    closeFile: (jobId: string) => void;
     /** Write the open tabs to this browser now. */
     persist: () => void;
     /** The files open in tabs now. */
@@ -70,6 +75,14 @@ export interface ServerUiHandle {
   flushNow: () => Promise<void>;
   /** Tell the panel whether the copy kept in this browser worked (false when the browser's storage is full). */
   setLocalOk: (ok: boolean) => void;
+  /** Rename a file on the server (a tab was renamed). */
+  renameFile: (jobId: string, name: string) => void;
+  /** The tabs the person has open, as last kept on the server; null if there is none or the server cannot be reached. */
+  loadWorkspace: () => Promise<RemoteWorkspace | null>;
+  /** Keep the open tabs on the server (best effort). */
+  saveWorkspace: (w: { tabs: WorkspaceTab[]; active: string | null }) => Promise<boolean>;
+  /** One of the person's own files from the server, or null. */
+  loadJob: (id: string) => Promise<Awaited<ReturnType<typeof getJob>> | null>;
 }
 
 export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
@@ -174,7 +187,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     enterRole();
     if (stationMode) return;
     ctx.notify(`Signed in as ${session.id}`);
-    const restored = ctx.tabs.restore(session.id); // the tabs this person had open last time
+    const restored = await ctx.tabs.restore(session.id); // the tabs this person had open last time (on this or another browser)
     if (session.role === "pupil" && !restored) void files(true);
   }
 
@@ -193,7 +206,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     } catch (e) { err.textContent = problem(e); }
   }
 
-  const currentJob = () => buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin: cur.origin, submit: false });
+  const currentJob = () => buildJob({ objects: ctx.objects(), dimensions: ctx.dimensions(), activityId: session!.role === "pupil" ? activity?.id ?? null : undefined, pupilId: session!.id, presetId: ctx.materialId(), origin: cur.origin, name: ctx.fileName(), submit: false });
 
   /** What went wrong, in words, with the server's own list of problems when it gave one. */
   const explain = (e: unknown): string[] => [handle(e), ...(e instanceof ServerError && e.details ? e.details.slice(0, 5).map((d) => `${d.path || "the job"}: ${d.message}`) : [])];
@@ -327,7 +340,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   function open(j: JobSummary, close: () => void): void {
     if (ctx.tabs.show({ jobId: j.status === "draft" ? j.id : null, sourceId: j.id })) { ctx.notify(`${j.id} is already open: switched to its tab.`); close(); return; } // never two versions of one file
-    ctx.tabs.openBlank(designName(j.createdAt, j.status !== "draft"));
+    ctx.tabs.openBlank(j.name || designName(j.createdAt, j.status !== "draft"));
     ctx.load(fromJobObjects(j.objects), j.preset.id, (j.dimensions ?? []).map(fromJobDimension));
     cur.origin = j.origin ?? DEFAULT_ORIGIN;
     cur.jobId = j.status === "draft" ? j.id : null; // only a draft can be changed; anything else opens as a copy
@@ -391,9 +404,26 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
         const reason = j.statusReason && j.status !== "done" ? ` (${j.statusReason})` : "";
         const place = queued.get(j.id);
         const where = j.status === "approved" ? queueText(j.ticket ?? place?.ticket, place?.position, place?.aheadS) : j.ticket != null ? `Ticket ${j.ticket}` : "";
-        const { row, add } = mkRow(`${where ? where + " · " : ""}${j.id} · ${j.preset.id} · ${new Date(j.createdAt).toLocaleString()}${est} · ${STATUS_TEXT[j.status] ?? j.status}${reason}`);
+        const { row, add } = mkRow(`${where ? where + " · " : ""}${j.name || designName(j.createdAt)} · ${j.preset.id} · ${new Date(j.createdAt).toLocaleString()}${est} · ${STATUS_TEXT[j.status] ?? j.status}${reason}`);
+        row.title = j.id;
         add(j.status === "draft" ? "Open" : "Open a copy", () => open(j, () => dlg.close()));
+        add("Rename", async () => {
+          const v = await openDialog("Rename file", [{ key: "name", label: "Name", type: "text", value: j.name || designName(j.createdAt) }], { intro: "A name for you to find it by. It does not change the design.", ok: "Rename" });
+          if (!v) return;
+          const r = await renameJob(session!, j.id, String(v.name).trim().slice(0, 60) || null);
+          j.name = r.name;
+          ctx.tabs.setName(j.id, r.name || designName(j.createdAt));
+          draw();
+        });
         if (j.status === "draft") add("Send for cutting", async () => { const r = await submitJob(session!, j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
+        if (["draft", "cancelled", "failed"].includes(j.status)) add("Delete", async () => {
+          if (!confirm(`Delete "${j.name || designName(j.createdAt)}"? It cannot be brought back.`)) return;
+          await deleteJob(session!, j.id);
+          jobs = jobs.filter((x) => x.id !== j.id);
+          ctx.tabs.closeFile(j.id);
+          ctx.notify("Deleted.");
+          draw();
+        }, "danger");
         if (["draft", "submitted", "approved"].includes(j.status)) add("Cancel", async () => { const r = await cancelJob(session!, j.id); j.status = r.status; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
         body.append(row);
       }
@@ -485,7 +515,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   });
   $("gate-url").addEventListener("change", () => { authConfig = { mode: "planner", sso: null }; });
   ($("gate-url") as HTMLInputElement).value = defaultBase;
-  $("gate-offline").addEventListener("click", () => { offline = true; render(); ctx.tabs.restore("offline"); });
+  $("gate-offline").addEventListener("click", () => { offline = true; render(); void ctx.tabs.restore("offline"); });
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
   window.addEventListener("kerf-profile", () => render()); // the person's name arrived from DINO
   $("srv-status").addEventListener("click", () => { if (!session) { offline = false; render(); } });
@@ -543,10 +573,10 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   void dinoStart();
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
-    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); const restored = !!session && !stationMode && ctx.tabs.restore(session.id); if (session?.role === "pupil" && !restored) void files(true); }).catch((e) => {
+    void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); const restored = !!session && !stationMode && (await ctx.tabs.restore(session.id)); if (session?.role === "pupil" && !restored) void files(true); }).catch((e) => {
       if (e instanceof ServerError && e.status === 401) { dropSession(); return; }
       // the server cannot be reached right now: the tabs kept on this computer still come back, and saving carries on trying
-      if (session && !stationMode) { ctx.tabs.restore(session.id); ctx.notify("The server cannot be reached. Your work is kept on this computer and will be saved when it is back."); }
+      if (session && !stationMode) { void ctx.tabs.restore(session.id); ctx.notify("The server cannot be reached. Your work is kept on this computer and will be saved when it is back."); }
     });
   }
   return {
@@ -558,5 +588,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     noteChange,
     flushNow,
     setLocalOk: (ok) => { if (ok !== localOk) { localOk = ok; showSaveState(); } },
+    renameFile: (jobId, name) => { if (session && session.role !== "station") void renameJob(session, jobId, name).catch(() => undefined); },
+    loadWorkspace: async () => { if (!session || session.role === "station") return null; try { return await getWorkspace(session); } catch { return null; } },
+    saveWorkspace: async (w) => { if (!session || session.role === "station") return true; try { await putWorkspace(session, w); return true; } catch { return false; } },
+    loadJob: async (id) => { if (!session) return null; try { return await getJob(session, id); } catch { return null; } },
   };
 }

@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.25 - file names, delete, and open tabs that follow the person (additive)
+- `job.schema.json`: optional `name` (the pupil's title for a file, at most 60 characters). The Server stores and returns it.
+- `openapi.yaml`: `PUT /jobs/{jobId}/name` renames a file in any state (owner only); `DELETE /jobs/{jobId}` deletes a draft, cancelled, rejected or failed file (owner only; `409 in_queue` while it is waiting or on a laser, `409 keep_record` for a finished cut, `409 handed_in` for work handed in for an activity; its G-code and history go with it).
+- `openapi.yaml`: `GET /workspace` and `PUT /workspace`: the files a person has open in the Editor (tab order, tab names, the one showing), kept per person on the server so another browser shows the same tabs after signing in. Only the caller's own, still existing files are kept or returned; at most 30.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.25`.
+
 ## 0.2.24 - another laser takes over a file (additive)
 - `openapi.yaml`: `POST /jobs/{jobId}/take` (teacher, admin, technician; body `{station}`): a waiting (`approved`) file that was assigned to, or being framed on, another laser becomes this laser's. It keeps its place in the queue; a frame made on the other laser is forgotten, so it must be framed again here. `409 not_approved` for a file that is not waiting. Event `taken_over` records from/to.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.24`.

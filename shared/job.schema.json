@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.24"
+      "const": "0.2.25"
     },
     "id": {
       "type": "string",
@@ -170,6 +170,11 @@
         "type": "string"
       },
       "description": "Non-blocking problems found when the job was accepted"
+    },
+    "name": {
+      "type": ["string", "null"],
+      "maxLength": 60,
+      "description": "The pupil's own title for the file (shown in My files and on the tab). Optional; never a person's name by rule of use, but the server does not check."
     },
     "activityId": {
       "type": ["string", "null"],

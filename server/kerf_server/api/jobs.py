@@ -155,6 +155,19 @@ def move_in_queue(job_id: str, body: dict[str, Any] = Body(...), who: Principal 
     return queue.entries(s, who, cfg)
 
 
+@router.put("/jobs/{job_id}/name")
+def rename_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
+    if "name" not in body or not (body["name"] is None or isinstance(body["name"], str)):
+        raise ApiError(422, "invalid", "name is text (or null to clear it).")
+    j = sj.rename(s, who, sj.get_owned(s, job_id, who), body["name"])
+    return {"id": j.id, "name": j.name}
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+def delete_job(job_id: str, who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
+    sj.delete(s, who, sj.get_owned(s, job_id, who))
+
+
 @router.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
     return sj.receipt(sj.cancel(s, who, sj.get_owned(s, job_id, who)))

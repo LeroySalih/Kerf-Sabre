@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.24
+  version: 0.2.25
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -622,6 +622,23 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+    delete:
+      summary: |
+        Delete a file (its owner). Allowed for a draft, a cancelled or rejected file and a failed one. A file that is waiting or on a laser
+        must be cancelled first (409 `in_queue`); a finished cut is kept as the pupil's record (409 `keep_record`); a file handed in for an
+        activity cannot be deleted (409 `handed_in`). Its G-code and history go with it.
+      responses:
+        "204": {description: Deleted}
+        "404":
+          description: No such job, or not yours
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "409":
+          description: Cannot be deleted in its state
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
     put:
       summary: Replace the geometry of a draft job (owner or teacher)
       requestBody:
@@ -692,6 +709,48 @@ paths:
                 reason: {type: string}
       responses:
         "200": {description: Rejected}
+  /jobs/{jobId}/name:
+    put:
+      summary: Rename a file (its owner), in any state. Only the title changes. An empty name clears it.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [name], properties: {name: {type: [string, "null"], maxLength: 60}}}
+      responses:
+        "200": {description: "{id, name}"}
+        "404":
+          description: No such job, or not yours
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /workspace:
+    get:
+      summary: |
+        The files the caller has open in the Editor (their tabs), so signing in on another browser shows the same tabs. Only files that still exist
+        and are the caller's own are returned, in tab order. `{tabs: [{jobId, name, renamed}], active, updatedAt}`; before anything was saved
+        `tabs` is empty and `updatedAt` null.
+      responses:
+        "200": {description: OK}
+    put:
+      summary: Remember the caller's open tabs. Anything that is not one of their own files is dropped. At most 30 tabs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tabs]
+              properties:
+                tabs:
+                  type: array
+                  maxItems: 30
+                  items: {type: object, required: [jobId], properties: {jobId: {type: string}, name: {type: [string, "null"], maxLength: 60}, renamed: {type: boolean}}}
+                active: {type: [string, "null"], description: "The jobId of the tab showing"}
+      responses:
+        "200": {description: "What was stored (same shape as GET)"}
   /jobs/{jobId}/cancel:
     post:
       summary: Cancel a job that is not running (owner or teacher). Running jobs are stopped from the station.

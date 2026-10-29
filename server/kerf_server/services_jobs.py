@@ -16,7 +16,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.24"
+SCHEMA_VERSION = "0.2.25"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -49,6 +49,8 @@ def to_doc(j: Job) -> dict[str, Any]:
         doc["ticket"] = j.ticket
     if j.activity_id:
         doc["activityId"] = j.activity_id
+    if j.name:
+        doc["name"] = j.name
     if j.dimensions:
         doc["dimensions"] = j.dimensions
     if j.status_reason:
@@ -173,7 +175,7 @@ def create(s: Session, cfg: Settings, who, doc: dict[str, Any], *, source: str =
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j = Job(
         id=new_id(), pupil_id=pupil, school_id=who.school, status="draft", source=source, preset_id=p["id"], preset_version=p["version"],
-        station=doc.get("station"), origin=doc["origin"], objects=doc["objects"], dimensions=doc.get("dimensions", []), warnings=[], report=report, units=units,
+        station=doc.get("station"), name=clean_name(doc.get("name")), origin=doc["origin"], objects=doc["objects"], dimensions=doc.get("dimensions", []), warnings=[], report=report, units=units,
     )
     s.add(j)
     s.flush()
@@ -193,6 +195,8 @@ def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
     if p is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
     j.objects, j.origin, j.station = doc["objects"], doc["origin"], doc.get("station")
+    if "name" in doc:
+        j.name = clean_name(doc["name"])
     j.dimensions = doc.get("dimensions", [])
     if "activityId" in doc:
         from . import services_activities as activities
@@ -267,6 +271,46 @@ def reject(s: Session, who, j: Job, reason: str) -> Job:
     j.status, j.status_reason = "cancelled", (f"Rejected at the laser: {note}" if who.role == "technician" else note)
     event(s, j.id, who.id, "rejected", {"reason": j.status_reason})
     return j
+
+
+def clean_name(v: Any) -> str | None:
+    """A file's title: trimmed, at most 60 characters, empty means none."""
+    if not isinstance(v, str):
+        return None
+    return v.strip()[:60] or None
+
+
+def _owner_only(who, j: Job) -> None:
+    if j.pupil_id != who.id:  # teachers can see a pupil's file, but renaming or deleting it is the pupil's own business
+        raise ApiError(403, "forbidden", "Only the person who made a file can rename or delete it.")
+
+
+def rename(s: Session, who, j: Job, name: Any) -> Job:
+    """Any state: only the title changes, never the design."""
+    _owner_only(who, j)
+    j.name = clean_name(name)
+    event(s, j.id, who.id, "renamed")
+    return j
+
+
+DELETABLE = ("draft", "cancelled", "failed")
+
+
+def delete(s: Session, who, j: Job) -> None:
+    """Delete a file for good (its owner). Only drafts and cancelled/rejected/failed files; see the API notes for why not the others."""
+    _owner_only(who, j)
+    if j.status in ("submitted", "approved", "queued", "assigned", "running"):
+        raise ApiError(409, "in_queue", "This file is waiting or being cut. Cancel it first.")
+    if j.status not in DELETABLE:
+        raise ApiError(409, "keep_record", "A finished cut is kept as your record, so it cannot be deleted.")
+    works = list(s.scalars(select(ActivityWork).where(ActivityWork.job_id == j.id)))
+    if any(w.status in ("submitted", "revise", "complete") for w in works):
+        raise ApiError(409, "handed_in", "This file was handed in for an activity, so it cannot be deleted.")
+    for w in works:  # work still in progress just loses its link
+        w.job_id = None
+    for g in s.scalars(select(GcodeRow).where(GcodeRow.job_id == j.id)):
+        s.delete(g)
+    s.delete(j)  # its events go with it (ON DELETE CASCADE)
 
 
 def cancel(s: Session, who, j: Job) -> Job:

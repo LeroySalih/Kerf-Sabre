@@ -64,6 +64,8 @@ class Job(Base):
     ticket: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
     rank: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The pupil's own title for the file (optional).
+    name: Mapped[str | None] = mapped_column(String(60), nullable=True)
     #: The class activity this file was made for, if any.
     activity_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -71,6 +73,16 @@ class Job(Base):
     framed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     framed_bounds: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     running_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Workspace(Base):
+    """The files a person has open in the Editor, in tab order, so another browser shows the same tabs after sign-in. One row per person."""
+
+    __tablename__ = "workspaces"
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    school_id: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class JobEvent(Base):

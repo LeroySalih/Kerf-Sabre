@@ -165,6 +165,29 @@ class TestJobRun:
         outcome, msg, _ = runner(sim, link, clock, self.LINES, log)[0].run()
         assert outcome == "failed" and "stopped answering" in msg
 
+    def test_a_line_that_waits_for_the_machine_to_finish_moving_is_not_a_timeout(self, log):
+        """Real GRBL answers M9 (and M5) only once the queued moves have run; on a slow cut that is far longer than 15 s. The station saw
+        'The laser stopped answering at line 36 of 38 (M9)' while the status still said Run."""
+        sim, link, clock = make(log)
+        sim.slow_ok["M9"] = 3  # three 15 s waits, each time the status says Run
+        lines = ["G21", "G90", "G1 X10 Y10 S100 F180", "M5", "M9"]
+        outcome, msg, secs = runner(sim, link, clock, lines, log)[0].run()
+        assert (outcome, msg) == ("done", "")
+        assert secs > 30  # it really did wait for the machine
+        assert not any(b == b"\x18" for b in sim.written)  # and never reset it
+
+    def test_a_laser_that_is_busy_for_ever_still_fails_in_the_end(self, log):
+        sim, link, clock = make(log)
+        sim.slow_ok["M9"] = 10_000
+        outcome, msg, _ = runner(sim, link, clock, ["G21", "G90", "M9"], log)[0].run()
+        assert outcome == "failed" and "stopped answering at line 3 of 3" in msg
+
+    def test_an_idle_laser_that_does_not_answer_is_a_timeout_at_once(self, log):
+        sim, link, clock = make(log)
+        sim.silent_after = 2  # lines are swallowed; status polls still answer Idle
+        outcome, msg, secs = runner(sim, link, clock, ["G21", "G90", "M9"], log)[0].run()
+        assert outcome == "failed" and "stopped answering" in msg and secs < 40
+
     def test_a_serial_drop_mid_job_fails_it_with_the_reason(self, log):
         sim, link, clock = make(log)
         sim.fail_write_after = 6

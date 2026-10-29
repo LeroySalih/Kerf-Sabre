@@ -63,6 +63,10 @@ class JobRunner:
         self._halt()
         return "failed", message, round(self.clock() - t0, 1)
 
+    def _busy_limit(self) -> float:
+        """The most a single line may wait for the machine to finish moving: the same allowance as the final wait for idle."""
+        return max(60.0, self.estimated_s * 3 + 30)
+
     # ---- the run
     def run(self) -> Result:
         t0 = self.clock()
@@ -79,7 +83,9 @@ class JobRunner:
                         if st and st.stopped_hold:
                             self.on_state("Hold")
                     self.sleep(0.1)
-                _lines, final = self.link.command(line, timeout=15.0, abort=self._stop.is_set, paused=self._paused.is_set)
+                # GRBL answers M5/M9 (and any line when its planner is full) only once the queued moves have run: a slow cut can take minutes,
+                # so a quiet line is only a fault if the laser is not moving (see Link.command).
+                _lines, final = self.link.command(line, timeout=15.0, abort=self._stop.is_set, paused=self._paused.is_set, busy_limit=self._busy_limit())
                 if final == "aborted":
                     return "cancelled", "Stopped", round(self.clock() - t0, 1)
                 if final != "ok":
@@ -95,7 +101,7 @@ class JobRunner:
                     last_progress = now
                     self.on_progress(i, total, round(now - t0, 1))
             # every line is queued: wait until the machine has finished moving
-            limit = max(60.0, self.estimated_s * 3 + 30)
+            limit = self._busy_limit()
             st = self.link.wait_idle(timeout=limit, abort=self._stop.is_set)
             if self._stop.is_set():
                 return "cancelled", "Stopped", round(self.clock() - t0, 1)

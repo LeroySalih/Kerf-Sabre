@@ -53,24 +53,48 @@ class Link:
         return text or None
 
     # ---- commands
-    def command(self, line: str, timeout: float = 5.0, abort: Callable[[], bool] | None = None, paused: Callable[[], bool] | None = None) -> tuple[list[str], str]:
+    def command(self, line: str, timeout: float = 5.0, abort: Callable[[], bool] | None = None, paused: Callable[[], bool] | None = None,
+                busy_limit: float = 0.0) -> tuple[list[str], str]:
         """Send a line and collect replies until ok / error / ALARM. Returns (lines, final) where final is that line, "timeout" or "aborted".
-        While `paused()` the timeout does not run (in a hold GRBL may not answer until the hold ends)."""
+        While `paused()` the timeout does not run (in a hold GRBL may not answer until the hold ends).
+
+        GRBL does not answer a line that has to wait for the motion planner (M5, M9, M3, G4, or any move when the buffer is full) until the
+        queued moves have run, which can take minutes on a slow cut. So when `timeout` passes with no answer and `busy_limit` is set, the
+        laser's status is asked for: while it still reports Run, Hold, Jog or Home the wait carries on (up to `busy_limit` seconds in all);
+        only a laser that is Idle, in Alarm or silent is a real timeout."""
         with self.lock:
             self.tx(line)
             lines: list[str] = []
-            deadline = self.clock() + timeout
+            started = self.clock()
+            deadline = started + timeout
+            probing = False  # a `?` is out and its answer decides whether to go on waiting
             while True:
                 if abort and abort():
                     return lines, "aborted"
                 if paused and paused():
                     deadline = self.clock() + timeout
-                if self.clock() >= deadline:
-                    self.log.warning("command_timeout", line=line, timeout_s=timeout, received=lines[-3:])
-                    return lines, "timeout"
+                now = self.clock()
+                if now >= deadline:
+                    if busy_limit and not probing and now - started < busy_limit:
+                        self.realtime(b"?")
+                        probing = True
+                        deadline = now + 2.0
+                    else:
+                        self.log.warning("command_timeout", line=line, timeout_s=timeout, waited_s=round(now - started, 1), received=lines[-3:])
+                        return lines, "timeout"
                 text = self.read_line()
                 if text is None:
                     continue
+                if probing and text.startswith("<"):
+                    st = parse_status(text)
+                    if st:
+                        probing = False
+                        if st.state.startswith(("Run", "Hold", "Jog", "Home")):
+                            self.log.info("waiting_for_motion", line=line, state=st.state, waited_s=round(self.clock() - started, 1))
+                            deadline = self.clock() + timeout
+                        else:
+                            busy_limit = 0.0  # Idle or Alarm yet no answer: the line is lost, so this is a real timeout
+                            deadline = self.clock()
                 lines.append(text)
                 if text == "ok" or text.startswith("error") or text.startswith("ALARM"):
                     if text != "ok":

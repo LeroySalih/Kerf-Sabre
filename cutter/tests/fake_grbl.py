@@ -48,6 +48,8 @@ class FakeGrbl:
         self.fail_write_after: int | None = None  # raise OSError on write after this many writes
         self.silent_after: int | None = None  # stop answering after this many lines
         self.hold_blocks_ok = False
+        self.slow_ok: dict[str, int] = {}   # substring of a line -> how many status polls the machine stays in Run before it answers ok (real GRBL: M5/M9 wait for the planner)
+        self._slow_left = 0
         self._motion_lines = 0
         self._held_oks = 0
 
@@ -96,6 +98,14 @@ class FakeGrbl:
             state = f"Hold:{1 if self.hold == 2 else 0}"
             if self.hold == 2:
                 self.hold = 1
+        elif self._slow_left > 0:
+            self._slow_left -= 1
+            state = "Run"
+            if self._slow_left == 0:
+                x, y, z = self.pos
+                self.rx.append(f"<{state}|MPos:{x:.3f},{y:.3f},{z:.3f}|FS:180,1000>")
+                self.rx.append("ok")
+                return
         elif self.queued > 0:
             self.queued -= 1
             state = "Run" if self.queued > 0 else "Idle"
@@ -117,6 +127,10 @@ class FakeGrbl:
         for sub, err in self.error_on.items():
             if sub in line:
                 self._answer(err)
+                return
+        for sub, polls in self.slow_ok.items():
+            if sub in line:
+                self._slow_left = polls
                 return
         if line == "$$":
             self.rx.extend(f"${k}={v}" for k, v in self.settings.items())

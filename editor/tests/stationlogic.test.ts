@@ -3,7 +3,7 @@ import { Doc } from "../src/doc";
 import { circle, rectangle, translation } from "../src/geometry";
 import { buildJob } from "../src/job";
 import type { QueueEntry, StationInfo } from "../src/server";
-import { formatClock, previewSvg, progressPct, sizeOf, stepState } from "../src/stationlogic";
+import { formatClock, previewSvg, progressPct, remainingText, sizeOf, stepState } from "../src/stationlogic";
 
 const entry = (over: Partial<QueueEntry> = {}): QueueEntry => ({ ticket: 4, jobId: "job-1", status: "approved", position: 1, own: false, next: true, ...over });
 const station = (over: Partial<StationInfo> = {}): StationInfo => ({ id: "station-1", online: true, state: "Idle", ...over });
@@ -79,5 +79,24 @@ describe("sizeText", () => {
     expect(sizeText(null)).toBe("");
     expect(sizeText(undefined)).toBe("");
     expect(sizeText({ widthMm: NaN, heightMm: 5 })).toBe("");
+  });
+});
+
+describe("remainingText", () => {
+  const p = (actualS: number, estimatedS = 300) => ({ jobId: "j", line: 1, totalLines: 2, estimatedS, actualS });
+  it("says how long is left", () => {
+    expect(remainingText(p(135))).toBe("about 2:45 left");
+    expect(remainingText(p(0))).toBe("about 5:00 left");
+    expect(remainingText(p(299))).toBe("about 0:01 left");
+  });
+  it("says so when the cut runs past its estimate", () => {
+    expect(remainingText(p(300))).toMatch(/longer than estimated/);
+    expect(remainingText(p(400))).toMatch(/longer than estimated/);
+  });
+  it("uses the queue's estimate when the progress has none, and is quiet when nothing is known", () => {
+    expect(remainingText({ jobId: "j", line: 1, totalLines: 2, actualS: 60 }, 240)).toBe("about 3:00 left");
+    expect(remainingText({ jobId: "j", line: 1, totalLines: 2, actualS: 60 })).toBe("");
+    expect(remainingText({ jobId: "j", line: 1, totalLines: 2, estimatedS: 300 })).toBe("");
+    expect(remainingText(null, 300)).toBe("");
   });
 });

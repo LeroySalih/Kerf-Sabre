@@ -11,7 +11,7 @@ import {
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
-import { formatClock, previewSvg, progressPct, sizeOf, sizeText, stepState } from "./stationlogic";
+import { formatClock, previewSvg, progressPct, remainingText, sizeOf, sizeText, stepState } from "./stationlogic";
 
 const POLL_MS = 2000;
 
@@ -197,7 +197,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     const out: Node[] = [
       h("h2", {}, e ? `Cutting: ticket ${e.ticket}${e.pupilId ? ` · ${pupilLabel(e.pupilId, e.pupilName)}` : ""}` : "Cutting"),
       bar,
-      h("p", {}, p ? `${pct}%${p.actualS !== undefined ? ` · ${formatClock(p.actualS)} of about ${formatClock(est)}` : ""}${paused ? " · PAUSED" : ""}` : `Starting…${paused ? " · PAUSED" : ""}`),
+      h("p", {}, p ? `${pct}%${p.actualS !== undefined ? ` · ${formatClock(p.actualS)} of about ${formatClock(est)}` : ""}${remainingText(p, est) ? ` · ${remainingText(p, est)}` : ""}${paused ? " · PAUSED" : ""}` : `Starting…${paused ? " · PAUSED" : ""}`),
       h("div", { class: "st-actions" },
         button(paused ? "Resume" : "Pause", () => void guard(() => controlStation(session, stationId, paused ? "resume" : "pause"))),
         button("Stop", () => { if (confirm("Stop cutting now? The job cannot be restarted from where it stopped.")) void guard(() => controlStation(session, stationId, "stop")); }, "danger")),

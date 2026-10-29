@@ -40,6 +40,17 @@ export const progressPct = (p: StationInfo["progress"]): number => {
   return p.totalLines > 0 ? Math.min(100, Math.round((100 * p.line) / p.totalLines)) : 0;
 };
 
+/**
+ * What to say about the time left in a cut: "about 2:45 left", or a note once it has run past its estimate. Empty when there is no estimate or
+ * no time yet. `fallbackEstimateS` is the queue entry's estimate, for when the progress message has none.
+ */
+export function remainingText(p: StationInfo["progress"], fallbackEstimateS = 0): string {
+  const est = p?.estimatedS || fallbackEstimateS;
+  if (!p || !(est > 0) || typeof p.actualS !== "number") return "";
+  const left = est - p.actualS;
+  return left > 0 ? `about ${formatClock(left)} left` : "taking a little longer than estimated";
+}
+
 export function formatClock(s: number): string {
   const m = Math.floor(s / 60), sec = Math.round(s % 60);
   return `${m}:${String(sec).padStart(2, "0")}`;

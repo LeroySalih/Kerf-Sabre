@@ -62,11 +62,12 @@ export async function request<T>(s: { baseUrl: string; token: string }, method: 
   return json as T;
 }
 
-export interface School { id: string; name: string; createdAt?: string }
+export interface School { id: string; name: string; createdAt?: string; /** New files go straight to the queue while this is on. */ autoApprove?: boolean }
 export interface StaffMember { role: "admin" | "teacher" | "technician" | "station"; id: string; label?: string | null; createdAt?: string }
 export const listSchools = (s: Session, f?: Fetch) => request<School[]>(s, "GET", "/schools", undefined, f);
 export const createSchool = (s: Session, id: string, name: string, adminId?: string, f?: Fetch) => request<School & { admin?: { id: string; token: string } }>(s, "POST", "/schools", { id, name, ...(adminId ? { adminId } : {}) }, f);
 export const mySchool = (s: Session, f?: Fetch) => request<School>(s, "GET", "/school", undefined, f);
+export const setAutoApprove = (s: Session, on: boolean, f?: Fetch) => request<School>(s, "PATCH", "/school", { autoApprove: on }, f);
 export const listStaff = (s: Session, f?: Fetch) => request<StaffMember[]>(s, "GET", "/staff", undefined, f);
 export const addStaff = (s: Session, role: StaffMember["role"], id: string, label?: string, f?: Fetch) => request<{ role: string; id: string; token: string }>(s, "POST", "/staff", { role, id, ...(label ? { label } : {}) }, f);
 export const revokeStaff = (s: Session, id: string, f?: Fetch) => request<null>(s, "DELETE", `/staff/${encodeURIComponent(id)}`, undefined, f);

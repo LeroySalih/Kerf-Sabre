@@ -21,8 +21,13 @@ SCHOOL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 STAFF_ROLES = ("admin", "teacher", "station")
 
 
-def school_doc(s: School) -> dict:
-    return {"id": s.id, "name": s.name, "createdAt": iso(s.created_at)}
+def auto_approve_on(s: Session, school_id: str | None, default: bool) -> bool:
+    row = s.get(School, school_id) if school_id else None
+    return default if row is None or row.auto_approve is None else bool(row.auto_approve)
+
+
+def school_doc(s: School, default_auto_approve: bool = True) -> dict:
+    return {"id": s.id, "name": s.name, "createdAt": iso(s.created_at), "autoApprove": default_auto_approve if s.auto_approve is None else bool(s.auto_approve)}
 
 
 def list_schools(s: Session) -> list[dict]:

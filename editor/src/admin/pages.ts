@@ -7,7 +7,7 @@ import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
-  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
+  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
   listJobsByStatus, pupilLabel, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
@@ -161,7 +161,25 @@ const activities: Page = {
 
 const queue: Page = {
   key: "queue", title: "Queue", lead: "Approve or reject files, and put the queue in order. This updates by itself every few seconds.",
-  mount: (host, ctx) => mountQueue(host, ctx.session),
+  mount(host, ctx) {
+    const s = ctx.session;
+    const box = el("input", { type: "checkbox", "aria-describedby": "aa-hint" }) as HTMLInputElement;
+    const hint = el("span", { class: "hint", id: "aa-hint" }, "");
+    const explain = () => { hint.textContent = box.checked ? "On: every new file goes straight to the queue. Files already waiting still need you." : "Off: files wait here for approval (unless their class is set to go straight to the queue)."; };
+    box.disabled = true;
+    void mySchool(s).then((sc) => { box.checked = sc.autoApprove !== false; box.disabled = false; explain(); }).catch(() => { hint.textContent = "Could not read the auto-approve setting."; });
+    box.addEventListener("change", () => {
+      const want = box.checked;
+      box.disabled = true;
+      void setAutoApprove(s, want).then((sc) => { box.checked = sc.autoApprove !== false; })
+        .catch(async (e) => { box.checked = !want; await infoDialog("That didn't work", [msg(e)]); })
+        .finally(() => { box.disabled = false; explain(); });
+    });
+    const bar = el("div", { class: "ad-bar" }, el("label", {}, box, " Auto-approve new files"), hint);
+    const body = el("div");
+    host.replaceChildren(bar, body);
+    return mountQueue(body, s);
+  },
 };
 
 // ---------------------------------------------------------------- stations (the lasers, and the Cutter software that runs on each laser's PC)

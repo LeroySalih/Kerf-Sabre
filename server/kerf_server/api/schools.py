@@ -7,7 +7,8 @@ from fastapi import APIRouter, Body, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from .. import services_schools as ss
-from ..deps import get_session
+from ..config import Settings
+from ..deps import get_session, get_settings
 from ..errors import ApiError
 from ..models import School
 from ..security import Principal, require
@@ -36,9 +37,19 @@ def create_school(request: Request, body: dict[str, Any] = Body(...), _: Princip
 
 
 @router.get("/school")
-def my_school(who: Principal = Depends(require("admin", "teacher")), s: Session = Depends(get_session)):
+def my_school(who: Principal = Depends(require("admin", "teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     school = s.get(School, who.school)
-    return ss.school_doc(school)
+    return ss.school_doc(school, cfg.auto_approve_default)
+
+
+@router.patch("/school")
+def update_school(body: dict[str, Any] = Body(...), who: Principal = Depends(require("admin", "teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """Switch auto-approve on or off for my school. Only files that arrive afterwards are affected."""
+    school = s.get(School, who.school)
+    if not isinstance(body.get("autoApprove"), bool):
+        raise ApiError(422, "invalid", "Send autoApprove: true or false.")
+    school.auto_approve = body["autoApprove"]
+    return ss.school_doc(school, cfg.auto_approve_default)
 
 
 @router.get("/staff")

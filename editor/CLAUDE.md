@@ -74,3 +74,5 @@ Station page, picking and rejecting: a technician (or teacher/admin) clicks any 
 **Disconnect Cutter**: a button on the Station page header (technician, teacher, admin; hidden while cutting) and on each Admin *Stations* card calls `POST /stations/{id}/disconnect` after a confirm; the Cutter stays disconnected until started again on its PC.
 
 **Taking over**: on a laser's Station page every waiting file is clickable, including ones meant for (or being set up on) another laser. Those show "This file is for station-N" with **Take over for station-M** (`POST /jobs/{id}/take`) and Reject; after taking over, the normal Frame/Start flow applies.
+
+**Auto-approve** (Admin site, Queue page): a checkbox above the queue (`setAutoApprove`, `PATCH /school`), on by default. While on, new files skip *Waiting for approval* and go straight to the queue; files already waiting are not affected.

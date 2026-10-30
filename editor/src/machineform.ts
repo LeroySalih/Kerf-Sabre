@@ -2,7 +2,7 @@
 import type { MachineProfile } from "./machine";
 import type { DialogField, DialogValue } from "./dialog";
 
-export const SCHEMA_VERSION = "0.2.25";
+export const SCHEMA_VERSION = "0.2.26";
 export const STATION_ID = /^[a-z0-9][a-z0-9-]*$/;
 const ORIGINS = [["front-left", "Front left"], ["front-right", "Front right"], ["back-left", "Back left"], ["back-right", "Back right"]] as const;
 const CAMERAS = [["usb-uvc", "USB camera"], ["network", "Network camera"], ["none", "No camera"], ["unknown", "Not sure"]] as const;

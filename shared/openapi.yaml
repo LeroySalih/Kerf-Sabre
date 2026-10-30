@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.25
+  version: 0.2.26
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -113,7 +113,20 @@ paths:
         "409": {description: That school exists}
   /school:
     get:
-      summary: Admin or teacher. My school
+      summary: Admin or teacher. My school (id, name, autoApprove)
+      responses:
+        "200": {description: OK}
+    patch:
+      summary: Admin or teacher. Switch auto-approve on or off. While on, new files skip approval and go straight to the queue.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [autoApprove]
+              properties:
+                autoApprove: {type: boolean}
       responses:
         "200": {description: OK}
   /auth/profile:

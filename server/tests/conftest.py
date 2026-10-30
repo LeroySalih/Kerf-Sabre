@@ -13,7 +13,7 @@ from kerf_server.security import issue_token
 @pytest.fixture()
 def settings(tmp_path: Path) -> Settings:
     # most tests put several files from the same pupil in the queue; TestANewSendReplacesTheOldOne turns replacement on
-    return Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="pins")  # the tests sign in with stored tokens; test_sso.py covers DINO
+    return Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="pins", auto_approve_default=False)  # the tests sign in with stored tokens; test_sso.py covers DINO
 
 
 @pytest.fixture()

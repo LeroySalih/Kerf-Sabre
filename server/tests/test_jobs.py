@@ -18,7 +18,7 @@ def rect_obj(oid, x, y, w, h, layer="cut", closed=True):
 
 
 def job_doc(pupil="P001", status="draft", objects=None, **over):
-    d = {"schemaVersion": "0.2.25", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
+    d = {"schemaVersion": "0.2.26", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
          "preset": {"id": "ply-3mm", "version": 1}, "station": None, "origin": {"mode": "absolute"},
          "objects": objects or [rect_obj("a", 20, 20, 50, 30)]}
     d.update(over)
@@ -252,3 +252,36 @@ class TestOlderEditors:
         d["objects"][0]["layer"] = "engrave"
         r = client.post(f"{API}/jobs", json=d, headers=auth(tokens["pupil"]))
         assert r.status_code == 422 and any("layer" in x["path"] for x in r.json()["details"])
+
+
+class TestAutoApprove:
+    def test_a_school_starts_with_it_on_by_default_setting_and_files_go_straight_to_the_queue(self, tmp_path):
+        from fastapi.testclient import TestClient
+        from kerf_server.app import create_app
+        from kerf_server.config import Settings
+        from kerf_server.security import issue_token
+        app = create_app(Settings.from_env(data_dir=tmp_path / "d", replace_old_sends=False, auth_mode="pins"))  # real default: on
+        with TestClient(app) as c:
+            tk = {"pupil": issue_token(app.state.db, "pupil", "P001"), "teacher": issue_token(app.state.db, "teacher", "T001")}
+            assert c.get(f"{API}/school", headers=auth(tk["teacher"])).json()["autoApprove"] is True
+            r = post(c, tk, status="submitted").json()
+            assert r["status"] == "approved" and r["ticket"] == 1
+
+    def test_switched_off_a_file_waits_for_approval_again_and_the_setting_is_kept(self, client, tokens):
+        t = auth(tokens["teacher"])
+        assert client.get(f"{API}/school", headers=t).json()["autoApprove"] is False  # the test settings start it off
+        assert client.patch(f"{API}/school", json={"autoApprove": True}, headers=t).json()["autoApprove"] is True
+        assert post(client, tokens, status="submitted").json()["status"] == "approved"
+        client.patch(f"{API}/school", json={"autoApprove": False}, headers=t)
+        waiting = post(client, tokens, status="submitted").json()
+        assert waiting["status"] == "submitted"
+
+    def test_turning_it_on_does_not_approve_files_already_waiting(self, client, tokens):
+        t = auth(tokens["teacher"])
+        old = post(client, tokens, status="submitted").json()["id"]
+        client.patch(f"{API}/school", json={"autoApprove": True}, headers=t)
+        assert client.get(f"{API}/jobs/{old}", headers=auth(tokens["pupil"])).json()["status"] == "submitted"
+
+    def test_only_staff_can_change_it_and_it_needs_a_boolean(self, client, tokens):
+        assert client.patch(f"{API}/school", json={"autoApprove": True}, headers=auth(tokens["pupil"])).status_code == 403
+        assert client.patch(f"{API}/school", json={"autoApprove": "yes"}, headers=auth(tokens["teacher"])).status_code == 422

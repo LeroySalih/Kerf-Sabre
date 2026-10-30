@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import services_classes as classes
+from . import services_schools as schools
 from . import services_presets as sp
 from .config import Settings
 from .db import iso, utcnow
@@ -16,7 +17,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.25"
+SCHEMA_VERSION = "0.2.26"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -219,8 +220,8 @@ def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
         j._replaced = replace_waiting(s, who, j)  # type: ignore[attr-defined]
     j.status = "submitted"
     event(s, j.id, who.id, "submitted")
-    # Approval is skipped when switched off for the whole server, or for this pupil's class (e.g. Year 10 yes, Year 7 no).
-    if not cfg.require_approval or not classes.needs_approval(s, j.pupil_id):
+    # Approval is skipped when the school's auto-approve switch is on, when switched off for the whole server, or for this pupil's class (e.g. Year 10 yes, Year 7 no).
+    if schools.auto_approve_on(s, j.school_id, cfg.auto_approve_default) or not cfg.require_approval or not classes.needs_approval(s, j.pupil_id):
         j.status = "approved"
         j.approved_by = "auto"
         from . import services_queue as queue  # (the queue module imports this one)

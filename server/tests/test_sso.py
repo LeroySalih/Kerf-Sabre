@@ -60,7 +60,7 @@ def jwks():
 
 @pytest.fixture()
 def sso_app(tmp_path, jwks):
-    cfg = Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="both", sso_issuer=ISS)
+    cfg = Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="both", sso_issuer=ISS, auto_approve_default=False)
     app = create_app(cfg)
     app.state.sso = Verifier(cfg, fetch=jwks)
     return app
@@ -243,7 +243,7 @@ class TestModes:
 
 @pytest.fixture()
 def planner_client(tmp_path, jwks):
-    cfg = Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="planner", sso_issuer=ISS)
+    cfg = Settings.from_env(data_dir=tmp_path / "data", replace_old_sends=False, auth_mode="planner", sso_issuer=ISS, auto_approve_default=False)
     app = create_app(cfg)
     app.state.sso = Verifier(cfg, fetch=jwks)
     with TestClient(app) as c:

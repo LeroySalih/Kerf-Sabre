@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.26 - auto-approve switch (additive)
+- `openapi.yaml`: `GET /school` carries `autoApprove`; new `PATCH /school {autoApprove}` (teacher or admin). While it is on, every file submitted in that school is approved at once and goes straight to the queue, whatever its class's approval setting. Files already waiting when it is switched on are not approved by it. A school that has never set it uses the Server's `KERF_AUTO_APPROVE` (default **on**).
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.26`.
+
 ## 0.2.25 - file names, delete, and open tabs that follow the person (additive)
 - `job.schema.json`: optional `name` (the pupil's title for a file, at most 60 characters). The Server stores and returns it.
 - `openapi.yaml`: `PUT /jobs/{jobId}/name` renames a file in any state (owner only); `DELETE /jobs/{jobId}` deletes a draft, cancelled, rejected or failed file (owner only; `409 in_queue` while it is waiting or on a laser, `409 keep_record` for a finished cut, `409 handed_in` for work handed in for an activity; its G-code and history go with it).

@@ -19,6 +19,8 @@ class School(Base):
     __tablename__ = "schools"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
+    #: Files that arrive while this is on are approved at once (whatever a class says). NULL (a school made before this existed) takes `Settings.auto_approve_default`.
+    auto_approve: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

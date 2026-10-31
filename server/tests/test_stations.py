@@ -106,18 +106,14 @@ class TestRun:
         for path in ("frame", "assign"):
             assert client.post(f"{API}/jobs/{jid}/{path}", json={"station": "station-1", "materialConfirmed": True}, headers=auth(tokens["pupil"])).status_code == 403
 
-    def test_untested_material_blocked_unless_teacher_overrides(self, client, tokens):
+    def test_untested_material_is_only_a_warning(self, client, tokens):
         jid = approved_job(client, tokens, preset={"id": "mdf-3mm", "version": 1})
         sh = auth(tokens["station"])
         with FakeCutter(client, tokens["station"]):
             wait_for(lambda: st(client, tokens)["online"])
             assert client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=sh).status_code == 202
-            body = {"station": "station-1", "materialConfirmed": True}
-            r = client.post(f"{API}/jobs/{jid}/assign", json=body, headers=sh)
-            assert r.status_code == 422 and r.json()["code"] == "untested_material"
-            assert client.post(f"{API}/jobs/{jid}/assign", json={**body, "allowUntested": True}, headers=sh).status_code == 422  # station may not override
-            t = client.post(f"{API}/jobs/{jid}/assign", json={**body, "allowUntested": True}, headers=auth(tokens["teacher"]))
-            assert t.status_code == 200, t.text
+            r = client.post(f"{API}/jobs/{jid}/assign", json={"station": "station-1", "materialConfirmed": True}, headers=sh)
+            assert r.status_code == 200, r.text
 
     def test_refusal_returns_the_job_to_the_queue(self, client, tokens):
         jid = approved_job(client, tokens)
@@ -360,17 +356,11 @@ class TestEdgeAlignedPointyDesign:
 
 
 class TestMarkTested:
-    def test_marking_a_material_tested_lets_files_already_waiting_cut(self, client, tokens):
-        jid = approved_job(client, tokens, preset={"id": "mdf-3mm", "version": 1})
-        sh = auth(tokens["station"])
-        with FakeCutter(client, tokens["station"]):
-            wait_for(lambda: st(client, tokens)["online"])
-            client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=sh)
-            body = {"station": "station-1", "materialConfirmed": True}
-            assert client.post(f"{API}/jobs/{jid}/assign", json=body, headers=sh).json()["code"] == "untested_material"
-            m = client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-1"}, headers=auth(tokens["teacher"]))
-            assert m.status_code == 200 and "station-1" in m.json()["testedOn"]
-            assert client.post(f"{API}/jobs/{jid}/assign", json=body, headers=sh).status_code == 200
+    def test_marking_a_material_tested_and_untested(self, client, tokens):
+        m = client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-1"}, headers=auth(tokens["teacher"]))
+        assert m.status_code == 200 and "station-1" in m.json()["testedOn"]
+        u = client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-1", "tested": False}, headers=auth(tokens["teacher"]))
+        assert "station-1" not in u.json()["testedOn"]
 
     def test_only_staff_and_only_a_real_laser(self, client, tokens):
         assert client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-1"}, headers=auth(tokens["pupil"])).status_code == 403

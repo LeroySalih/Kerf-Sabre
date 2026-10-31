@@ -4,7 +4,7 @@ Schemas and the API contract are versioned together. Breaking change = major bum
 
 ## 0.2.27 - mark a material tested on a laser (additive)
 - `openapi.yaml`: `POST /presets/{presetId}/tested {station, tested?}` (teacher, admin, technician) adds the laser to (or, with `tested: false`, removes it from) the preset's `testedOn`, as a new preset version.
-- Behaviour: Start checks `testedOn` on the material's **latest** version, so marking it tested also clears files already in the queue. The `allowUntested` override is open to technicians as well as teachers and admins.
+- Behaviour: a material that has not been test-gridded on a laser **no longer blocks Start** (`422 untested_material` is gone); it stays a warning. `allowUntested` is accepted and ignored.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.27`.
 
 ## 0.2.26 - auto-approve switch (additive)

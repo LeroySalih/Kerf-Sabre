@@ -154,7 +154,7 @@ def validate_for_cutting(s: Session, j: Job, cfg: Settings) -> None:
     if is_material_test(j):
         warnings.append("This is a material test, so settings that have not been tested yet are allowed.")
     if untested_on and not is_material_test(j):
-        warnings.append(f"This material has not been test-gridded yet on: {', '.join(untested_on)}. Run a material test before cutting there.")
+        warnings.append(f"This material has not been test-gridded yet on: {', '.join(untested_on)} (a material test is optional).")
     warnings += [w for w in r.warnings if w not in warnings and "test" not in w.lower()]
     j.estimate = r.estimate
     j.warnings = warnings

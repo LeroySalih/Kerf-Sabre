@@ -148,7 +148,7 @@ def generate(job: dict[str, Any], preset: dict[str, Any], machine: dict[str, Any
     if bx0 < -eps or by0 < -eps or bx1 > bw + eps or by1 > bh + eps:
         raise GcodeError(_fit_message(origin["mode"] == "current-position", head, (bx0, by0, bx1, by1), (bw, bh), eps))
     if rp.untested:
-        warnings.append("This material has not been test-gridded on this laser yet. Run a material test first.")
+        warnings.append("This material has not been test-gridded on this laser yet (a material test is optional).")
 
     air = machine.get("airAssist") or {}
     air_cmd = air.get("command") if air.get("supported") is not False else None

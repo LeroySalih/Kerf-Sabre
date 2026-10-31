@@ -3,11 +3,13 @@ import { openClasses } from "../classesui";
 import { openClassWork } from "../activitiesui";
 import { infoDialog, openDialog, type DialogValue } from "../dialog";
 import { profileFromForm, stationFields } from "../machineform";
+import { materialFields, opText, overrideFields, presetFromForm, presetWithOverride } from "../materialform";
+import { presetLabel, type Preset } from "../presets";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
-  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
+  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
   listJobsByStatus, pupilLabel, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
@@ -182,6 +184,55 @@ const queue: Page = {
   },
 };
 
+// ---------------------------------------------------------------- materials (power, speed, passes, kerf; per-laser settings)
+
+const materials: Page = {
+  key: "materials", title: "Materials", lead: "Each material's laser settings: power, speed and passes for Cut and Score, and the kerf. A laser can have its own settings for a material. Every change is a new version: files already sent keep the settings they were sent with.",
+  mount(host, ctx) {
+    const s = ctx.session;
+    const draw = async () => {
+      const [list, stations] = await Promise.all([listPresets(s), listStations(s)]);
+      const redraw = () => void draw().catch((e) => fail(host, e));
+      const edit = async (cur?: Preset, copyOf?: Preset) => {
+        let typed: Record<string, DialogValue> | null = null;
+        for (;;) {
+          const base = materialFields(cur ?? copyOf).map((f) => (typed && f.key in typed ? { ...f, value: typed[f.key]! } : f));
+          const v = await openDialog(cur ? `Edit ${presetLabel(cur)}` : copyOf ? `Copy of ${presetLabel(copyOf)}` : "New material", base, { ok: "Save", intro: cur ? "Saving makes a new version. Files already sent keep the settings they were sent with." : undefined });
+          if (!v) return;
+          try {
+            if (cur) await putPreset(s, presetFromForm(v, cur));
+            else await createPreset(s, { ...presetFromForm(v), laserOverrides: copyOf?.laserOverrides ?? {}, testedOn: [] });
+            return redraw();
+          } catch (e) { await infoDialog("That didn't work", [msg(e)]); typed = v; }
+        }
+      };
+      const perLaser = async (p: Preset) => {
+        if (!stations.length) return void infoDialog("No lasers yet", ["Add a station on the Stations page first."]);
+        const pick = await openDialog(`${presetLabel(p)}: settings on one laser`, [{ key: "station", label: "Laser", type: "select", value: stations[0]!.id, options: stations.map((x) => ({ value: x.id, label: x.id })) }], { ok: "Next" });
+        if (!pick) return;
+        const station = String(pick.station);
+        let typed: Record<string, DialogValue> | null = null;
+        for (;;) {
+          const fields = overrideFields(p, station).map((f) => (typed && f.key in typed ? { ...f, value: typed[f.key]! } : f));
+          const v = await openDialog(`${presetLabel(p)} on ${station}`, fields, { ok: "Save", intro: "Fill in only what this laser does differently. Leave the rest blank." });
+          if (!v) return;
+          try { await putPreset(s, presetWithOverride(p, station, v)); return redraw(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); typed = v; }
+        }
+      };
+      const bar = el("div", { class: "ad-bar" }, btn("New material", () => void edit(), "on"));
+      if (!list.length) return host.replaceChildren(bar, empty("No materials yet."));
+      host.replaceChildren(bar, table(["Material", "Kerf", "Cut", "Score", "Own settings on", "Test-gridded on", ""], list.map((p) => el("tr", {},
+        cell(el("b", {}, presetLabel(p)), el("div", { class: "hint" }, `${p.id} · v${p.version}`)),
+        cell(`${p.kerfMm} mm`), cell(opText(p.cut)), cell(opText(p.score)),
+        cell(Object.keys(p.laserOverrides ?? {}).sort().join(", ") || "none"),
+        cell((p.testedOn ?? []).join(", ") || "none"),
+        actions(btn("Edit…", () => void edit(p)), btn("On one laser…", () => void perLaser(p)), btn("Copy…", () => void edit(undefined, p)))))),
+        el("p", { class: "hint" }, "Pupils pick the material in the Editor; the laser uses that material's settings, with the laser's own settings where it has them. Power is a percentage of the laser's maximum ($30)."));
+    };
+    void draw().catch((e) => fail(host, e));
+  },
+};
+
 // ---------------------------------------------------------------- stations (the lasers, and the Cutter software that runs on each laser's PC)
 
 /** Add a station (no `cur`) or change one. Opens the form, then saves the profile. Resolves true if something was saved. */
@@ -352,6 +403,6 @@ const schools: Page = {
 export function pagesFor(role: string): Page[] {
   if (role === "platform") return [schools];
   if (role === "technician") return [stationPages]; // technicians run the stations and see nothing else here
-  const base = [overview, classes, pupils, activities, queue, stations];
+  const base = [overview, classes, pupils, activities, queue, materials, stations];
   return role === "admin" ? [...base, stationPages, staff] : base;
 }

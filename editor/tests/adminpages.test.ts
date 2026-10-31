@@ -9,5 +9,7 @@ describe("which Admin pages a role sees", () => {
     expect(pagesFor("admin").map((p) => p.key)).toContain("stationpages");
     expect(pagesFor("teacher").map((p) => p.key)).not.toContain("stationpages");
     expect(pagesFor("teacher").map((p) => p.key)).not.toContain("staff");
+    expect(pagesFor("teacher").map((p) => p.key)).toContain("materials");
+    expect(pagesFor("technician").map((p) => p.key)).not.toContain("materials");
   });
 });

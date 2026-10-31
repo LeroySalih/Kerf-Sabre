@@ -130,3 +130,19 @@ class TestServesEditor:
             assert "Kerf" in c.get("/").text
             assert c.get("/health").json()["status"] == "ok"
             assert c.get(f"{API}/auth/me").status_code == 401  # the API is not shadowed by the static mount
+
+
+class TestMaterialsPage:
+    """What the Admin site's Materials page sends: a new material, then an edit with one laser's own settings."""
+
+    def test_create_then_edit_with_a_laser_override(self, client, tokens):
+        t = {"Authorization": f"Bearer {tokens['teacher']}"}
+        doc = {"schemaVersion": "0.2.27", "id": "mdf-6mm", "version": 1, "material": "MDF", "thicknessMm": 6,
+               "sheet": {"widthMm": 600, "heightMm": 400, "costSar": None}, "kerfMm": 0.2,
+               "cut": {"powerPct": 100, "speedMmPerS": 2, "passes": 3, "airAssist": True},
+               "score": {"powerPct": 20, "speedMmPerS": 20, "passes": 1, "airAssist": False}, "laserOverrides": {}, "testedOn": []}
+        assert client.post("/api/v1/presets", json=doc, headers=t).status_code == 201
+        doc2 = {**doc, "laserOverrides": {"station-2": {"cut": {"speedMmPerS": 1.5}}}, "testedOn": ["station-2"]}
+        r = client.put("/api/v1/presets/mdf-6mm", json=doc2, headers=t)
+        assert r.status_code == 200 and r.json()["version"] == 2
+        assert client.post("/api/v1/presets", json=doc, headers={"Authorization": f"Bearer {tokens['pupil']}"}).status_code == 403

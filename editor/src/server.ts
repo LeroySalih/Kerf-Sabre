@@ -118,6 +118,9 @@ export const myActivity = (s: Session, id: string, f?: Fetch) => request<MyActiv
 export const submitActivity = (s: Session, id: string, jobId?: string, f?: Fetch) => request<PupilWork>(s, "POST", `/activities/${encodeURIComponent(id)}/submit`, jobId ? { jobId } : {}, f);
 
 export const listPresets = (s: Session, f?: Fetch) => request<Preset[]>(s, "GET", "/presets", undefined, f);
+export const createPreset = (s: Session, p: Preset, f?: Fetch) => request<Preset>(s, "POST", "/presets", p, f);
+/** Every edit becomes the material's next version on the server; files already sent keep the version they were sent with. */
+export const putPreset = (s: Session, p: Preset, f?: Fetch) => request<Preset>(s, "PUT", `/presets/${encodeURIComponent(p.id)}`, p, f);
 export const sendJob = (s: Session, job: JobDoc, f?: Fetch) => request<Receipt>(s, "POST", "/jobs", job, f);
 export const saveDraft = (s: Session, id: string, job: JobDoc, f?: Fetch) => request<Receipt>(s, "PUT", `/jobs/${encodeURIComponent(id)}`, job, f);
 export const listQueue = (s: Session, station?: string, f?: Fetch) => request<QueueEntry[]>(s, "GET", station ? `/queue?station=${encodeURIComponent(station)}` : "/queue", undefined, f);

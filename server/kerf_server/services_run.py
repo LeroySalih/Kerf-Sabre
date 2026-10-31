@@ -149,9 +149,12 @@ def assign_checks(s: Session, hub: Hub, cfg: Settings, who, j: Job, station_id: 
             raise ApiError(409, "not_framed", "Check the position first: run Frame so the laser traces the outline with the laser off.")
         if not j.framed_bounds or not _same(j.framed_bounds, b):
             raise ApiError(409, "moved_since_frame", "The laser head has moved since you checked the position. Frame again.")
-    if r.untested and not sj.is_material_test(j):
-        if not (allow_untested and who.is_teacher):
-            raise ApiError(422, "untested_material", "This material has not been test-gridded on this laser. Run a material test first (a teacher can override).")
+    # Whether the material is tested on this laser is read from its LATEST preset, so marking it tested also clears files already in the queue.
+    latest = sp.latest_preset(s, j.school_id, j.preset_id) or {}
+    untested = station_id not in (latest.get("testedOn") or [])
+    if untested and not sj.is_material_test(j):
+        if not (allow_untested and who.can_override_queue):
+            raise ApiError(422, "untested_material", "This material has not been test-gridded on this laser. Cut a material test grid, then mark it tested (a technician, teacher or admin can also cut anyway).")
     return live, machine, r, b
 
 

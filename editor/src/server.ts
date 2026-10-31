@@ -127,6 +127,7 @@ export const frameJob = (s: Session, id: string, station: string, opts: { skipQu
 export const assignJob = (s: Session, id: string, station: string, materialConfirmed: boolean, opts: { skipQueue?: boolean; allowUntested?: boolean } = {}, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/assign`, { station, materialConfirmed, ...opts }, f);
 export const disconnectStation = (s: Session, station: string, f?: Fetch) => request<null>(s, "POST", `/stations/${encodeURIComponent(station)}/disconnect`, undefined, f);
 export const takeJob = (s: Session, id: string, station: string, f?: Fetch) => request<{ id: string; station: string }>(s, "POST", `/jobs/${encodeURIComponent(id)}/take`, { station }, f);
+export const markTested = (s: Session, presetId: string, station: string, tested = true, f?: Fetch) => request<Preset>(s, "POST", `/presets/${encodeURIComponent(presetId)}/tested`, { station, tested }, f);
 export const controlStation = (s: Session, station: string, command: "stop" | "pause" | "resume", f?: Fetch) => request<unknown>(s, "POST", `/stations/${encodeURIComponent(station)}/control`, { command }, f);
 export const deferJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/defer`, undefined, f);
 export const approveJob = (s: Session, id: string, station?: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/approve`, station ? { station } : {}, f);

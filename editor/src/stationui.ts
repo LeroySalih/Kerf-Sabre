@@ -5,9 +5,9 @@ import { createAlignView, type AlignView } from "./alignui";
 import { openCalibration } from "./calibrateui";
 import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
-import { findPreset, presetLabel } from "./presets";
+import { findPreset, presetLabel, setPresets } from "./presets";
 import {
-  STATUS_TEXT, ServerError, disconnectStation, pupilLabel, takeJob, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, disconnectStation, listPresets, markTested, pupilLabel, takeJob, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -250,6 +250,17 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     if (st?.cameraAvailable && calib && bed && job) out.push(h("div", { class: "st-actions" }, button("Line up on the camera picture", () => void startAlign(next.jobId!), busy ? "disabled" : "on")));
     else if (st?.cameraAvailable && calib === null) out.push(h("p", { class: "hint" }, "Camera alignment is not set up for this laser yet. A teacher can do it on the Admin site (Lasers). Until then, move the laser head to your material and press Frame."));
     out.push(h("p", { class: "st-say" }, step.say));
+    // Material not test-gridded on this laser: staff can mark it tested (after cutting a test grid) or cut this file anyway.
+    const staff = ["technician", "teacher", "admin"].includes(session.role);
+    const pr = findPreset(next.presetId ?? job?.preset.id);
+    const isTestGrid = !!job?.objects.some((o) => (o as { settings?: unknown }).settings);
+    if (staff && pr && !isTestGrid && !(pr.testedOn ?? []).includes(stationId)) {
+      out.push(h("div", { class: "st-note" },
+        h("p", {}, `${material} is not marked as test-gridded on ${stationId}. Cut a test grid (Editor: Tools > Material test grid, send it, cut it here), check the result, then mark it tested. Or cut this file anyway.`),
+        h("div", { class: "st-actions" },
+          button(`Mark ${material} tested on ${stationId}`, () => { if (confirm(`Mark ${material} as test-gridded on ${stationId}? Do this after a test grid has been cut on this laser and the settings look right.`)) void guard(async () => { await markTested(session, pr.id, stationId); setPresets(await listPresets(session)); say(`${material} is now marked as tested on ${stationId}.`); }); }),
+          button("Cut anyway (override)", () => void guard(async () => { await assignJob(session, next.jobId!, stationId, true, { ...skip(next), allowUntested: true }); confirmed = false; lastJob = null; }), step.canStart && !busy ? "" : "disabled"))));
+    }
     const check = h("input", { type: "checkbox" }) as HTMLInputElement;
     check.checked = confirmed;
     check.disabled = !step.framed || busy;

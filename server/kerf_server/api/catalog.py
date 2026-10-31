@@ -41,6 +41,25 @@ def update_preset(preset_id: str, doc: dict[str, Any] = Body(...), p: Principal 
     return sp.update_preset(s, p.school, preset_id, doc, p.id)
 
 
+@router.post("/presets/{preset_id}/tested")
+def mark_tested(preset_id: str, body: dict[str, Any] = Body(...), p: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
+    """After a material test grid was cut on a laser and the settings look right: mark the material tested there (or untested again).
+    Makes a new preset version, like any preset edit."""
+    station, tested = body.get("station"), body.get("tested", True)
+    if not isinstance(station, str) or not isinstance(tested, bool):
+        raise ApiError(422, "invalid", "Send station and, optionally, tested: true or false.")
+    if sp.get_machine(s, p.school, station) is None:
+        raise ApiError(404, "not_found", f"There is no laser '{station}'.")
+    cur = sp.latest_preset(s, p.school, preset_id)
+    if cur is None:
+        raise ApiError(404, "not_found", f"There is no preset '{preset_id}'.")
+    on = set(cur.get("testedOn") or [])
+    want = on | {station} if tested else on - {station}
+    if want == on:
+        return cur
+    return sp.update_preset(s, p.school, preset_id, {**cur, "testedOn": sorted(want)}, p.id)
+
+
 @router.get("/machines")
 def list_machines(who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     return sp.list_machines(s, who.school)

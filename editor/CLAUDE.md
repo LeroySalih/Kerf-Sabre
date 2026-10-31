@@ -76,3 +76,5 @@ Station page, picking and rejecting: a technician (or teacher/admin) clicks any 
 **Taking over**: on a laser's Station page every waiting file is clickable, including ones meant for (or being set up on) another laser. Those show "This file is for station-N" with **Take over for station-M** (`POST /jobs/{id}/take`) and Reject; after taking over, the normal Frame/Start flow applies.
 
 **Auto-approve** (Admin site, Queue page): a checkbox above the queue (`setAutoApprove`, `PATCH /school`), on by default. While on, new files skip *Waiting for approval* and go straight to the queue; files already waiting are not affected.
+
+**Untested material at the laser**: when the material is not in `testedOn` for this laser, the Station page shows staff (technician, teacher, admin) **Mark <material> tested on <laser>** (`markTested`, after a confirm; presets are reloaded) and **Cut anyway (override)** (`allowUntested`). A material test grid itself (Editor: Tools > Material test grid) is never blocked.

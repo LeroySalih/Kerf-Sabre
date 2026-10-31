@@ -357,3 +357,22 @@ class TestEdgeAlignedPointyDesign:
             r = client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=auth(tokens["station"]))
             assert r.status_code == 202, r.text
             assert r.json()["bounds"]["minX"] >= -0.01 and r.json()["bounds"]["minY"] >= -0.01
+
+
+class TestMarkTested:
+    def test_marking_a_material_tested_lets_files_already_waiting_cut(self, client, tokens):
+        jid = approved_job(client, tokens, preset={"id": "mdf-3mm", "version": 1})
+        sh = auth(tokens["station"])
+        with FakeCutter(client, tokens["station"]):
+            wait_for(lambda: st(client, tokens)["online"])
+            client.post(f"{API}/jobs/{jid}/frame", json={"station": "station-1"}, headers=sh)
+            body = {"station": "station-1", "materialConfirmed": True}
+            assert client.post(f"{API}/jobs/{jid}/assign", json=body, headers=sh).json()["code"] == "untested_material"
+            m = client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-1"}, headers=auth(tokens["teacher"]))
+            assert m.status_code == 200 and "station-1" in m.json()["testedOn"]
+            assert client.post(f"{API}/jobs/{jid}/assign", json=body, headers=sh).status_code == 200
+
+    def test_only_staff_and_only_a_real_laser(self, client, tokens):
+        assert client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-1"}, headers=auth(tokens["pupil"])).status_code == 403
+        assert client.post(f"{API}/presets/mdf-3mm/tested", json={"station": "station-9"}, headers=auth(tokens["teacher"])).status_code == 404
+        assert client.post(f"{API}/presets/nope/tested", json={"station": "station-1"}, headers=auth(tokens["teacher"])).status_code == 404

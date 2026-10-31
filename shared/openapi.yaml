@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.26
+  version: 0.2.27
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -517,6 +517,23 @@ paths:
             schema: {$ref: "./preset.schema.json"}
       responses:
         "200": {description: Updated}
+  /presets/{presetId}/tested:
+    post:
+      summary: Teacher, admin or technician. Mark the material test-gridded on a laser (body station; tested false removes it). Makes a new preset version.
+      parameters:
+        - {name: presetId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [station]
+              properties:
+                station: {type: string}
+                tested: {type: boolean, default: true}
+      responses:
+        "200": {description: The new preset version}
   /machines:
     get:
       summary: List machine profiles

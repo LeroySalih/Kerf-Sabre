@@ -11,7 +11,7 @@ describe("station form", () => {
   });
   it("makes a profile that fits the schema's shape", () => {
     expect(profileFromForm(answers)).toEqual({
-      schemaVersion: "0.2.26", id: "station-5", name: "Station 5", model: null, placeholder: false,
+      schemaVersion: "0.2.27", id: "station-5", name: "Station 5", model: null, placeholder: false,
       bed: { widthMm: 400, heightMm: 415, originCorner: "front-left" },
       grbl: { baud: 115200, laserMode: true, s30Max: 1000 }, airAssist: { command: "M8", supported: null }, camera: { type: "usb-uvc" },
     });

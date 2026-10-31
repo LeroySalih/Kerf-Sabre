@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.27 - mark a material tested on a laser (additive)
+- `openapi.yaml`: `POST /presets/{presetId}/tested {station, tested?}` (teacher, admin, technician) adds the laser to (or, with `tested: false`, removes it from) the preset's `testedOn`, as a new preset version.
+- Behaviour: Start checks `testedOn` on the material's **latest** version, so marking it tested also clears files already in the queue. The `allowUntested` override is open to technicians as well as teachers and admins.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.27`.
+
 ## 0.2.26 - auto-approve switch (additive)
 - `openapi.yaml`: `GET /school` carries `autoApprove`; new `PATCH /school {autoApprove}` (teacher or admin). While it is on, every file submitted in that school is approved at once and goes straight to the queue, whatever its class's approval setting. Files already waiting when it is switched on are not approved by it. A school that has never set it uses the Server's `KERF_AUTO_APPROVE` (default **on**).
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.26`.

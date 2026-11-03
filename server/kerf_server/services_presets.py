@@ -11,9 +11,14 @@ from .errors import ApiError
 from .models import MachineRow, PresetRow
 
 
+def _latest_row(s: Session, school: str, preset_id: str) -> PresetRow | None:
+    return s.scalar(select(PresetRow).where(PresetRow.school_id == school, PresetRow.id == preset_id).order_by(PresetRow.version.desc()).limit(1))
+
+
 def latest_preset(s: Session, school: str, preset_id: str) -> dict[str, Any] | None:
-    row = s.scalar(select(PresetRow).where(PresetRow.school_id == school, PresetRow.id == preset_id).order_by(PresetRow.version.desc()).limit(1))
-    return row.data if row else None
+    """The newest version of a material in the catalogue; None once it has been deleted (old versions stay for old files: `preset_version`)."""
+    row = _latest_row(s, school, preset_id)
+    return row.data if row and not row.deleted else None
 
 
 def preset_version(s: Session, school: str, preset_id: str, version: int) -> dict[str, Any] | None:
@@ -24,12 +29,29 @@ def preset_version(s: Session, school: str, preset_id: str, version: int) -> dic
 def list_latest_presets(s: Session, school: str) -> list[dict[str, Any]]:
     newest = select(PresetRow.id, func.max(PresetRow.version).label("v")).where(PresetRow.school_id == school).group_by(PresetRow.id).subquery()
     rows = s.scalars(select(PresetRow).join(newest, (PresetRow.id == newest.c.id) & (PresetRow.version == newest.c.v)).where(PresetRow.school_id == school).order_by(PresetRow.id))
-    return [r.data for r in rows]
+    return [r.data for r in rows if not r.deleted]
+
+
+def delete_preset(s: Session, school: str, preset_id: str) -> None:
+    """Take a material out of the catalogue. Refused while files that are waiting or on a laser use it (change their material first).
+    Every version is kept (marked deleted) so files already cut can still be looked at and reproduced."""
+    from .models import Job
+
+    if latest_preset(s, school, preset_id) is None:
+        raise ApiError(404, "not_found", f"There is no material '{preset_id}'.")
+    busy = s.scalar(select(func.count()).select_from(Job).where(Job.school_id == school, Job.preset_id == preset_id, Job.status.in_(("submitted", "approved", "assigned", "running"))))
+    if busy:
+        raise ApiError(409, "material_in_use", f"{busy} file{'s' if busy != 1 else ''} waiting for approval, in the queue or on a laser use this material. Change their material (Queue page) or let them finish first.")
+    for row in s.scalars(select(PresetRow).where(PresetRow.school_id == school, PresetRow.id == preset_id)):
+        row.deleted = True
 
 
 def create_preset(s: Session, school: str, doc: dict[str, Any], actor: str) -> dict[str, Any]:
-    if latest_preset(s, school, doc["id"]) is not None:
+    old = _latest_row(s, school, doc["id"])
+    if old is not None and not old.deleted:
         raise ApiError(409, "conflict", f"A preset called '{doc['id']}' already exists. Update it instead.")
+    if old is not None:  # the id of a deleted material: bring it back as its next version (old files keep theirs)
+        doc = {**doc, "version": old.version + 1}
     s.add(PresetRow(school_id=school, id=doc["id"], version=doc["version"], data=doc, updated_by=actor))
     return doc
 

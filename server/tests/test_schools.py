@@ -121,6 +121,8 @@ class TestFilesAndQueueAreSeparate:
             assert client.post(f"{API}/jobs/{jb}/reject", json={"reason": "no"}, headers=who).status_code == 404
             assert client.post(f"{API}/queue/{jb}/move", json={"to": "front"}, headers=who).status_code == 404
             assert client.get(f"{API}/jobs/{jb}/gcode", headers=who).status_code == 404
+            assert client.put(f"{API}/jobs/{jb}/preset", json={"presetId": "mdf-3mm"}, headers=who).status_code == 404
+            assert client.post(f"{API}/jobs/{jb}/requeue", headers=who).status_code == 404
 
     def test_each_school_has_its_own_queue_and_tickets_are_only_that_schools(self, client, world):
         a, b = world["alpha"], world["beta"]
@@ -185,6 +187,9 @@ class TestLasersAndMaterialsAreSeparate:
         edited = {**doc, "material": "Changed"}
         assert client.put(f"{API}/presets/alpha-only", json=edited, headers=a["teacher"]).json()["version"] == 2
         assert client.get(f"{API}/presets/alpha-only", headers=b["pupil"]).json()["version"] == 1
+        # deleting one school's material leaves the other's
+        assert client.delete(f"{API}/presets/alpha-only", headers=a["teacher"]).status_code == 204
+        assert client.get(f"{API}/presets/alpha-only", headers=b["pupil"]).status_code == 200
 
 
 def test_a_database_made_before_schools_moves_into_the_default_school(tmp_path):

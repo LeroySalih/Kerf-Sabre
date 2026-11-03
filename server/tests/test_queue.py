@@ -284,3 +284,42 @@ class TestANewSendReplacesTheOldOne:
                 ids.append(jid)
             assert c.get(f"{API}/jobs/{ids[0]}", headers=auth(tk["teacher"])).json()["status"] == "cancelled"
             assert [e["jobId"] for e in c.get(f"{API}/queue", headers=auth(tk["teacher"])).json()] == [ids[1]]
+
+
+class TestMaterialsAndProcessedFiles:
+    def test_change_a_waiting_files_material_keeps_its_place(self, client, tokens):
+        a, b = approved_job(client, tokens), approved_job(client, tokens)
+        t = auth(tokens["teacher"])
+        r = client.put(f"{API}/jobs/{a}/preset", json={"presetId": "mdf-3mm"}, headers=t)
+        assert r.status_code == 200, r.text
+        assert client.get(f"{API}/jobs/{a}", headers=t).json()["preset"]["id"] == "mdf-3mm"
+        assert [e["jobId"] for e in queue(client, tokens["teacher"])] == [a, b]
+        assert client.put(f"{API}/jobs/{a}/preset", json={"presetId": "nope"}, headers=t).status_code == 422
+        assert client.put(f"{API}/jobs/{a}/preset", json={"presetId": "mdf-3mm"}, headers=auth(tokens["pupil"])).status_code == 403
+
+    def test_a_material_in_use_cannot_be_deleted_then_can_and_old_files_still_open(self, client, tokens):
+        t = auth(tokens["teacher"])
+        a = approved_job(client, tokens, preset={"id": "mdf-3mm", "version": 1})
+        r = client.delete(f"{API}/presets/mdf-3mm", headers=t)
+        assert r.status_code == 409 and r.json()["code"] == "material_in_use"
+        client.post(f"{API}/jobs/{a}/cancel", headers=auth(tokens["pupil"]))
+        assert client.delete(f"{API}/presets/mdf-3mm", headers=t).status_code == 204
+        assert "mdf-3mm" not in [p["id"] for p in client.get(f"{API}/presets", headers=t).json()]
+        assert client.get(f"{API}/jobs/{a}", headers=t).status_code == 200
+        # a new file in the deleted material is refused; the id can be used again for a new material
+        from .test_jobs import post
+        assert post(client, tokens, status="submitted", preset={"id": "mdf-3mm", "version": 1}).status_code == 422
+        assert client.delete(f"{API}/presets/mdf-3mm", headers=auth(tokens["pupil"])).status_code == 403
+
+    def test_a_processed_file_goes_back_to_the_end_of_the_queue(self, client, tokens):
+        t = auth(tokens["teacher"])
+        a, b = approved_job(client, tokens), approved_job(client, tokens)
+        client.post(f"{API}/jobs/{a}/reject", json={"reason": "too big"}, headers=t)
+        done = client.get(f"{API}/jobs?status=done,failed,cancelled", headers=t).json()
+        assert [j["id"] for j in done] == [a]
+        r = client.post(f"{API}/jobs/{a}/requeue", headers=t)
+        assert r.status_code == 200 and r.json()["status"] == "approved"
+        q = queue(client, tokens["teacher"])
+        assert [e["jobId"] for e in q] == [b, a] and q[1]["ticket"] == 3
+        assert client.post(f"{API}/jobs/{b}/requeue", headers=t).status_code == 409  # still waiting
+        assert client.post(f"{API}/jobs/{a}/requeue", headers=auth(tokens["pupil"])).status_code == 403

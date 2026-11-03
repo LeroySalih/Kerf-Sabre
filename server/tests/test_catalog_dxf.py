@@ -11,7 +11,7 @@ API = "/api/v1"
 
 
 def preset(**over):
-    base = {"schemaVersion": "0.2.27", "id": "felt-2mm", "version": 1, "material": "Felt", "thicknessMm": 2, "sheet": {"widthMm": 300, "heightMm": 300},
+    base = {"schemaVersion": "0.2.28", "id": "felt-2mm", "version": 1, "material": "Felt", "thicknessMm": 2, "sheet": {"widthMm": 300, "heightMm": 300},
             "kerfMm": 0.1, "cut": {"powerPct": 50, "speedMmPerS": 8, "passes": 1, "airAssist": True}, "score": {"powerPct": 10, "speedMmPerS": 30, "passes": 1, "airAssist": False}}
     base.update(over)
     return base
@@ -137,7 +137,7 @@ class TestMaterialsPage:
 
     def test_create_then_edit_with_a_laser_override(self, client, tokens):
         t = {"Authorization": f"Bearer {tokens['teacher']}"}
-        doc = {"schemaVersion": "0.2.27", "id": "mdf-6mm", "version": 1, "material": "MDF", "thicknessMm": 6,
+        doc = {"schemaVersion": "0.2.28", "id": "mdf-6mm", "version": 1, "material": "MDF", "thicknessMm": 6,
                "sheet": {"widthMm": 600, "heightMm": 400, "costSar": None}, "kerfMm": 0.2,
                "cut": {"powerPct": 100, "speedMmPerS": 2, "passes": 3, "airAssist": True},
                "score": {"powerPct": 20, "speedMmPerS": 20, "passes": 1, "airAssist": False}, "laserOverrides": {}, "testedOn": []}

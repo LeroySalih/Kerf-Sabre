@@ -41,6 +41,13 @@ def update_preset(preset_id: str, doc: dict[str, Any] = Body(...), p: Principal 
     return sp.update_preset(s, p.school, preset_id, doc, p.id)
 
 
+@router.delete("/presets/{preset_id}", status_code=204)
+def delete_preset(preset_id: str, p: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """Remove a material from the catalogue (refused while waiting or queued files use it). Old files keep their settings."""
+    sp.delete_preset(s, p.school, preset_id)
+    return Response(status_code=204)
+
+
 @router.post("/presets/{preset_id}/tested")
 def mark_tested(preset_id: str, body: dict[str, Any] = Body(...), p: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     """After a material test grid was cut on a laser and the settings look right: mark the material tested there (or untested again).

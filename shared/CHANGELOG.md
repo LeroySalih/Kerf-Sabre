@@ -2,6 +2,13 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.28 - delete materials, change a file's material, put processed files back (additive)
+- `openapi.yaml`: `DELETE /presets/{presetId}` (teacher, admin): takes a material out of the catalogue. `409 material_in_use` while files waiting for approval, in the queue or on a laser use it. Every version is kept (marked deleted), so files already cut can still be opened; `GET /presets` and new files no longer see it, and sending a draft in a deleted material answers `422 unknown_preset`. Creating a material with a deleted material's id brings that id back as its next version.
+- `PUT /jobs/{jobId}/preset {presetId}` (teacher, admin, technician): change the material of a file that is waiting for approval or in the queue. It keeps its place; its estimate and warnings are worked out again and an old frame is cleared. Event `material_changed`.
+- `POST /jobs/{jobId}/requeue` (teacher, admin): a processed file (`done`, `failed`, `cancelled`, including rejected) goes back to the end of the queue, approved, with a new ticket. Event `requeued`.
+- `GET /jobs` takes `limit` (1 to 1000).
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.28`.
+
 ## 0.2.27 - mark a material tested on a laser (additive)
 - `openapi.yaml`: `POST /presets/{presetId}/tested {station, tested?}` (teacher, admin, technician) adds the laser to (or, with `tested: false`, removes it from) the preset's `testedOn`, as a new preset version.
 - Behaviour: a material that has not been test-gridded on a laser **no longer blocks Start** (`422 untested_material` is gone); it stays a warning. `allowUntested` is accepted and ignored.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.27
+  version: 0.2.28
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -517,6 +517,14 @@ paths:
             schema: {$ref: "./preset.schema.json"}
       responses:
         "200": {description: Updated}
+  /presets/{presetId}:
+    delete:
+      summary: Teacher or admin. Remove a material from the catalogue. 409 material_in_use while waiting, queued or running files use it. Old versions are kept for old files.
+      parameters:
+        - {name: presetId, in: path, required: true, schema: {type: string}}
+      responses:
+        "204": {description: Deleted}
+        "409": {description: material_in_use}
   /presets/{presetId}/tested:
     post:
       summary: Teacher, admin or technician. Mark the material test-gridded on a laser (body station; tested false removes it). Makes a new preset version.
@@ -723,6 +731,32 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /jobs/{jobId}/preset:
+    put:
+      summary: Teacher, admin or technician. Change a waiting file's material (submitted or approved). It keeps its place in the queue.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [presetId]
+              properties:
+                presetId: {type: string}
+      responses:
+        "200": {description: The receipt}
+        "409": {description: The file is not waiting}
+        "422": {description: unknown_preset}
+  /jobs/{jobId}/requeue:
+    post:
+      summary: Teacher or admin. Put a processed file (done, failed, cancelled or rejected) back at the end of the queue, approved, with a new ticket.
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: The receipt}
+        "409": {description: The file is not processed}
   /jobs/{jobId}/reject:
     post:
       summary: Teacher rejection, or a technician's for a file waiting in the queue (the reason then starts with Rejected at the laser). The job becomes cancelled with the reason.

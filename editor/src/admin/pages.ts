@@ -10,7 +10,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -178,11 +178,48 @@ const queue: Page = {
         .finally(() => { box.disabled = false; explain(); });
     });
     const bar = el("div", { class: "ad-bar" }, el("label", {}, box, " Auto-approve new files"), hint);
+    // Two tabs: the live queue, and the files already processed (cut, failed, cancelled or rejected), which can go back to the queue.
+    const tabs = el("div", { class: "ad-tabs", role: "tablist" });
     const body = el("div");
-    host.replaceChildren(bar, body);
-    return mountQueue(body, s);
+    let stop: () => void = () => {};
+    let current: "queue" | "processed" = "queue";
+    try { if (sessionStorage.getItem("kerf.admin.queueTab") === "processed") current = "processed"; } catch { /* fine */ }
+    const show = (which: "queue" | "processed") => {
+      stop();
+      current = which;
+      try { sessionStorage.setItem("kerf.admin.queueTab", which); } catch { /* fine */ }
+      tabs.replaceChildren(...([["queue", "Queue"], ["processed", "Processed files"]] as const).map(([k, label]) => {
+        const b = btn(label, () => show(k), k === current ? "on" : "");
+        b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(k === current));
+        return b;
+      }));
+      if (which === "queue") { host.replaceChildren(tabs, bar, body); stop = mountQueue(body, s); }
+      else { host.replaceChildren(tabs, body); stop = mountProcessed(body, s); }
+    };
+    show(current);
+    return () => stop();
   },
 };
+
+const PROCESSED = "done,failed,cancelled";
+
+/** Files that have left the queue: cut, failed, cancelled or rejected (newest first). Any of them can go back to the end of the queue. */
+function mountProcessed(host: HTMLElement, s: Session): () => void {
+  const draw = async (): Promise<void> => {
+    const [jobs, materials] = await Promise.all([listJobsByStatus(s, PROCESSED, undefined, 200), listPresets(s)]);
+    const mat = (id: string) => { const p = materials.find((m) => m.id === id); return p ? presetLabel(p) : `${id} (removed)`; };
+    const redraw = () => void draw().catch((e) => fail(host, e));
+    if (!jobs.length) return void host.replaceChildren(empty("Nothing has been processed yet."));
+    host.replaceChildren(table(["Sent", "Pupil", "File", "Material", "Result", ""], jobs.map((j) => el("tr", {},
+      cell(shortDate(j.createdAt)), cell(pupilLabel(j.pupilId, j.pupilName)),
+      cell(el("span", { title: j.id }, (j as JobSummary & { name?: string | null }).name || (j.ticket ? `Ticket ${j.ticket}` : j.id))),
+      cell(mat(j.preset.id)),
+      cell(el("span", { class: `ad-tag ${j.status === "done" ? "ok" : "warn"}` }, STATUS_TEXT[j.status] ?? j.status), ...(j.statusReason ? [el("div", { class: "hint" }, j.statusReason)] : [])),
+      actions(btn("Back to the queue", () => { if (confirm("Put this file back at the end of the queue?")) void attempt(() => requeueJob(s, j.id), redraw); }))))),
+      el("p", { class: "hint" }, "The newest 200. A file put back gets a new ticket at the end of the queue, already approved."));
+  };
+  return refreshing(host, draw, 10000);
+}
 
 // ---------------------------------------------------------------- materials (power, speed, passes, kerf; per-laser settings)
 
@@ -226,8 +263,9 @@ const materials: Page = {
         cell(`${p.kerfMm} mm`), cell(opText(p.cut)), cell(opText(p.score)),
         cell(Object.keys(p.laserOverrides ?? {}).sort().join(", ") || "none"),
         cell((p.testedOn ?? []).join(", ") || "none"),
-        actions(btn("Edit…", () => void edit(p)), btn("On one laser…", () => void perLaser(p)), btn("Copy…", () => void edit(undefined, p)))))),
-        el("p", { class: "hint" }, "Pupils pick the material in the Editor; the laser uses that material's settings, with the laser's own settings where it has them. Power is a percentage of the laser's maximum ($30)."));
+        actions(btn("Edit…", () => void edit(p)), btn("On one laser…", () => void perLaser(p)), btn("Copy…", () => void edit(undefined, p)),
+          btn("Delete", () => { if (confirm(`Delete ${presetLabel(p)}? Pupils can no longer choose it. Files already cut keep their settings.`)) void attempt(() => deletePreset(s, p.id), redraw); }, "danger"))))),
+        el("p", { class: "hint" }, "Pupils pick the material in the Editor; the laser uses that material's settings, with the laser's own settings where it has them. Power is a percentage of the laser's maximum ($30). A material that files in the queue still use cannot be deleted: change their material on the Queue page first."));
     };
     void draw().catch((e) => fail(host, e));
   },

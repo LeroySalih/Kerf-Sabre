@@ -33,6 +33,7 @@ def list_jobs(
     status: str | None = Query(None),
     station: str | None = Query(None),
     mine: bool = Query(False),
+    limit: int | None = Query(None, ge=1, le=1000),
     who: Principal = Depends(require("pupil", "station")),
     s: Session = Depends(get_session),
 ):
@@ -43,7 +44,7 @@ def list_jobs(
         q = q.where(Job.status.in_([x.strip() for x in status.split(",") if x.strip()]))
     if station:
         q = q.where((Job.station == station) | Job.station.is_(None))
-    jobs = list(s.scalars(q))
+    jobs = list(s.scalars(q.limit(limit) if limit else q))
     named = people.names(s, who.school, (j.pupil_id for j in jobs)) if who.staff() else {}
     return [{**sj.to_doc(j), **({"pupilName": named[j.pupil_id]} if j.pupil_id in named else {})} for j in jobs]
 
@@ -120,6 +121,25 @@ def submit_job(job_id: str, who: Principal = Depends(require("pupil")), s: Sessi
 def approve_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     j = sj.get_visible(s, job_id, who)
     sj.approve(s, who, j, (body or {}).get("station"))
+    s.flush()
+    return _receipt(s, j)
+
+
+@router.put("/jobs/{job_id}/preset")
+def change_preset(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """Change a waiting file's material (Queue page). It keeps its place in the queue."""
+    pid = body.get("presetId")
+    if not isinstance(pid, str) or not pid:
+        raise ApiError(422, "invalid", "Send presetId: the material to use.")
+    j = sj.change_preset(s, cfg, who, sj.get_visible(s, job_id, who), pid)
+    s.flush()
+    return _receipt(s, j)
+
+
+@router.post("/jobs/{job_id}/requeue")
+def requeue_job(job_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """Put a processed file (cut, failed, cancelled or rejected) back at the end of the queue."""
+    j = sj.requeue(s, who, sj.get_visible(s, job_id, who))
     s.flush()
     return _receipt(s, j)
 

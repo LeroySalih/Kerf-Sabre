@@ -3,7 +3,7 @@
 import type { DialogField, DialogValue } from "./dialog";
 import type { Operation, Preset } from "./presets";
 
-export const SCHEMA_VERSION = "0.2.27";
+export const SCHEMA_VERSION = "0.2.28";
 export const MATERIAL_ID = /^[a-z0-9][a-z0-9-]*$/;
 const YESNO = [{ value: "yes", label: "On" }, { value: "no", label: "Off" }];
 

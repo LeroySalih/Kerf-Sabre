@@ -17,7 +17,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.27"
+SCHEMA_VERSION = "0.2.28"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -213,8 +213,9 @@ def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
     if j.status != "draft":
         raise ApiError(409, "conflict", f"This job is already {j.status}.")
     p = sp.latest_preset(s, j.school_id, j.preset_id)
-    if p is not None:  # pick up preset edits made since the draft was saved
-        j.preset_version = p["version"]
+    if p is None:
+        raise ApiError(422, "unknown_preset", "This file's material has been removed from the catalogue. Pick another material, then send it again.")
+    j.preset_version = p["version"]  # pick up preset edits made since the draft was saved
     validate_for_cutting(s, j, cfg)
     if cfg.replace_old_sends:
         j._replaced = replace_waiting(s, who, j)  # type: ignore[attr-defined]
@@ -260,6 +261,42 @@ def approve(s: Session, who, j: Job, station: str | None) -> Job:
 
     queue.enqueue(s, j)
     event(s, j.id, who.id, "approved", {"station": station})
+    return j
+
+
+def change_preset(s: Session, cfg: Settings, who, j: Job, preset_id: str) -> Job:
+    """Staff change the material of a file that is waiting (for approval or in the queue) without the pupil sending it again.
+    The file keeps its place; its estimate and warnings are worked out again, and a frame made with the old material is forgotten."""
+    if j.status not in ("submitted", "approved"):
+        raise ApiError(409, "conflict", f"Only a waiting file's material can be changed; this one is {j.status}.")
+    p = sp.latest_preset(s, j.school_id, preset_id)
+    if p is None:
+        raise ApiError(422, "unknown_preset", f"There is no material '{preset_id}'.")
+    old = (j.preset_id, j.preset_version, j.estimate, j.warnings)
+    j.preset_id, j.preset_version = p["id"], p["version"]
+    try:
+        validate_for_cutting(s, j, cfg)
+    except ApiError:
+        j.preset_id, j.preset_version, j.estimate, j.warnings = old
+        raise
+    j.framed_station = j.framed_at = j.framed_bounds = None
+    event(s, j.id, who.id, "material_changed", {"from": old[0], "to": p["id"]})
+    return j
+
+
+def requeue(s: Session, who, j: Job) -> Job:
+    """Put a processed file (cut, failed, cancelled or rejected) back at the end of the queue, already approved, with a new ticket."""
+    if j.status not in ("done", "failed", "cancelled"):
+        raise ApiError(409, "conflict", f"Only a processed file can be put back in the queue; this one is {j.status}.")
+    if sp.latest_preset(s, j.school_id, j.preset_id) is None:
+        raise ApiError(422, "unknown_preset", "This file's material has been removed from the catalogue. Restore it, then change its material if needed.")
+    j.status, j.status_reason, j.approved_by = "approved", None, who.id
+    j.ticket = None  # a new ticket at the back of the queue
+    j.framed_station = j.framed_at = j.framed_bounds = None
+    from . import services_queue as queue
+
+    queue.enqueue(s, j)
+    event(s, j.id, who.id, "requeued")
     return j
 
 

@@ -109,6 +109,8 @@ class PresetRow(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Deleted from the catalogue: no longer offered or usable for new files. The rows stay so old files can still be reproduced.
+    deleted: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
 
 
 class MachineRow(Base):

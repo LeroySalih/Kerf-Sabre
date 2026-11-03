@@ -5,9 +5,9 @@ import { createAlignView, type AlignView } from "./alignui";
 import { openCalibration } from "./calibrateui";
 import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
-import { findPreset, presetLabel, setPresets } from "./presets";
+import { findPreset, presetLabel, setPresets, type Preset } from "./presets";
 import {
-  STATUS_TEXT, ServerError, disconnectStation, listPresets, markTested, pupilLabel, takeJob, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
+  STATUS_TEXT, ServerError, changeJobPreset, disconnectStation, listPresets, markTested, pupilLabel, takeJob, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
@@ -337,6 +337,7 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
   let waiting: JobSummary[] = [];
   let queue: QueueEntry[] = [];
   let stations: StationInfo[] = [];
+  let materials: Preset[] = [];
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
   let busy = false;
 
@@ -344,10 +345,18 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     if (busy) return;
     busy = true;
     try {
-      [waiting, queue, stations] = await Promise.all([listJobsByStatus(session, "submitted"), listQueue(session), listStations(session)]);
+      [waiting, queue, stations, materials] = await Promise.all([listJobsByStatus(session, "submitted"), listQueue(session), listStations(session), listPresets(session)]);
       draw();
     } finally { busy = false; }
   }
+
+  const matName = (id?: string | null) => { const p = materials.find((m) => m.id === id); return p ? presetLabel(p) : id ?? ""; };
+  /** Change a waiting file's material: the pupil does not have to send it again, and it keeps its place. */
+  const changeMaterial = (id: string, current?: string | null) => void (async () => {
+    const v = await openDialog("Change the material", [{ key: "preset", label: "Material", type: "select", value: current ?? materials[0]?.id ?? "", options: materials.map((m) => ({ value: m.id, label: presetLabel(m) })) }],
+      { ok: "Change", intro: "The file keeps its place. Its estimate is worked out again, and it must be framed again on the laser." });
+    if (v && v.preset !== current) await act(() => changeJobPreset(session, id, String(v.preset)));
+  })();
 
   function draw(): void {
     const approvals = h("div", {}, h("h3", {}, `Waiting for approval (${waiting.length})`));
@@ -355,8 +364,9 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     for (const j of waiting) {
       const sel = h("select", { title: "Pupils do not choose a laser: pick the one that should cut this file, or leave it on Any laser for the next free one" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
       approvals.append(h("div", { class: "filerow" },
-        h("span", {}, `${j.id} · ${pupilLabel(j.pupilId, j.pupilName)} · ${j.preset.id}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
+        h("span", {}, `${j.id} · ${pupilLabel(j.pupilId, j.pupilName)} · ${matName(j.preset.id)}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
         button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
+        button("Material…", () => changeMaterial(j.id, j.preset.id)),
         button("Reject…", () => void (async () => {
           const v = await openDialog("Reject this file", [{ key: "reason", label: "Reason (the pupil sees this)", type: "text", value: "" }], { ok: "Reject" });
           if (v && String(v.reason).trim()) await act(() => rejectJob(session, j.id, String(v.reason).trim()));
@@ -365,12 +375,13 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     const q = h("div", {}, h("h3", {}, `Queue (${queue.length})`));
     if (!queue.length) q.append(h("p", { class: "hint" }, "The queue is empty."));
     for (const e of queue) {
-      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${pupilLabel(e.pupilId, e.pupilName)} · ${e.presetId ?? ""}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
+      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${pupilLabel(e.pupilId, e.pupilName)} · ${matName(e.presetId)}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
       if (e.status === "approved" && e.jobId) {
         const id = e.jobId;
         row.append(
           button("⤒", () => void act(() => moveInQueue(session, id, { to: "front" })), "icon"), button("↑", () => void act(() => moveInQueue(session, id, { to: "up" })), "icon"),
           button("↓", () => void act(() => moveInQueue(session, id, { to: "down" })), "icon"), button("⤓", () => void act(() => moveInQueue(session, id, { to: "back" })), "icon"),
+          button("Material…", () => changeMaterial(id, e.presetId)),
           button("Cancel", () => { if (confirm(`Cancel ticket ${e.ticket}?`)) void act(() => cancelJob(session, id)); }, "danger"));
       }
       q.append(row);

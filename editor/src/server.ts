@@ -136,7 +136,13 @@ export const deferJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(
 export const approveJob = (s: Session, id: string, station?: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/approve`, station ? { station } : {}, f);
 export const rejectJob = (s: Session, id: string, reason: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/reject`, { reason }, f);
 export const moveInQueue = (s: Session, id: string, body: { to?: "front" | "back" | "up" | "down"; position?: number }, f?: Fetch) => request<QueueEntry[]>(s, "POST", `/queue/${encodeURIComponent(id)}/move`, body, f);
-export const listJobsByStatus = (s: Session, status: string, f?: Fetch) => request<JobSummary[]>(s, "GET", `/jobs?status=${encodeURIComponent(status)}`, undefined, f);
+export const listJobsByStatus = (s: Session, status: string, f?: Fetch, limit?: number) => request<JobSummary[]>(s, "GET", `/jobs?status=${encodeURIComponent(status)}${limit ? `&limit=${limit}` : ""}`, undefined, f);
+/** Staff: change a waiting file's material without the pupil sending it again (it keeps its place). */
+export const changeJobPreset = (s: Session, id: string, presetId: string, f?: Fetch) => request<Receipt>(s, "PUT", `/jobs/${encodeURIComponent(id)}/preset`, { presetId }, f);
+/** Staff: put a processed file (cut, failed, cancelled or rejected) back at the end of the queue. */
+export const requeueJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/requeue`, undefined, f);
+/** Staff: remove a material from the catalogue (refused while waiting or queued files use it). */
+export const deletePreset = (s: Session, id: string, f?: Fetch) => request<null>(s, "DELETE", `/presets/${encodeURIComponent(id)}`, undefined, f);
 
 /** Where the camera picture sits on the bed, or null if a teacher has not calibrated this laser's camera yet. */
 export async function getCalibration(s: Session, station: string, f?: Fetch): Promise<Calibration | null> {

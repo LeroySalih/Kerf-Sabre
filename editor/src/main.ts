@@ -29,6 +29,7 @@ import { mountIcons } from "./icons";
 import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs";
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles } from "./machine";
+import { explainIssue, scaleChoices, sizeIssue, sizeLabel, sizeOfBounds, suggestedChoice, unitsName } from "./importscale";
 import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
 import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
@@ -774,14 +775,30 @@ on("imp", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
   const f = fileInput.files?.[0];
   fileInput.value = "";
-  if (f) importDXF(await f.text(), f.name);
+  if (f) await importDXF(await f.text(), f.name);
 });
 
-function importDXF(text: string, name: string): void {
+async function importDXF(text: string, name: string): Promise<void> {
   const r = parseDXF(text);
   if (!r.shapes.length) { alert(`No importable shapes in ${name}.`); return; }
-  const k = mmPerUnit(r.insunits) ?? DEFAULT_MM_PER_UNIT; // no units in file: assume cm (Onshape default)
-  const paths = r.shapes.map((s) => scalePath(s.path, k));
+  let k = mmPerUnit(r.insunits) ?? DEFAULT_MM_PER_UNIT; // no units in file: assume cm (Onshape default)
+  let paths = r.shapes.map((s) => scalePath(s.path, k));
+  // Units are often mixed up between mm and cm: a model under 10 mm or over 40 cm is flagged, and the pupil may rescale it.
+  let rescaled = "";
+  const size = sizeOfBounds(paths.map(boundsOf));
+  if (size && sizeIssue(size)) {
+    const choices = scaleChoices(size);
+    const v = await openDialog("Check the size of this model", [
+      { key: "choice", label: "What would you like to do?", type: "radio", value: suggestedChoice(size), options: choices.map((c) => ({ value: c.id, label: c.label + (c.id !== "keep" && c.fixes ? " \u2014 looks right" : "") })) },
+    ], { intro: explainIssue(size, { unitsInFile: unitsName(r.insunits) }), ok: "Import" });
+    if (!v) { notify("Import cancelled."); return; }
+    const c = choices.find((x) => x.id === v.choice)!;
+    if (c.factor !== 1) {
+      k *= c.factor;
+      paths = r.shapes.map((s) => scalePath(s.path, k));
+      rescaled = ` Rescaled (${c.id === "mm-to-cm" ? "mm \u2192 cm" : "cm \u2192 mm"}) to ${sizeLabel(c.size)}.`;
+    }
+  }
   const min = designMin(paths); // bounding box bottom-left -> (0,0)
   // Onshape exports every edge as its own entity: chain the ones that meet into real shapes, per layer.
   const tol = joinTol();
@@ -798,7 +815,7 @@ function importDXF(text: string, name: string): void {
     selected = new Set(items.map((it) => doc.add(it.path, translation(-min.x, -min.y), it.layer).id));
   });
   const skipped = Object.entries(r.skipped).map(([t, n]) => `${n} ${t}`).join(", ");
-  notify(`Imported ${r.shapes.length} entities as ${items.length} shapes${closed ? ` (${closed} closed)` : ""}${merges ? `, joining ends within ${tol} mm` : ""}.${skipped ? ` Skipped unsupported: ${skipped}.` : ""}`);
+  notify(`Imported ${r.shapes.length} entities as ${items.length} shapes${closed ? ` (${closed} closed)` : ""}${merges ? `, joining ends within ${tol} mm` : ""}.${skipped ? ` Skipped unsupported: ${skipped}.` : ""}${rescaled}`);
 }
 
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;

@@ -4,7 +4,8 @@ export type DialogValue = number | string;
 export interface DialogField {
   key: string;
   label: string;
-  type: "number" | "select" | "text" | "password";
+  /** `radio`: a group with every option shown in full (use it when the option text matters and a dropdown would cut it off). */
+  type: "number" | "select" | "text" | "password" | "radio";
   value: DialogValue;
   min?: number;
   max?: number;
@@ -73,8 +74,35 @@ export function openDialog(title: string, fields: DialogField[], opts: DialogOpt
     }
     const grid = document.createElement("div");
     grid.className = "kgrid";
-    const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
+    const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | { value: string; focus: () => void }>();
     for (const f of fields) {
+      if (f.type === "radio") {
+        const set = document.createElement("fieldset");
+        set.className = "kradios";
+        const legend = document.createElement("legend");
+        legend.textContent = f.label;
+        set.append(legend);
+        const radios: HTMLInputElement[] = [];
+        for (const o of f.options ?? []) {
+          const row = document.createElement("label");
+          const r = document.createElement("input");
+          r.type = "radio";
+          r.name = f.key;
+          r.value = o.value;
+          r.checked = o.value === String(f.value);
+          radios.push(r);
+          row.append(r, document.createTextNode(o.label));
+          set.append(row);
+        }
+        grid.append(set);
+        // the group answers like any other input: its value is the checked option's
+        inputs.set(f.key, {
+          get value() { return radios.find((r) => r.checked)?.value ?? ""; },
+          set value(v: string) { for (const r of radios) r.checked = r.value === v; },
+          focus: () => (radios.find((r) => r.checked) ?? radios[0])?.focus(),
+        });
+        continue;
+      }
       const label = document.createElement("label");
       label.append(document.createTextNode(f.label));
       let el: HTMLInputElement | HTMLSelectElement;

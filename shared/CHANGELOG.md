@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.29 - send with open Cut paths once the pupil has confirmed (additive)
+- `openapi.yaml`: `POST /jobs/{jobId}/submit` takes an optional body `{acceptOpenPaths: true}`. A server set to block open Cut paths (`KERF_OPEN_CUT_PATHS=block`, the default) still answers `422 open_cut_path` without it, now saying the sender can confirm; with it the file is accepted with the warning "N open path(s) on the Cut layer will be cut as drawn". The Editor warns the pupil, marks the open ends and sends the flag only after they approve. Every other check (bed, preset, G-code) still applies.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.29`.
+
 ## 0.2.28 - delete materials, change a file's material, put processed files back (additive)
 - `openapi.yaml`: `DELETE /presets/{presetId}` (teacher, admin): takes a material out of the catalogue. `409 material_in_use` while files waiting for approval, in the queue or on a laser use it. Every version is kept (marked deleted), so files already cut can still be opened; `GET /presets` and new files no longer see it, and sending a draft in a deleted material answers `422 unknown_preset`. Creating a material with a deleted material's id brings that id back as its next version.
 - `PUT /jobs/{jobId}/preset {presetId}` (teacher, admin, technician): change the material of a file that is waiting for approval or in the queue. It keeps its place; its estimate and warnings are worked out again and an old frame is cleared. Event `material_changed`.

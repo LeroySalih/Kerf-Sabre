@@ -185,6 +185,37 @@ export function openDialog(title: string, fields: DialogField[], opts: DialogOpt
   });
 }
 
+/** A warning with two buttons: resolves true for the main button, false for the other (or Esc). */
+export function confirmDialog(title: string, lines: string[], opts: { intro?: string; ok?: string; cancel?: string } = {}): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dlg = document.createElement("dialog");
+    dlg.className = "kdialog";
+    const h = document.createElement("h2");
+    h.textContent = title;
+    dlg.append(h);
+    makeDraggable(dlg, h);
+    if (opts.intro) dlg.append(Object.assign(document.createElement("p"), { textContent: opts.intro }));
+    if (lines.length) {
+      const ul = document.createElement("ul");
+      for (const l of lines) ul.append(Object.assign(document.createElement("li"), { textContent: l }));
+      dlg.append(ul);
+    }
+    const row = document.createElement("div");
+    row.className = "krow";
+    const no = Object.assign(document.createElement("button"), { type: "button", textContent: opts.cancel ?? "Cancel" });
+    const yes = Object.assign(document.createElement("button"), { type: "button", className: "on", textContent: opts.ok ?? "OK" });
+    let answer = false;
+    yes.addEventListener("click", () => { answer = true; dlg.close(); });
+    no.addEventListener("click", () => dlg.close());
+    row.append(no, yes);
+    dlg.append(row);
+    document.body.append(dlg);
+    dlg.addEventListener("close", () => { dlg.remove(); resolve(answer); });
+    dlg.showModal();
+    no.focus(); // the safe answer is the default
+  });
+}
+
 /** A message dialog with an OK button and, optionally, a list of lines. */
 export function infoDialog(title: string, lines: string[], opts: { intro?: string } = {}): Promise<void> {
   return new Promise((resolve) => {

@@ -18,7 +18,7 @@ def rect_obj(oid, x, y, w, h, layer="cut", closed=True):
 
 
 def job_doc(pupil="P001", status="draft", objects=None, **over):
-    d = {"schemaVersion": "0.2.28", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
+    d = {"schemaVersion": "0.2.29", "id": "x", "pupilId": pupil, "createdAt": "2026-10-13T09:00:00Z", "status": status,
          "preset": {"id": "ply-3mm", "version": 1}, "station": None, "origin": {"mode": "absolute"},
          "objects": objects or [rect_obj("a", 20, 20, 50, 30)]}
     d.update(over)
@@ -106,6 +106,21 @@ class TestValidation:
     def test_open_cut_path_blocks(self, client, tokens):
         r = post(client, tokens, objects=[rect_obj("a", 10, 10, 20, 20, closed=False)], status="submitted")
         assert r.status_code == 422 and r.json()["code"] == "open_cut_path"
+
+    def test_open_cut_path_goes_through_when_the_sender_confirms_it_with_a_warning(self, client, tokens):
+        jid = post(client, tokens, objects=[rect_obj("a", 10, 10, 20, 20), rect_obj("o", 40, 10, 20, 20, closed=False)]).json()["id"]
+        refused = client.post(f"{API}/jobs/{jid}/submit", headers=auth(tokens["pupil"]))
+        assert refused.status_code == 422 and refused.json()["code"] == "open_cut_path" and "confirm" in refused.json()["message"]
+        still = client.get(f"{API}/jobs/{jid}", headers=auth(tokens["pupil"])).json()
+        assert still["status"] == "draft"  # a refused send changes nothing
+        r = client.post(f"{API}/jobs/{jid}/submit", json={"acceptOpenPaths": True}, headers=auth(tokens["pupil"]))
+        assert r.status_code == 200 and r.json()["status"] == "submitted"
+        assert any("open path" in w for w in r.json()["warnings"])
+
+    def test_confirming_does_not_excuse_anything_else(self, client, tokens):
+        jid = post(client, tokens, objects=[rect_obj("a", 350, 10, 100, 20, closed=False)]).json()["id"]
+        r = client.post(f"{API}/jobs/{jid}/submit", json={"acceptOpenPaths": True}, headers=auth(tokens["pupil"]))
+        assert r.status_code == 422 and "bed" in r.json()["message"]
 
     def test_open_score_path_is_fine(self, client, tokens):
         r = post(client, tokens, objects=[rect_obj("a", 10, 10, 20, 20), rect_obj("s", 12, 12, 5, 5, layer="score", closed=False)], status="submitted")

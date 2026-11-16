@@ -111,8 +111,9 @@ def replace_job(
 
 
 @router.post("/jobs/{job_id}/submit")
-def submit_job(job_id: str, who: Principal = Depends(require("pupil")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
-    j = sj.submit(s, cfg, who, sj.get_owned(s, job_id, who))
+def submit_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    accepted = isinstance(body, dict) and body.get("acceptOpenPaths") is True  # the pupil was warned about open Cut paths and chose to send anyway
+    j = sj.submit(s, cfg, who, sj.get_owned(s, job_id, who), accepted)
     s.flush()
     return _receipt(s, j)
 

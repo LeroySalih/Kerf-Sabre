@@ -203,7 +203,8 @@ export const getWorkspace = (s: Session, f?: Fetch) => request<RemoteWorkspace>(
 export const putWorkspace = (s: Session, w: { tabs: WorkspaceTab[]; active: string | null }, f?: Fetch) => request<RemoteWorkspace>(s, "PUT", "/workspace", w, f);
 
 export const cancelJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/cancel`, undefined, f);
-export const submitJob = (s: Session, id: string, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/submit`, undefined, f);
+/** Send a draft for cutting. `acceptOpenPaths` says the pupil was warned about open Cut paths and chose to send anyway. */
+export const submitJob = (s: Session, id: string, acceptOpenPaths = false, f?: Fetch) => request<Receipt>(s, "POST", `/jobs/${encodeURIComponent(id)}/submit`, acceptOpenPaths ? { acceptOpenPaths: true } : undefined, f);
 
 export function describeDuration(s: number | undefined): string {
   if (s === undefined) return "";

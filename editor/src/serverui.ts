@@ -1,6 +1,6 @@
 // Pupil sign-in and their files on the server: Save, Send for cutting, My files (open / send / cancel).
 // All talking is in server.ts; the job document is built and read back in job.ts.
-import { infoDialog, openDialog } from "./dialog";
+import { confirmDialog, infoDialog, openDialog } from "./dialog";
 import { sizeText } from "./stationlogic";
 import { openMyActivities } from "./activitiesui";
 import { closeStation, openStation, openStationPicker } from "./stationui";
@@ -22,6 +22,10 @@ export interface ServerUiContext {
   materialId: () => string;
   /** The title to save the file under (the tab's name), or null while it is still called "Untitled". */
   fileName: () => string | null;
+  /** How many shapes on the Cut layer are not closed (they would cut a line, not a part). */
+  openCutPaths: () => number;
+  /** Mark the open ends on the drawing. */
+  showOpenPaths: () => void;
   /** Why the design can't be sent right now (out of bounds, empty...), or null. */
   blocker: () => string | null;
   notify: (msg: string) => void;
@@ -298,9 +302,34 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   /** Save the file showing now without waiting, e.g. before switching tabs or signing out. */
   const flushNow = (): Promise<void> => autosave();
 
+  const OPEN_WARNING = {
+    title: "Open paths on the Cut layer",
+    intro: "A shape on the Cut layer that is not closed cuts a line, not a part, so nothing will drop out of the material.",
+    ok: "Send anyway", cancel: "Go back and check",
+  };
+
+  /** Send a draft for cutting. If the server refuses because of open Cut paths, ask the pupil once and send again with their say-so. */
+  async function submitConfirmed(id: string, accepted = false) {
+    try { return await submitJob(session!, id, accepted); } catch (e) {
+      if (!accepted && e instanceof ServerError && e.code === "open_cut_path") {
+        if (await confirmDialog(OPEN_WARNING.title, [e.message], { intro: OPEN_WARNING.intro, ok: OPEN_WARNING.ok, cancel: OPEN_WARNING.cancel })) return submitJob(session!, id, true);
+      }
+      throw e;
+    }
+  }
+
   async function send(): Promise<void> {
     const why = ctx.blocker();
     if (why) { ctx.notify(why); return; }
+    // open Cut paths are a warning, not a block: show where they are, and send only if the pupil says so
+    let acceptOpen = false;
+    const openCut = ctx.openCutPaths();
+    if (openCut) {
+      ctx.showOpenPaths();
+      const ok = await confirmDialog(OPEN_WARNING.title, [`${openCut} shape${openCut === 1 ? "" : "s"} on the Cut layer ${openCut === 1 ? "is" : "are"} not closed. The open ends are marked with red dots on the drawing.`, "Close them, or move them to the Score layer if a line is what you want."], { intro: OPEN_WARNING.intro, ok: OPEN_WARNING.ok, cancel: OPEN_WARNING.cancel });
+      if (!ok) return;
+      acceptOpen = true;
+    }
     // a new send replaces the pupil's earlier file that is still waiting, and goes to the back of the queue
     let waiting: JobSummary[] = [];
     try { waiting = (await listJobs(session!)).filter((j) => ["submitted", "approved"].includes(j.status)); } catch { /* the warning is only a courtesy */ }
@@ -318,7 +347,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     button.disabled = true;
     try {
       const id = await saveCurrent();
-      const r = await submitJob(session!, id);
+      const r = await submitConfirmed(id, acceptOpen);
       cur.jobId = null; // it is now in the queue: further changes are a new file
       render();
       const est = r.estimate;
@@ -415,7 +444,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
           ctx.tabs.setName(j.id, r.name || designName(j.createdAt));
           draw();
         });
-        if (j.status === "draft") add("Send for cutting", async () => { const r = await submitJob(session!, j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
+        if (j.status === "draft") add("Send for cutting", async () => { const r = await submitConfirmed(j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
         if (["draft", "cancelled", "failed"].includes(j.status)) add("Delete", async () => {
           if (!confirm(`Delete "${j.name || designName(j.createdAt)}"? It cannot be brought back.`)) return;
           await deleteJob(session!, j.id);

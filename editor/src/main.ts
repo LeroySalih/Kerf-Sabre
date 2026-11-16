@@ -29,6 +29,7 @@ import { mountIcons } from "./icons";
 import { autoTabFractions, nearestFraction, tabPieces, toggleTab } from "./tabs";
 import { closePath, deleteNode, explodePath, insertNode, joinPaths, moveNode, nodePoints } from "./repair";
 import { loadMachineProfiles } from "./machine";
+import { describeOpen, openCutCount, openEnds } from "./openpaths";
 import { explainIssue, scaleChoices, sizeIssue, sizeLabel, sizeOfBounds, suggestedChoice, unitsName } from "./importscale";
 import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } from "./bedsize";
 import type { BedSize } from "./bounds";
@@ -314,6 +315,23 @@ function drawOffsetPreview(): void {
   }
 }
 
+// ---- Check open paths: a big red dot at each free end of an open path ----
+let showOpenEnds = false;
+function drawOpenEnds(): void {
+  if (!showOpenEnds) return;
+  for (const e of openEnds(doc.state.objects)) {
+    const c = new paper.Path.Circle(toScreen({ x: e.x, y: e.y }), e.layer === "cut" ? 9 : 6);
+    if (e.layer === "cut") { c.fillColor = new paper.Color("#ff0000"); c.strokeColor = new paper.Color("#ffffff"); c.strokeWidth = 2.5; } // large and solid: needs fixing
+    else { c.strokeColor = new paper.Color("#ff0000"); c.strokeWidth = 2; } // a Score line is meant to be open: only a ring
+  }
+}
+function setOpenEnds(on: boolean, say = true): void {
+  showOpenEnds = on;
+  document.getElementById("act-openpaths")?.classList.toggle("on", on);
+  if (on && say) notify(describeOpen(doc.state.objects) + " Click the tool again to hide the marks.");
+  draw();
+}
+
 function drawPatternPreview(): void {
   for (const p of patternPreview) {
     const g = toPaperPath(p);
@@ -593,6 +611,7 @@ function draw(): void {
   }
   drawOffsetPreview();
   drawPatternPreview();
+  drawOpenEnds();
   if (showDims) for (const d of doc.state.dimensions) drawDimension(d, selectedDims.has(d.id), false);
   const ghost = dimGhost();
   if (ghost) drawDimension(ghost, false, true);
@@ -767,6 +786,7 @@ on("ungroup", () => ungroupSelected());
 });
 on("undo", () => { if (doc.undo()) { selected.clear(); draw(); } });
 on("redo", () => { if (doc.redo()) { selected.clear(); draw(); } });
+on("act-openpaths", () => setOpenEnds(!showOpenEnds));
 on("exp-dxf", () => download("kerf-design.dxf", toDXF(doc.state.objects), "application/dxf"));
 on("exp-svg", () => download("kerf-design.svg", toSVG(doc.state.objects), "image/svg+xml"));
 
@@ -2048,6 +2068,8 @@ server = initServerUi({
   objects: () => doc.state.objects,
   dimensions: () => doc.state.dimensions,
   materialId: () => doc.state.materialId,
+  openCutPaths: () => openCutCount(doc.state.objects),
+  showOpenPaths: () => setOpenEnds(true, false),
   fileName: () => { const n = ws.active().name; return /^Untitled( \d+)?$/.test(n) ? null : n.slice(0, 60); },
   blocker: () =>
     !doc.state.objects.length ? "Draw or import something first."

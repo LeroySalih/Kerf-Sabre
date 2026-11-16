@@ -17,7 +17,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.28"
+SCHEMA_VERSION = "0.2.29"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -86,12 +86,12 @@ def get_owned(s: Session, job_id: str, who) -> Job:
 
 # ---------------------------------------------------------------- validation + G-code
 
-def check_cut_paths(objects: list[dict[str, Any]], cfg: Settings) -> list[str]:
+def check_cut_paths(objects: list[dict[str, Any]], cfg: Settings, accepted: bool = False) -> list[str]:
     open_cut = [o["id"] for o in objects if o["layer"] == "cut" and not o["closed"]]
     if not open_cut:
         return []
-    if cfg.open_cut_paths == "block":
-        raise ApiError(422, "open_cut_path", f"{len(open_cut)} shape(s) on the Cut layer are not closed, so they would not cut out a part. Close them or move them to Score.", [{"path": i, "message": "open Cut path"} for i in open_cut[:20]])
+    if cfg.open_cut_paths == "block" and not accepted:  # "block" means: not without the sender saying they know (the Editor asks the pupil first)
+        raise ApiError(422, "open_cut_path", f"{len(open_cut)} shape(s) on the Cut layer are not closed, so they would not cut out a part. Close them, move them to Score, or confirm that you want them cut as drawn.", [{"path": i, "message": "open Cut path"} for i in open_cut[:20]])
     return [f"{len(open_cut)} open path(s) on the Cut layer will be cut as drawn."]
 
 
@@ -120,11 +120,11 @@ def store_gcode(s: Session, j: Job, station: str, r: Result) -> GcodeRow:
     return row
 
 
-def validate_for_cutting(s: Session, j: Job, cfg: Settings) -> None:
+def validate_for_cutting(s: Session, j: Job, cfg: Settings, accepted: bool = False) -> None:
     """Everything that can be checked before a station is chosen. Sets estimate and warnings; stores a general G-code version."""
     if sp.preset_version(s, j.school_id, j.preset_id, j.preset_version) is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{j.preset_id}'.")
-    warnings = check_cut_paths(j.objects, cfg)
+    warnings = check_cut_paths(j.objects, cfg, accepted)
     machines = sp.list_machines(s, j.school_id)
     if not machines:
         raise ApiError(422, "no_machines", "No laser is set up on this server yet.")
@@ -209,14 +209,14 @@ def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
     return j
 
 
-def submit(s: Session, cfg: Settings, who, j: Job) -> Job:
+def submit(s: Session, cfg: Settings, who, j: Job, accepted_open_paths: bool = False) -> Job:
     if j.status != "draft":
         raise ApiError(409, "conflict", f"This job is already {j.status}.")
     p = sp.latest_preset(s, j.school_id, j.preset_id)
     if p is None:
         raise ApiError(422, "unknown_preset", "This file's material has been removed from the catalogue. Pick another material, then send it again.")
     j.preset_version = p["version"]  # pick up preset edits made since the draft was saved
-    validate_for_cutting(s, j, cfg)
+    validate_for_cutting(s, j, cfg, accepted_open_paths)
     if cfg.replace_old_sends:
         j._replaced = replace_waiting(s, who, j)  # type: ignore[attr-defined]
     j.status = "submitted"

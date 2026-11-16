@@ -20,6 +20,7 @@ export const ICONS: Record<string, string> = {
   join: '<path d="M3 12h7M14 12h7"/><path d="M8 9l3 3-3 3M16 9l-3 3 3 3"/>',
   "close-path": '<path d="M5 18V8l7-4 7 4v10"/><path d="M5 18h14" stroke-dasharray="2 2.5"/>',
   explode: '<path d="M5 6h8M18 8v8M16 19H8M6 17V9"/>',
+  openpath: '<path d="M5 17h6l3-7h5"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="10" r="2.2"/>',
   tab: '<path d="M4 18V6h5M15 6h5v12H4"/><path d="M9 3.5v5M15 3.5v5"/>',
   "tabs-auto": '<path d="M4 8V4h5M13 4h7v5M20 13v7h-5M11 20H4v-5"/>',
   measure: '<g transform="rotate(-35 12 12)"><rect x="2" y="8.5" width="20" height="7" rx="1"/><path d="M6 8.5v3M9.5 8.5v2M13 8.5v3M16.5 8.5v2M20 8.5v3" /></g>',

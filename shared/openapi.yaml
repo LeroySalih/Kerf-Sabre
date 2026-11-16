@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.28
+  version: 0.2.29
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -700,6 +700,14 @@ paths:
       summary: Draft to submitted (validates, generates G-code, estimates)
       parameters:
         - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acceptOpenPaths: {type: boolean, description: "The sender was warned that shapes on the Cut layer are not closed and chose to send anyway. Without it a server set to block open Cut paths answers 422 `open_cut_path`; with it the file goes through with a warning. Nothing else is excused."}
       responses:
         "200":
           description: Submitted

@@ -109,8 +109,12 @@ class Verifier:
                 raise ApiError(401, "unauthorized", "That sign-in token was not signed by DINO.")
             return key
 
-    def verify(self, token: str) -> tuple[str, str]:
-        """Returns (role, id) for a valid token, else raises ApiError 401/403/503."""
+    def verify(self, token: str, audience: str | None = None, any_client: bool = False) -> tuple[str, str]:
+        """Returns (role, id) for a valid token, else raises ApiError 401/403/503.
+
+        `audience` / `any_client` are for the MCP endpoint: its tokens are bound to the MCP resource (not `kerf-sabre`, so an Editor
+        token never works there and an MCP token never works on the REST API) and come from whatever client the AI app registered.
+        """
         bad = ApiError(401, "unauthorized", "That sign-in token is not valid or has expired. Sign in again.")
         try:
             header = jwt.get_unverified_header(token)
@@ -121,14 +125,14 @@ class Verifier:
         key = self._key_for(header["kid"])
         try:
             claims = jwt.decode(
-                token, key, algorithms=["RS256"], audience=self.cfg.sso_audience, issuer=self.cfg.sso_issuer,
+                token, key, algorithms=["RS256"], audience=self.cfg.sso_audience if audience is None else audience, issuer=self.cfg.sso_issuer,
                 leeway=LEEWAY_S, options={"require": ["exp", "nbf", "iss", "aud", "sub"]},
             )
         except jwt.PyJWTError as e:
             log.info("sign-in token refused: %s", type(e).__name__)
             raise bad from None
         allowed_clients = {self.cfg.sso_client_editor, self.cfg.sso_client_admin}
-        if claims.get("client_id") not in allowed_clients:
+        if not any_client and claims.get("client_id") not in allowed_clients:
             raise bad
         sub = claims["sub"]
         if not isinstance(sub, str) or not 0 < len(sub) <= 64 or not set(sub) <= ID_OK:

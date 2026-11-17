@@ -1,6 +1,7 @@
 """Application factory."""
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from . import __version__, errors
 from .api import activities, auth, catalog, classes, cutter, cutter_ws, dxf, jobs, schools, stations, workspace
 from .config import Settings
 from .db import Database
+from .mcp_layer import routes as mcp_routes
 from .services_seed import seed
 from .services_classes import IpThrottle
 from .sso import Verifier
@@ -26,6 +28,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         raise ValueError(f"KERF_AUTH_MODE must be pins, planner or both, not {settings.auth_mode!r}")
     if settings.sso_enabled and not settings.sso_issuer.startswith(("https://", "http://")):
         raise ValueError("KERF_SSO_ISSUER (planner-004's public origin) is required when KERF_AUTH_MODE is planner or both")
+    if settings.mcp_enabled and settings.sso_enabled and not settings.mcp_aud:
+        raise ValueError("KERF_PUBLIC_URL (this server's public origin) or KERF_MCP_AUDIENCE is required to turn on KERF_MCP with DINO sign-in")
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     db = Database(settings.db_url)
 
@@ -61,6 +65,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(cutter.router)
     api.include_router(cutter_ws.router)  # /api/v1/ws/cutter
     app.include_router(api)
+
+    if settings.mcp_enabled:  # before the Editor mount, which would otherwise answer "/mcp"
+        app.include_router(mcp_routes.router)
+        mcp_log = logging.getLogger("kerf.mcp")  # who read what (IDs and tool names only) must reach the console even when nothing else configures logging
+        if not mcp_log.handlers:
+            h = logging.StreamHandler()
+            h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(message)s"))
+            mcp_log.addHandler(h)
+            mcp_log.setLevel(logging.INFO)
 
     @app.get("/health", include_in_schema=False)
     def health() -> dict[str, str]:

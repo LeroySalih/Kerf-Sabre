@@ -66,12 +66,26 @@ class Settings:
     sso_jwks_url: str = ""
     sso_client_editor: str = "kerf-editor"
     sso_client_admin: str = "kerf-admin"
+    #: MCP (read-only tools for staff: submitted files, the queue, station status) at POST /mcp. Off unless asked for.
+    mcp_enabled: bool = False
+    #: This server's public origin (https://kerf.example.org). The MCP resource is <public_url>/mcp; DINO binds MCP tokens to it.
+    public_url: str = ""
+    #: The `aud` an MCP token must carry. Empty: the MCP resource URL (<public_url>/mcp).
+    mcp_audience: str = ""
     log_max_bytes: int = 5_000_000
     log_backups: int = 5
 
     @property
     def sso_enabled(self) -> bool:
         return self.auth_mode in ("planner", "both")
+
+    @property
+    def mcp_resource(self) -> str:
+        return f"{self.public_url}/mcp" if self.public_url else ""
+
+    @property
+    def mcp_aud(self) -> str:
+        return self.mcp_audience or self.mcp_resource
 
     @property
     def db_url(self) -> str:
@@ -103,6 +117,9 @@ class Settings:
             sso_jwks_url=e.get("KERF_SSO_JWKS_URL", "").strip(),
             sso_client_editor=e.get("KERF_SSO_CLIENT_EDITOR", "kerf-editor"),
             sso_client_admin=e.get("KERF_SSO_CLIENT_ADMIN", "kerf-admin"),
+            mcp_enabled=_bool(e.get("KERF_MCP"), False),
+            public_url=e.get("KERF_PUBLIC_URL", "").strip().rstrip("/"),
+            mcp_audience=e.get("KERF_MCP_AUDIENCE", "").strip(),
             cors_origins=tuple(o.strip() for o in e.get("KERF_CORS_ORIGINS", "").split(",") if o.strip()),
         )
         return replace_settings(base, **overrides) if overrides else base

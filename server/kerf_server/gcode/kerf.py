@@ -16,6 +16,12 @@ from .prepare import arc_to_cubics  # noqa: F401  (re-export for tests)
 
 FLAT_TOL = 0.002  # mm: chords of flattened arcs stay this close to the true arc
 FIT_TOL = 0.004  # mm: a run of points becomes an arc if it stays this close to one circle
+#: ...and no two neighbouring points of that run are further apart than this, seen from the circle's centre. Flattened arcs and offset arcs step by
+#: a few degrees; the corners of a polygon (a star's tips and valleys) jump by 60 or more, and three such corners always lie on *some* circle.
+MAX_STEP_RAD = math.radians(30)
+#: A flattened or offset arc's neighbouring points are at least ~0.05 mm apart (r >= 0.2 mm, FLAT_TOL 0.002). Neighbours closer than this are the little
+#: bevel a kerf offset leaves at a sharp corner (a few micrometres, growing with the kerf), never part of a curve.
+MIN_CHORD_MM = 0.02
 
 
 def path_points(p: BedPath, tol: float = FLAT_TOL) -> list[Point]:
@@ -105,10 +111,12 @@ def _fits(pts: list[Point], i: int, j: int, tol: float) -> tuple[Point, float, b
     for k in range(i, j + 1):
         if abs(math.hypot(pts[k][0] - c[0], pts[k][1] - c[1]) - r) > tol:
             return None
+        if k > i and dist(pts[k], pts[k - 1]) < MIN_CHORD_MM:
+            return None
         a = math.atan2(pts[k][1] - c[1], pts[k][0] - c[0])
         if prev_a is not None:
             d = (a - prev_a + math.pi) % math.tau - math.pi
-            if abs(d) < 1e-12:
+            if abs(d) < 1e-9 or abs(d) > MAX_STEP_RAD:  # the same point twice says nothing about a curve, and a real arc is made of small steps
                 return None
             s = 1 if d > 0 else -1
             if sign and s != sign:
@@ -121,8 +129,23 @@ def _fits(pts: list[Point], i: int, j: int, tol: float) -> tuple[Point, float, b
     return c, r, sign > 0
 
 
+def _distinct(pts: list[Point], eps: float = 0.002) -> list[Point]:
+    """The polyline without repeated vertices (closer than 2 micrometres, finer than the G-code's own 1 micrometre digits can show a curve). A kerf
+    offset leaves a tiny bevel of two or three almost-equal vertices at a sharp corner, and a run of five points that is really three (A, A, B, C, C)
+    lies on a circle by accident: the fitter then drew an arc through two star tips and the valley between them, and the laser cut a circle. The last
+    point is kept exactly, so a closed path still ends where it began."""
+    out = [pts[0]]
+    for k, p in enumerate(pts[1:], 1):
+        if dist(p, out[-1]) > eps:
+            out.append(p)
+        elif k == len(pts) - 1:
+            out[-1] = p
+    return out
+
+
 def fit_arcs(pts: list[Point], tol: float = FIT_TOL, min_run: int = 5) -> list[Seg]:
     """Segments (lines and true arcs) for a polyline, starting at pts[0]."""
+    pts = _distinct(pts)
     n = len(pts)
     segs: list[Seg] = []
     i = 0

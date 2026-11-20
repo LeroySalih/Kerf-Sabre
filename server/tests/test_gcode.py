@@ -271,3 +271,95 @@ def test_an_absolute_job_keeps_the_plain_message():
     j = job([rect_obj("a", 0, 0, 5000, 10)])
     with pytest.raises(GcodeError, match="does not fit on this laser's bed"):
         generate(j, preset(), MACHINE)
+
+
+def _toolpath_far_from_outline(text, outline):
+    """How far the toolpath strays from the drawn outline (arcs sampled)."""
+    import re
+
+    from shapely.geometry import Point, Polygon
+
+    x = y = 0.0
+    pts = []
+    for line in text.splitlines():
+        m = re.match(r"G([0-3])\b(.*)", line)
+        if not m:
+            continue
+        g, a = int(m.group(1)), dict(re.findall(r"([XYIJ])(-?\d+\.?\d*)", m.group(2)))
+        nx, ny = float(a.get("X", x)), float(a.get("Y", y))
+        if g in (2, 3):
+            cx, cy = x + float(a.get("I", 0)), y + float(a.get("J", 0))
+            r, a0, a1 = math.hypot(x - cx, y - cy), math.atan2(y - cy, x - cx), math.atan2(ny - cy, nx - cx)
+            d = a1 - a0
+            d = d + 2 * math.pi if g == 3 and d <= 0 else d - 2 * math.pi if g == 2 and d >= 0 else d
+            pts += [(cx + r * math.cos(a0 + d * k / 24), cy + r * math.sin(a0 + d * k / 24)) for k in range(1, 25)]
+        elif g == 1:
+            pts.append((nx, ny))
+        x, y = nx, ny
+    ring = Polygon(outline).exterior
+    return max(ring.distance(Point(q)) for q in pts)
+
+
+def _star_job(n, big, small, matrix):
+    pts = [((big if i % 2 == 0 else small) * math.cos(math.pi / 2 + i * math.pi / n), (big if i % 2 == 0 else small) * math.sin(math.pi / 2 + i * math.pi / n)) for i in range(2 * n)]
+    obj = {"id": "s", "layer": "cut", "closed": True, "start": list(pts[0]), "segments": [{"type": "line", "to": list(p)} for p in pts[1:] + [pts[0]]], "matrix": matrix}
+    placed = [(matrix[0] * x + matrix[2] * y + matrix[4], matrix[1] * x + matrix[3] * y + matrix[5]) for x, y in pts]
+    return job([obj]), placed
+
+
+def test_a_mirrored_star_with_kerf_stays_a_star_and_is_not_turned_into_arcs():
+    """A pupil's star was cut as a circle: the kerf offset repeats vertices at the tips, a run like A,A,B,C,C 'fitted' one arc through three star points."""
+    matrix = [-1.7527245385843118, -0.805749685727407, -0.805749685727407, 1.7527245385843118, 142.25080659846023, 136.35177786879657]  # mirrored (negative determinant)
+    j, outline = _star_job(5, 30.643346289308916, 16.739613856504793, matrix)
+    r = generate(j, preset(kerf=0.1), MACHINE)
+    assert [l for l in r.text.splitlines() if l.startswith(("G2 ", "G3 "))] == []  # a polygon has no arcs
+    assert _toolpath_far_from_outline(r.text, outline) <= 0.1 + 0.002  # within the kerf offset (half of 0.2) of the drawn outline
+
+
+@pytest.mark.parametrize("points", [3, 5, 8, 12, 24])
+@pytest.mark.parametrize("flip", [1, -1])
+@pytest.mark.parametrize("kerf", [0.0, 0.1, 0.25])
+def test_polygon_stars_never_get_arcs_whatever_the_flip_turn_or_kerf(points, flip, kerf):
+    for ang in (0.0, 0.7, 2.0, 4.1):
+        c, s = math.cos(ang), math.sin(ang)
+        m = [1.3 * c, 1.3 * s, -1.3 * flip * s, 1.3 * flip * c, 150.0, 150.0]
+        j, outline = _star_job(points, 40.0, 17.0, m)
+        r = generate(j, preset(kerf=kerf), MACHINE)
+        assert not [l for l in r.text.splitlines() if l.startswith(("G2 ", "G3 "))], (points, flip, kerf, ang)
+        assert _toolpath_far_from_outline(r.text, outline) <= kerf / 2 * 8 + 0.002  # sharp tips may mitre a little further than half the kerf
+
+
+def test_a_star_whose_tip_bevel_is_a_few_micrometres_is_still_a_star():
+    """The second form of the same bug: a bevel of 3 micrometres is not a repeated point, but the run still has only three real corners."""
+    matrix = [0.8970613767879273, 0.8924592746741188, 0.8924592746741188, -0.8970613767879273, 191.75885419629904, 211.0990739601556]  # mirrored
+    j, outline = _star_job(4, 23.681023120457525, 11.996469864896646, matrix)
+    r = generate(j, preset(kerf=0.1), MACHINE)
+    assert not [l for l in r.text.splitlines() if l.startswith(("G2 ", "G3 "))]
+    assert _toolpath_far_from_outline(r.text, outline) <= 0.1 + 0.01
+
+
+def test_an_arc_is_never_made_from_a_few_far_apart_corners():
+    from kerf_server.gcode.kerf import fit_arcs
+
+    # three corners with a hair's-breadth bevel between them, all on one circle: still a polygon
+    pts = [(0.0, 0.0), (0.0, 0.003), (10.0, 6.0), (20.0, 0.0), (20.0, 0.003), (20.0, -10.0), (0.0, 0.0)]
+    assert all(s.kind == "l" for s in fit_arcs(pts))
+
+
+def test_a_flat_stretched_star_with_a_wide_kerf_is_still_a_star():
+    """Tips nearly in a line fit a huge circle with tiny steps; only the bevel pairs (4 micrometres apart at kerf 0.3) give it away."""
+    matrix = [-1.1288819281291818, 0.007657169026660752, 0.0026269087945275204, 0.38728018862592045, 180.0719801717354, 182.22482663963257]
+    j, outline = _star_job(3, 52.83643346793923, 39.387004361381905, matrix)
+    r = generate(j, preset(kerf=0.3), MACHINE)
+    assert not [l for l in r.text.splitlines() if l.startswith(("G2 ", "G3 "))]
+
+
+def test_the_arc_fitter_ignores_repeated_points():
+    from kerf_server.gcode.kerf import fit_arcs
+
+    a, b, c = (0.0, 0.0), (10.0, 6.0), (20.0, 0.0)
+    pts = [a, (a[0] + 0.0003, a[1]), b, c, (c[0], c[1] + 0.0003), (20.0, -10.0), a]  # tips bevelled by a third of a micrometre, as the kerf offset leaves them
+    assert all(s.kind == "l" for s in fit_arcs(pts))  # three distinct points are not an arc
+    circle = [(10 * math.cos(t / 10), 10 * math.sin(t / 10)) for t in range(0, 16)]  # a real arc still is one
+    dup = [p for q in circle for p in (q, q)]
+    assert any(s.kind == "a" for s in fit_arcs(dup))

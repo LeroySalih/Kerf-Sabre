@@ -167,6 +167,6 @@ def auth_config(cfg: Settings) -> dict[str, Any]:
         out["sso"] = {
             "issuer": o, "authorizeUrl": f"{o}/oauth/authorize", "tokenUrl": f"{o}/oauth/token",
             "revokeUrl": f"{o}/oauth/revoke", "userinfoUrl": f"{o}/oauth/userinfo",
-            "clientIds": {"editor": cfg.sso_client_editor, "admin": cfg.sso_client_admin}, "scopes": ["profile"],
+            "clientIds": {"editor": cfg.sso_client_editor, "admin": cfg.sso_client_admin}, "scopes": cfg.sso_scopes.split(),
         }
     return out

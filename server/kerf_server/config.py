@@ -66,6 +66,8 @@ class Settings:
     sso_jwks_url: str = ""
     sso_client_editor: str = "kerf-editor"
     sso_client_admin: str = "kerf-admin"
+    #: What Editor and Admin ask DINO for at sign-in. DINO refuses the whole sign-in (invalid_scope) if a client is not allowed one of them.
+    sso_scopes: str = "profile groups"
     #: MCP (read-only tools for staff: submitted files, the queue, station status) at POST /mcp. Off unless asked for.
     mcp_enabled: bool = False
     #: This server's public origin (https://kerf.example.org). The MCP resource is <public_url>/mcp; DINO binds MCP tokens to it.
@@ -117,6 +119,7 @@ class Settings:
             sso_jwks_url=e.get("KERF_SSO_JWKS_URL", "").strip(),
             sso_client_editor=e.get("KERF_SSO_CLIENT_EDITOR", "kerf-editor"),
             sso_client_admin=e.get("KERF_SSO_CLIENT_ADMIN", "kerf-admin"),
+            sso_scopes=" ".join(e.get("KERF_SSO_SCOPES", "profile groups").split()),
             mcp_enabled=_bool(e.get("KERF_MCP"), False),
             public_url=e.get("KERF_PUBLIC_URL", "").strip().rstrip("/"),
             mcp_audience=e.get("KERF_MCP_AUDIENCE", "").strip(),

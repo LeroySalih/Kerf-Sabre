@@ -217,7 +217,7 @@ class TestModes:
     def test_config_in_both_mode(self, sso_client):
         c = sso_client.get("/api/v1/auth/config").json()
         assert c["mode"] == "both" and c["sso"]["authorizeUrl"] == f"{ISS}/oauth/authorize"
-        assert c["sso"]["clientIds"] == {"editor": "kerf-editor", "admin": "kerf-admin"} and c["sso"]["scopes"] == ["profile"]
+        assert c["sso"]["clientIds"] == {"editor": "kerf-editor", "admin": "kerf-admin"} and c["sso"]["scopes"] == ["profile", "groups"]
 
     def test_config_needs_no_token(self, sso_client):
         assert sso_client.get("/api/v1/auth/config").status_code == 200

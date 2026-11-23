@@ -36,6 +36,7 @@ import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
 import { mergeRemoteTabs } from "./remotetabs";
 import { addFilesToDoc } from "./consolidate";
+import { askTrace, bitmapFromBlob } from "./imagetraceui";
 import { chooseFiles } from "./consolidateui";
 import { Workspace, blankMeta, matches as matchesMeta, addClosed, readClosed, readMirror, removeClosed, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
 import { emptyState } from "./doc";
@@ -800,6 +801,50 @@ fileInput.addEventListener("change", async () => {
   if (f) await importDXF(await f.text(), f.name);
 });
 
+// ---- trace a picture (paste, drop or Files > Trace image) ----
+const imgInput = document.getElementById("file-img") as HTMLInputElement;
+on("imp-img", () => imgInput.click());
+imgInput.addEventListener("change", () => { const f = imgInput.files?.[0]; imgInput.value = ""; if (f) void traceBlob(f); });
+const isImage = (f: File) => /^image\/(png|jpeg|gif|webp|bmp)$/.test(f.type);
+let tracing = false;
+async function traceBlob(file: Blob): Promise<void> {
+  if (tracing) return;
+  tracing = true;
+  try {
+    let src;
+    try { src = await bitmapFromBlob(file); } catch { notify("That picture could not be read."); return; }
+    const at = (w: number, h: number): Matrix => translation(Math.max(0, (bed.widthMm - w) / 2), Math.max(0, (bed.heightMm - h) / 2)); // centred on the bed
+    const ans = await askTrace(src, bed, (r) => {
+      patternPreview = r ? r.paths.map((p) => transformPath(p, at(r.widthMm, r.heightMm))) : [];
+      draw();
+    });
+    if (!ans) return;
+    const { result: r, layer } = ans;
+    if (!r.paths.length) { notify(r.share === 0 ? "Nothing was traced: no part of the picture is darker than the threshold. Raise it, or trace the light parts." : "Nothing was big enough to trace. Make it wider or lower the smallest size."); return; }
+    const m = at(r.widthMm, r.heightMm);
+    edit(() => {
+      const g = r.paths.length > 1 ? doc.state.nextGroup++ : undefined;
+      selected = new Set(r.paths.map((p) => { const o = doc.add(p, m, layer); if (g !== undefined) o.group = g; return o.id; }));
+    });
+    const hints: string[] = [];
+    if (r.share > 0.8) hints.push("Most of the picture was traced: try \"The light parts\" or a lower threshold.");
+    if (r.paths.length > 300) hints.push(`${r.paths.length} shapes is a lot: ignore bigger specks or smooth the corners.`);
+    if (r.dropped) hints.push(`${r.dropped} too small to cut ${r.dropped === 1 ? "was" : "were"} dropped.`);
+    if (layer === "cut" && r.paths.length > 1) hints.push("Check that parts inside letters or rings have bridges, or they will fall out.");
+    notify(`Traced ${r.paths.length} shape${r.paths.length === 1 ? "" : "s"} (${Math.round(r.widthMm)} \u00d7 ${Math.round(r.heightMm)} mm) as one group on ${layer === "cut" ? "Cut" : "Score"}. ${hints.join(" ")}`.trim());
+  } finally {
+    tracing = false;
+    patternPreview = [];
+    draw();
+  }
+}
+const stage = document.getElementById("stage")!;
+stage.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file" && i.type.startsWith("image/"))) e.preventDefault(); });
+stage.addEventListener("drop", (e) => {
+  const f = [...(e.dataTransfer?.files ?? [])].find(isImage);
+  if (f) { e.preventDefault(); void traceBlob(f); }
+});
+
 async function importDXF(text: string, name: string): Promise<void> {
   const r = parseDXF(text);
   if (!r.shapes.length) { alert(`No importable shapes in ${name}.`); return; }
@@ -949,6 +994,8 @@ document.addEventListener("cut", (e) => {
 });
 document.addEventListener("paste", (e) => {
   if (inTextField(e)) return;
+  const pic = [...(e.clipboardData?.files ?? [])].find(isImage); // a picture on the clipboard (a screenshot, "copy image"): trace it
+  if (pic) { e.preventDefault(); void traceBlob(pic); return; }
   const text = e.clipboardData?.getData("text/plain") ?? "";
   if (text !== clipboardText) { // not our own last copy: it may have come from another tab
     const parsed = parseClip(text);

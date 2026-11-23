@@ -13,6 +13,11 @@ BUILT_NAME = "kerf-cutter.zip"  # what cutter/build_cutter.py makes
 FALCON_NAME = "kerf-cutter-creality-falcon.zip"  # what the Admin site hands out
 KINDS = ("practice", "creality-falcon")
 
+LICENSE_NOTE = """Kerf Cutter (practice version). Copyright (C) 2026 mr-salih.org. All rights reserved.
+Proprietary software, part of the hosted Kerf service: provided for use with a school's Kerf subscription only.
+No licence is granted to copy, modify or distribute it except as allowed in writing by mr-salih.org.
+"""
+
 README = """Kerf Cutter: PRACTICE version
 ===================================
 
@@ -50,6 +55,7 @@ def build_zip() -> bytes:
         for name in ("fake_cutter.py", "fake_bed.jpg", "fake_bed_marked.jpg"):
             z.write(HERE / name, f"kerf-cutter/{name}")
         z.writestr("kerf-cutter/README.txt", README)
+        z.writestr("kerf-cutter/LICENSE.txt", LICENSE_NOTE)
         z.writestr("kerf-cutter/run_cutter.bat", BAT)
         info = zipfile.ZipInfo("kerf-cutter/run_cutter.sh")
         info.external_attr = 0o755 << 16  # executable on Mac/Linux

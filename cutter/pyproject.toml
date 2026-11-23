@@ -3,6 +3,7 @@ name = "kerf-cutter"
 version = "0.1.0"
 description = "Kerf Cutter: the station agent for a laser PC"
 authors = [{ name = "mr-salih.org" }]
+license = { text = "Proprietary: copyright mr-salih.org, all rights reserved (see LICENSE)" }
 requires-python = ">=3.11"
 # Runtime dependencies are bundled into the portable zip by build_cutter.py; these are for developing and testing.
 dependencies = ["pyserial>=3.5", "websockets>=12"]

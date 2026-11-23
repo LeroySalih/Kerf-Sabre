@@ -73,6 +73,7 @@ def build(out: Path, embed_zip: Path, camera: bool = True, skip_wheels: bool = F
     shutil.copytree(HERE / "kerf_cutter", stage / "kerf_cutter", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for name in ("run_cutter.bat", "devices.bat", "diag.bat", "README.txt"):
         (stage / name).write_bytes(crlf((HERE / "package" / name).read_bytes()))
+    (stage / "LICENSE.txt").write_bytes(crlf((HERE / "LICENSE").read_bytes()))  # proprietary: the licence travels with the program
     (stage / "VERSION.txt").write_text(f"kerf-cutter {version()}\n", encoding="ascii")
     zip_path = out / "kerf-cutter.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:

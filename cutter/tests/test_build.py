@@ -25,7 +25,7 @@ def test_the_zip_has_python_the_cutter_the_launchers_and_the_readme(tmp_path):
     out = bc.build(tmp_path / "out", embed, skip_wheels=True)
     names = set(zipfile.ZipFile(out).namelist())
     for need in ("kerf-cutter/python/python.exe", "kerf-cutter/kerf_cutter/__main__.py", "kerf-cutter/kerf_cutter/station.py", "kerf-cutter/run_cutter.bat",
-                 "kerf-cutter/devices.bat", "kerf-cutter/diag.bat", "kerf-cutter/README.txt", "kerf-cutter/VERSION.txt", "kerf-cutter/python/python311._pth"):
+                 "kerf-cutter/devices.bat", "kerf-cutter/diag.bat", "kerf-cutter/README.txt", "kerf-cutter/LICENSE.txt", "kerf-cutter/VERSION.txt", "kerf-cutter/python/python311._pth"):
         assert need in names, need
     z = zipfile.ZipFile(out)
     assert not any("__pycache__" in n or n.endswith(".pyc") for n in names)

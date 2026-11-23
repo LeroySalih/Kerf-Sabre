@@ -7,6 +7,7 @@ name = "kerf-server"
 version = "0.2.0"
 description = "Kerf Server: DXF clean-up, G-code post-processing, job queue and station relay"
 authors = [{ name = "mr-salih.org" }]
+license = { text = "Proprietary: copyright mr-salih.org, all rights reserved (see LICENSE)" }
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",

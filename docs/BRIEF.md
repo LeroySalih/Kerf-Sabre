@@ -36,7 +36,7 @@
   - 4 dedicated Windows station PCs, each connected by USB to one laser (1:1).
 - **Current workflow:** pupils design in Onshape in a separate classroom, export DXF, and take files to the laser PCs.
 - **Goal:** an in-house suite that replaces LightBurn for the department's workflow.
-- **Not for publication.** Internal school use only.
+- **Ownership:** Kerf Sabre is Leroy Salih's own work and intellectual property, built on his own time with his own Claude subscription, not as part of his job. BISAK is the first school using it. It may later be released as a product (free Editor, paid Server features).
 - **Project / repository name: Kerf Sabre** (GitHub repo `kerf-sabre`). The three components keep their names: BISAK Kerf Editor, Server and Cutter.
 
 ## 2. Architecture and names

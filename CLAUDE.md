@@ -1,6 +1,9 @@
 # Kerf Sabre (BISAK Kerf) — root rules
 
-Source of truth: `docs/BRIEF.md`. Read it before non-trivial work. Internal school use only.
+Source of truth: `docs/BRIEF.md`. Read it before non-trivial work.
+
+## Ownership
+Kerf Sabre is Leroy Salih's own work and intellectual property. He built it on his own time with his own Claude subscription, not as part of his job at BISAK; BISAK is the first school using it, not its owner. It may become a product (a free Editor, paid Server features), so do not describe it as the school's software or as for internal school use only, and treat BISAK-specific names, branding and settings as one customer's configuration, not part of the product.
 
 ## Components
 - **BISAK Kerf Editor** (`editor/`): TypeScript PWA. Design mode (pupils) and Station mode (laser PCs).

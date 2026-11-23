@@ -70,6 +70,22 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 - **Support access:** the school turns on **"Allow support access"** on its own page before the site admin can enter it through Kerf; failing that, the site admin can **email the school's admins an access request link**. All support access is logged.
 - **Leaving:** pupils are **archived** (soft-deleted, cannot sign in) and **can be deleted** permanently. A **group can be renamed** (moving up a year) **or archived**.
 
+## Free and paid (owner, 2026-11-23)
+
+| Free school | Paid school (approved by the site admin) |
+|---|---|
+| The Editor; pupil and staff accounts; groups; Pupil Cards; files saved to Kerf; **teacher merges pupils' files** into one file | Everything free, plus **activities and teacher feedback, approval, laser connection (Kerf Cutter), the queue, Station pages, the camera** |
+
+- **Limits for a free school:** 20 files per pupil, 20 groups per school, 50 pupils per group. Generous but firm; the server enforces them and says which limit was reached.
+- The teacher's merge of pupils' files must work from pupils' **saved files** (a free school has no queue).
+- **The camera features need a review** before they are sold (owner's note).
+- **School code:** every school has a short school code. Group-code sign-in is **school code + group code + pupil ID + password**. No QR codes.
+- **Pupil IDs** follow the group-code rule: Kerf makes one, the teacher may type their own (by hand or in the CSV), unique within the school.
+- **Email** is sent from `kerf-no-reply@mr-salih.org`.
+- **Re-sync** from a source removes a pupil from the group only (account and files kept) and shows the changes for the teacher to confirm first.
+- **Permanent delete** of an archived pupil: school admins only, and logged.
+- **BISAK** keeps every paid feature as an approved paid school.
+
 ## Remaining questions
 
-See the conversation of 2026-11-23; answers are recorded here as they come.
+- Which service sends the email (Postmark, Resend or Amazon SES)?

@@ -58,6 +58,18 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 2. **Group-code passwords are issued by the teacher**; pupils cannot create their own accounts. A **Pupil Cards** page makes this super simple: pick a group, print one small card per pupil (school name, group code, pupil ID, password, how to sign in), and a full-screen view of the group code for the board. A password is shown on cards only when it is made or reset, never again.
 3. **Staff use an email sign-in link** until their school turns on Google, Microsoft or DINO.
 
+## More answers (owner, 2026-11-23)
+
+- **Roll-out: free tools first.** No paid Server option is offered publicly yet. **Free schools register instantly**; a **paid school is approved by the site admin** (BISAK is the existing paid school).
+- **Group join codes:** Kerf generates one by default; the teacher may type their own when making the group (by hand or in the CSV), and may edit it later. **Unique within a school.**
+- **Pupil passwords:** Kerf's default is **two words** (e.g. `tiger-river`); the teacher reissues them (new card); pupils do not choose or change them.
+- **Pupils can be in several groups**, and a group can be **re-synced from its source** (e.g. DINO).
+- **Display names:** teachers may enter them; they are **printed on the Pupil Cards** (staff and the pupil's own card only, never in logs).
+- **Signing in without an import** (e.g. Google): the pupil is asked to **join** and waits; a teacher **approves** them from the group's page.
+- **Staff:** a school can have **several admins**; **only admins invite teachers** (and technicians, admins).
+- **Support access:** the school turns on **"Allow support access"** on its own page before the site admin can enter it through Kerf; failing that, the site admin can **email the school's admins an access request link**. All support access is logged.
+- **Leaving:** pupils are **archived** (soft-deleted, cannot sign in) and **can be deleted** permanently. A **group can be renamed** (moving up a year) **or archived**.
+
 ## Remaining questions
 
-See the list in the conversation of 2026-11-23; answers are recorded here as they come.
+See the conversation of 2026-11-23; answers are recorded here as they come.

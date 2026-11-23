@@ -175,6 +175,7 @@ export function booleanOp(op: BoolOp, operands: Path[][]): BoolResult {
   const s = sc();
   s.project.clear();
   try {
+    s.activate(); // paper has one "current" scope: the boolean work happens in its own, and the Editor's drawing scope is put back below
     let acc: paper.PathItem = toOperand(s, operands[0]!);
     for (const next of operands.slice(1)) {
       const b = toOperand(s, next);
@@ -183,7 +184,10 @@ export function booleanOp(op: BoolOp, operands: Path[][]): BoolResult {
     const known: Circle[] = operands.flat().flatMap((p) => circlesOf(p));
     const paths = contoursOf(acc, known);
     return paths.length ? { paths } : { paths, error: op === "intersect" ? "The shapes do not overlap." : "Nothing is left." };
+  } catch {
+    return { paths: [], error: "These shapes are too complicated to combine. Try fewer shapes at a time." }; // paper can give up on very tangled curves: leave the drawing as it was
   } finally {
     s.project.clear();
+    paper.activate(); // without this the canvas keeps drawing into the boolean scope's 1x1 project and goes white after every boolean
   }
 }

@@ -123,3 +123,13 @@ describe("arcs survive booleans", () => {
     expect(m[0]).toMatchObject({ t: "a", ccw: true, to: { x: -10, y: 0 } });
   });
 });
+
+describe("the Editor's drawing scope after a boolean", () => {
+  it("is the active paper scope again (a boolean used to leave the canvas drawing into a hidden 1x1 project and go white)", async () => {
+    const paper = (await import("paper")).default;
+    paper.setup(new paper.Size(10, 10));
+    const project = paper.project;
+    booleanOp("intersect", [[rectangle(10, 10)], [at(rectangle(10, 10), 5, 5)]]);
+    expect(paper.project).toBe(project);
+  });
+});

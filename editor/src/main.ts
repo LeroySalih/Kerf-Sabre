@@ -35,6 +35,8 @@ import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } f
 import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
 import { mergeRemoteTabs } from "./remotetabs";
+import { addFilesToDoc } from "./consolidate";
+import { chooseFiles } from "./consolidateui";
 import { Workspace, blankMeta, matches as matchesMeta, addClosed, readClosed, readMirror, removeClosed, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
 import { emptyState } from "./doc";
 import { cleanPoints, splinePath } from "./spline";
@@ -2061,6 +2063,28 @@ function openClosed(owner: string, id: string): boolean {
 window.addEventListener("pagehide", () => { persistTabs(); void server?.flushNow(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { persistTabs(); void server?.flushNow(); } });
 
+on("srv-consolidate", () => void (async () => {
+  const session = server?.session();
+  if (!session) return;
+  const pick = await chooseFiles(session, (id) => { const p = findPreset(id); return p ? presetLabel(p) : id; });
+  if (!pick) return;
+  const wasEmpty = doc.state.objects.length === 0;
+  const presets = new Set(pick.jobs.map((j) => j.preset.id));
+  let r!: ReturnType<typeof addFilesToDoc>;
+  edit(() => {
+    r = addFilesToDoc(doc, pick.jobs, { labels: pick.labels, bed });
+    selected = new Set(r.ids);
+    const only = presets.size === 1 ? [...presets][0]! : null;
+    if (wasEmpty && only && findPreset(only)) doc.state.materialId = only;
+  });
+  fillMaterials();
+  refreshLayerUI();
+  fit();
+  const parts = [`Imported ${r.groups} file${r.groups === 1 ? "" : "s"}, one group each.`];
+  if (r.skipped.length) parts.push(`Nothing to import from ${r.skipped.join(", ")}.`);
+  if (!r.fits) parts.push("They do not all fit on the bed: move or remove some.");
+  notify(parts.join(" "));
+})());
 on("tab-new", () => newTab());
 on("tab-dup", () => duplicateTab());
 on("tab-move", () => void moveToTabDialog());

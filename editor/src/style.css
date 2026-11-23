@@ -277,3 +277,12 @@ td.cell.st-todo { background: #f9fafb; }
 .menu-list a.btnlink:hover { background: #eef0f3; }
 .menu-list button { padding: 0 12px; }
 #srv-status { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kdialog.wide { min-width: 460px; max-width: 640px; }
+.klist { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; padding: 4px; }
+.klist:empty { display: none; }
+.kitem, .kcheck, .krowfield { display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: 13px; }
+.kitem input, .kcheck input { width: auto; flex: none; }
+.krowfield select { flex: 1; }
+.krow.left { justify-content: flex-start; margin-top: 4px; }
+.kwarn { color: #b45309; font-size: 12px; margin: 4px 0; }
+.kwarn:empty { display: none; }

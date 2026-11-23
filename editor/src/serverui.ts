@@ -122,6 +122,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     const act = $("srv-activity") as HTMLElement;
     act.hidden = !(session?.role === "pupil" && activity);
     act.replaceChildren(...(activity ? [document.createTextNode(`Activity: ${activity.title} `), Object.assign(document.createElement("button"), { textContent: "×", title: "Stop saving files for this activity", onclick: () => { activity = null; render(); } })] : []));
+    ($("srv-consolidate") as HTMLButtonElement).hidden = session?.role !== "teacher" && session?.role !== "admin";
     ($("srv-admin") as HTMLAnchorElement).hidden = session?.role !== "teacher" && session?.role !== "admin";
     $("srv-file").textContent = signedIn && cur.jobId ? `Editing ${cur.jobId}` : "";
     ctx.tabs.changed();

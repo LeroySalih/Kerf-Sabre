@@ -227,3 +227,11 @@ class TestApprovalPerClass:
         h = auth(tokens["pupil"])
         jid = client.post(f"{API}/jobs", json=job_doc(), headers=h).json()["id"]
         assert client.post(f"{API}/jobs/{jid}/submit", headers=h).json()["status"] == "submitted"
+
+
+class TestGroupsWithoutDino:
+    def test_groups_are_kerfs_classes_with_pupil_ids_and_pupils_cannot_ask(self, client, tokens):
+        setup_class_with(client, tokens)
+        r = client.get(f"{API}/groups", headers=auth(tokens["teacher"]))
+        assert r.json() == [{"id": "9B-DT", "name": "Y9 set 2", "subject": None, "yearGroup": None, "pupils": ["P001", "P002"]}]
+        assert client.get(f"{API}/groups", headers=auth(tokens["pupil"])).status_code == 403

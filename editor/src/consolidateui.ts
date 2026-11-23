@@ -1,7 +1,7 @@
 // The "Import pupils' files" window: pick a class, see the files waiting in its queue, tick the ones to bring into the open file.
 import { makeDraggable } from "./dialog";
 import { QUEUE_QUERY, describeFile, filesForClass, materialWarning } from "./consolidate";
-import { classPupils, listClasses, listJobsByStatus, type ClassInfo, type JobSummary, type Session } from "./server";
+import { listGroups, listJobsByStatus, type GroupInfo, type JobSummary, type Session } from "./server";
 
 export interface ConsolidateChoice { jobs: JobSummary[]; labels: boolean }
 
@@ -10,6 +10,10 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
   e.append(...kids);
   return e;
 };
+
+/** "26-11-DT · Design Technology · Year 11 (24 pupils)" */
+export const groupLabel = (g: GroupInfo): string =>
+  [g.name, g.subject, g.yearGroup ? `Year ${g.yearGroup}` : ""].filter(Boolean).join(" \u00b7 ") + ` (${g.pupils.length} pupil${g.pupils.length === 1 ? "" : "s"})`;
 
 /** Resolves with the files chosen (and whether to label them), or null if cancelled. `materialName` turns a preset id into its label. */
 export function chooseFiles(session: Session, materialName: (id: string) => string): Promise<ConsolidateChoice | null> {
@@ -62,15 +66,17 @@ export function chooseFiles(session: Session, materialName: (id: string) => stri
       }
       refresh();
     };
+    let groups: GroupInfo[] = [];
     const pick = async (code: string) => {
       shown = []; render();
-      if (!code) return;
+      const g = groups.find((x) => x.id === code);
+      if (!g) return;
       status.textContent = "Loading…";
       try {
-        const [pupils, jobs] = await Promise.all([classPupils(session, code), queue ? Promise.resolve(queue) : listJobsByStatus(session, QUEUE_QUERY)]);
+        const jobs = queue ?? (await listJobsByStatus(session, QUEUE_QUERY));
         queue = jobs;
-        shown = filesForClass(jobs, pupils);
-        status.textContent = shown.length ? `${shown.length} file${shown.length === 1 ? "" : "s"} in the queue for this class.` : "Nothing from this class is waiting in the queue.";
+        shown = filesForClass(jobs, g.pupils);
+      status.textContent = shown.length ? `${shown.length} file${shown.length === 1 ? "" : "s"} in the queue for this class.` : "Nothing from this class is waiting in the queue.";
         render();
       } catch (e) {
         status.textContent = `Could not load the queue: ${e instanceof Error ? e.message : String(e)}`;
@@ -88,10 +94,11 @@ export function chooseFiles(session: Session, materialName: (id: string) => stri
     dlg.showModal();
 
     status.textContent = "Loading classes…";
-    listClasses(session).then((cs: ClassInfo[]) => {
-      classSel.replaceChildren(new Option(cs.length ? "Choose a class…" : "No classes", ""), ...cs.map((c) => new Option(c.label ? `${c.code} – ${c.label}` : c.code, c.code)));
-      status.textContent = cs.length ? "" : "You have no classes yet.";
-      if (cs.length === 1) { classSel.value = cs[0]!.code; void pick(cs[0]!.code); }
-    }, (e) => { status.textContent = `Could not load classes: ${e instanceof Error ? e.message : String(e)}`; });
+    listGroups(session).then((cs: GroupInfo[]) => {
+      groups = cs;
+      classSel.replaceChildren(new Option(cs.length ? "Choose a class…" : "No classes", ""), ...cs.map((c) => new Option(groupLabel(c), c.id)));
+      status.textContent = cs.length ? "" : "DINO lists no classes for you.";
+      if (cs.length === 1) { classSel.value = cs[0]!.id; void pick(cs[0]!.id); }
+    }, (e: unknown) => { status.textContent = `Could not load your classes: ${e instanceof Error ? e.message : String(e)}`; });
   });
 }

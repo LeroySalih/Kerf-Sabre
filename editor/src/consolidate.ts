@@ -13,8 +13,8 @@ export const QUEUE_STATES = ["submitted", "approved"] as const;
 export const QUEUE_QUERY = QUEUE_STATES.join(",");
 
 /** The files in the queue that belong to this class's pupils, in pupil order then oldest first. */
-export function filesForClass(jobs: JobSummary[], pupils: ClassPupil[]): JobSummary[] {
-  const ids = new Set(pupils.map((p) => p.pupilId));
+export function filesForClass(jobs: JobSummary[], pupils: readonly (ClassPupil | string)[]): JobSummary[] {
+  const ids = new Set(pupils.map((p) => (typeof p === "string" ? p : p.pupilId)));
   return jobs
     .filter((j) => (QUEUE_STATES as readonly string[]).includes(j.status) && !!j.pupilId && ids.has(j.pupilId))
     .sort((a, b) => who(a).localeCompare(who(b)) || a.createdAt.localeCompare(b.createdAt));

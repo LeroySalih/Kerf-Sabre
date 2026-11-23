@@ -152,6 +152,27 @@ class Verifier:
             return None
         return doc.get("name") if isinstance(doc, dict) else None
 
+    def groups(self, token: str) -> list[dict[str, Any]]:
+        """The teacher's own classes from DINO (`GET /oauth/groups`, scope `groups`, called with their own token): `[{id, name, subject, yearGroup, pupils}]`.
+        Only ids, class names and pupil IDs are kept; a group whose id Kerf cannot hold (empty, over 64 characters, odd characters) is dropped. Raises on failure."""
+        doc = self.fetch_userinfo(f"{self.cfg.sso_issuer}/oauth/groups", token)
+        rows = doc.get("groups") if isinstance(doc, dict) else doc
+        if not isinstance(rows, list):
+            raise ValueError("DINO's group list was not a list")
+        out: list[dict[str, Any]] = []
+        for g in rows:
+            if not isinstance(g, dict) or g.get("teaching") is False:
+                continue
+            gid = g.get("id")
+            if not isinstance(gid, str) or not 0 < len(gid) <= 64 or not set(gid) <= ID_OK:
+                continue
+            pupils = sorted({p for p in g.get("pupils") or [] if isinstance(p, str) and 0 < len(p) <= 64 and set(p) <= ID_OK})
+            def text(k: str) -> str | None:
+                v = g.get(k)
+                return v.strip()[:64] if isinstance(v, str) and v.strip() else None
+            out.append({"id": gid, "name": text("name") or gid, "subject": text("subject"), "yearGroup": text("yearGroup"), "pupils": pupils})
+        return sorted(out, key=lambda g: g["id"])
+
     def principal(self, token: str):
         from .security import Principal
 

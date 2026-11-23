@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: BISAK Kerf API
-  version: 0.2.29
+  version: 0.2.30
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -161,6 +161,25 @@ paths:
         - {name: subjectId, in: path, required: true, schema: {type: string}}
       responses:
         "204": {description: Revoked}
+  /groups:
+    get:
+      summary: Teacher. My classes with the pupil IDs in each, for choosing whose files to work with. With DINO sign-in these are the teacher's DINO classes (the server asks DINO's `/oauth/groups` with the teacher's own token, so it needs the `groups` scope); otherwise Kerf's own classes. IDs only, never names. `502 groups_unavailable` if DINO cannot be asked (sign out and in again).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, pupils]
+                  properties:
+                    id: {type: string}
+                    name: {type: string}
+                    subject: {type: [string, "null"]}
+                    yearGroup: {type: [string, "null"]}
+                    pupils: {type: array, items: {type: string}}
   /classes:
     get:
       summary: Teacher. My classes (the ones I created, plus shared ones) and how many pupils are in each. Another teacher's class is invisible to me.

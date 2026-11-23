@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, errors
-from .api import activities, auth, catalog, classes, cutter, cutter_ws, dxf, jobs, schools, stations, workspace
+from .api import activities, auth, catalog, classes, cutter, cutter_ws, dxf, groups, jobs, schools, stations, workspace
 from .config import Settings
 from .db import Database
 from .mcp_layer import routes as mcp_routes
@@ -57,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(catalog.router)
     api.include_router(schools.router)
     api.include_router(classes.router)
+    api.include_router(groups.router)
     api.include_router(activities.router)
     api.include_router(dxf.router)
     api.include_router(jobs.router)

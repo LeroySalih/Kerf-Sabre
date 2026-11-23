@@ -113,3 +113,13 @@ describe("importing into the document", () => {
 });
 
 interface DocBox { minX: number; minY: number; maxX: number; maxY: number }
+
+describe("choosing by DINO class", () => {
+  it("filters by plain pupil IDs and labels a group", async () => {
+    const { groupLabel } = await import("../src/consolidateui");
+    const jobs = [file("a", "P1", 10, 10), file("b", "P2", 10, 10), file("c", "P3", 10, 10)];
+    expect(filesForClass(jobs, ["P3", "P1"]).map((j) => j.id)).toEqual(["a", "c"]);
+    expect(groupLabel({ id: "26-11-DT", name: "26-11-DT", subject: "Design Technology", yearGroup: "11", pupils: ["P1"] })).toBe("26-11-DT · Design Technology · Year 11 (1 pupil)");
+    expect(groupLabel({ id: "x", name: "x", subject: null, yearGroup: null, pupils: [] })).toBe("x (0 pupils)");
+  });
+});

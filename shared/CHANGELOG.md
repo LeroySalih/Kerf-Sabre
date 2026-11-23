@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.30 - the teacher's DINO classes with their pupils (additive)
+- `openapi.yaml`: `GET /groups` (teacher, admin): `[{id, name, subject, yearGroup, pupils: [pupil ID]}]`. With DINO sign-in it is the signed-in teacher's classes from DINO (`GET /oauth/groups`, scope `groups`, called with the teacher's own token); otherwise Kerf's own classes. IDs only. Sign-in now asks DINO for `profile groups` (`KERF_SSO_SCOPES`). The Editor's "Import pupils' files" lists these classes.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.30`.
+
 ## 0.2.29 - send with open Cut paths once the pupil has confirmed (additive)
 - `openapi.yaml`: `POST /jobs/{jobId}/submit` takes an optional body `{acceptOpenPaths: true}`. A server set to block open Cut paths (`KERF_OPEN_CUT_PATHS=block`, the default) still answers `422 open_cut_path` without it, now saying the sender can confirm; with it the file is accepted with the warning "N open path(s) on the Cut layer will be cut as drawn". The Editor warns the pupil, marks the open ends and sends the flag only after they approve. Every other check (bed, preset, G-code) still applies.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.29`.

@@ -368,3 +368,41 @@ def test_my_files_for_staff_lists_only_their_own(sso_client):
     assert len(sso_client.get("/api/v1/jobs", headers=auth(tk["teacher"])).json()) == 1  # staff see every file in the school
     assert sso_client.get("/api/v1/jobs?mine=1", headers=auth(tk["teacher"])).json() == []  # but "my files" is only their own
     assert len(sso_client.get("/api/v1/jobs?mine=1", headers=auth(tk["pupil"])).json()) == 1
+
+
+class TestDinoGroups:
+    GROUPS = [
+        {"id": "26-11-DT", "name": "26-11-DT", "subject": "Design Technology", "yearGroup": "11", "pupils": ["P2", "P1", "bad id", "P1"]},
+        {"id": "HOME-SCHOOL", "name": "HOME-SCHOOL", "teaching": False, "pupils": ["P1"]},
+        {"id": "has space", "name": "x", "pupils": ["P1"]},
+        {"id": "25-10-EN1", "pupils": []},
+    ]
+
+    def test_a_teacher_gets_their_dino_classes_with_pupil_ids(self, sso_app):
+        seen = []
+        sso_app.state.sso.fetch_userinfo = lambda url, token: (seen.append((url, token)) or self.GROUPS)
+        with TestClient(sso_app) as c:
+            tok = mint(sub="T1", roles=["teacher"])
+            r = c.get("/api/v1/groups", headers=auth(tok))
+            assert r.status_code == 200
+            assert r.json() == [
+                {"id": "25-10-EN1", "name": "25-10-EN1", "subject": None, "yearGroup": None, "pupils": []},
+                {"id": "26-11-DT", "name": "26-11-DT", "subject": "Design Technology", "yearGroup": "11", "pupils": ["P1", "P2"]},
+            ]
+            assert seen == [(f"{ISS}/oauth/groups", tok)]  # asked with the teacher's own token
+
+    def test_pupils_and_an_object_wrapped_list(self, sso_app):
+        sso_app.state.sso.fetch_userinfo = lambda url, token: {"groups": self.GROUPS}
+        with TestClient(sso_app) as c:
+            assert c.get("/api/v1/groups", headers=auth(mint(roles=["pupil"]))).status_code == 403
+            assert len(c.get("/api/v1/groups", headers=auth(mint(roles=["teacher"]))).json()) == 2
+
+    @pytest.mark.parametrize("answer", [OSError("down"), "nonsense"])
+    def test_dino_failing_is_a_clear_502(self, sso_app, answer):
+        def f(url, token):
+            if isinstance(answer, Exception): raise answer
+            return answer
+        sso_app.state.sso.fetch_userinfo = f
+        with TestClient(sso_app) as c:
+            r = c.get("/api/v1/groups", headers=auth(mint(roles=["teacher"])))
+            assert r.status_code == 502 and r.json()["code"] == "groups_unavailable"

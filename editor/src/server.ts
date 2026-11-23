@@ -80,6 +80,9 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
 export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean }
 export interface ClassPupil { pupilId: string; displayName?: string; lastLogin: string | null; locked: boolean }
 export interface AddedPupils { created: { pupilId: string; pin: string }[]; existing: string[]; conflicts: string[] }
+export interface GroupInfo { id: string; name: string; subject: string | null; yearGroup: string | null; pupils: string[] }
+/** The teacher's classes with their pupil IDs (from DINO when signed in with DINO). */
+export const listGroups = (s: Session, f?: Fetch) => request<GroupInfo[]>(s, "GET", "/groups", undefined, f);
 export const listClasses = (s: Session, f?: Fetch) => request<ClassInfo[]>(s, "GET", "/classes", undefined, f);
 export const createClass = (s: Session, code: string, label: string, requireApproval = true, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { code, label, requireApproval }, f);
 export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);

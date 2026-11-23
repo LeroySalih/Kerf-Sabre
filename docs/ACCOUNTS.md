@@ -52,8 +52,12 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 - Pupil password: stored hashed (scrypt, as PINs today), with lockout and throttling (the class-login code already does this).
 - BISAK migrates in place: its DINO pupils and staff become persons with a `dino` identity; DINO is switched on for BISAK only.
 
-## Open questions
+## Answers (owner, 2026-11)
 
-1. How does the site admin sign in to the Platform site (DINO account, a Kerf account, or Google)?
-2. Group-code sign-in: does the teacher issue each pupil's password (shown once, like PINs before), or may a pupil with the group code create their own account (pick their ID and password), waiting for the teacher to approve?
-3. Staff at a brand-new school: Kerf account by email link (proposed), until the school turns on Google, Microsoft or DINO?
+1. **The site admin signs in to the Platform site with their DINO account** (their DINO ID is listed as a site admin in the server's settings; no separate password).
+2. **Group-code passwords are issued by the teacher**; pupils cannot create their own accounts. A **Pupil Cards** page makes this super simple: pick a group, print one small card per pupil (school name, group code, pupil ID, password, how to sign in), and a full-screen view of the group code for the board. A password is shown on cards only when it is made or reset, never again.
+3. **Staff use an email sign-in link** until their school turns on Google, Microsoft or DINO.
+
+## Remaining questions
+
+See the list in the conversation of 2026-11-23; answers are recorded here as they come.

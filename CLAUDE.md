@@ -1,14 +1,14 @@
-# Kerf Sabre (BISAK Kerf) — root rules
+# Kerf Sabre (Kerf) — root rules
 
 Source of truth: `docs/BRIEF.md`. Read it before non-trivial work.
 
 ## Ownership
-Kerf Sabre is Leroy Salih's own work and intellectual property. He built it on his own time with his own Claude subscription, not as part of his job at BISAK; BISAK is the first school using it, not its owner. It may become a product (a free Editor, paid Server features), so do not describe it as the school's software or as for internal school use only, and treat BISAK-specific names, branding and settings as one customer's configuration, not part of the product.
+Kerf Sabre is owned by **mr-salih.org** (Leroy Salih's own work and intellectual property, built on his own time with his own Claude subscription, not as part of any job). It may become a product (a free Editor, paid Server features). The product, its code, names and branding carry no school's name: say "Kerf" (Kerf Editor, Kerf Server, Kerf Cutter), use neutral examples (e.g. `westfield-high`), and treat any school's names, lasers and settings as that customer's configuration, never as part of the product.
 
 ## Components
-- **BISAK Kerf Editor** (`editor/`): TypeScript PWA. Design mode (pupils) and Station mode (laser PCs).
-- **BISAK Kerf Server** (`server/`): Python. DXF clean-up, G-code, presets, queue, log collection.
-- **BISAK Kerf Cutter** (`cutter/`): Python station agent. GRBL serial, camera, logs. Outbound connection only. This is the **Creality Falcon Cutter** (the Admin site and the API kind `creality-falcon` use that name). The GCC Mercury III (station 5) is not GRBL and will be a separate Cutter.
+- **Kerf Editor** (`editor/`): TypeScript PWA. Design mode (pupils) and Station mode (laser PCs).
+- **Kerf Server** (`server/`): Python. DXF clean-up, G-code, presets, queue, log collection.
+- **Kerf Cutter** (`cutter/`): Python station agent. GRBL serial, camera, logs. Outbound connection only. This is the **Creality Falcon Cutter** (the Admin site and the API kind `creality-falcon` use that name). The GCC Mercury III (station 5) is not GRBL and will be a separate Cutter.
 - `shared/`: versioned JSON schemas and API contract. `spike/`: throwaway connectivity spike. `fixtures/dxf/`: real Onshape DXFs.
 
 ## Running it

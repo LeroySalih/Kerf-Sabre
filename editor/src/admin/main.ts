@@ -1,4 +1,4 @@
-// BISAK Kerf Admin: the teacher and school-admin site (and, for the platform owner, the list of schools).
+// Kerf Admin: the teacher and school-admin site (and, for the platform owner, the list of schools).
 // It talks to the same server API as the Editor. Pupils never see it; a token decides which pages and which school's data you get.
 import "../style.css";
 import "./admin.css";
@@ -31,7 +31,7 @@ function signInView(error = ""): void {
   const url = el("input", { type: "text", placeholder: "Leave blank unless told otherwise" });
   (url as HTMLInputElement).value = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
   const dino = el("button", { type: "submit", class: "on" }, "Sign in with DINO");
-  const form = el("form", { class: "ad-card ad-signin" }, el("h1", {}, "BISAK Kerf Admin"),
+  const form = el("form", { class: "ad-card ad-signin" }, el("h1", {}, "Kerf Admin"),
     el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with your DINO account."),
     el("details", {}, el("summary", {}, "Server address"), url), err, dino, el("a", { href: "/" }, "Looking for the Editor?"));
   form.addEventListener("submit", (ev) => {
@@ -85,7 +85,7 @@ async function shell(): Promise<void> {
     stopPage = typeof stop === "function" ? stop : () => {};
   }
 
-  const head = el("header", { class: "ad-head" }, el("span", { class: "brand" }, "BISAK Kerf Admin"),
+  const head = el("header", { class: "ad-head" }, el("span", { class: "brand" }, "Kerf Admin"),
     el("span", { class: "who" }, `${schoolName ? schoolName + " · " : ""}${s.role === "platform" ? "Platform owner" : s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
     ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/" }, "Editor")] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);

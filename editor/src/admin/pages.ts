@@ -423,7 +423,7 @@ const schools: Page = {
       const redraw = () => void draw().catch((e) => fail(host, e));
       const bar = el("div", { class: "ad-bar" }, btn("New school…", () => void (async () => {
         const v = await openDialog("New school", [
-          { key: "id", label: "School ID", type: "text", value: "", hint: "Lower-case letters, digits and -, e.g. bisak" },
+          { key: "id", label: "School ID", type: "text", value: "", hint: "Lower-case letters, digits and -, e.g. westfield-high" },
           { key: "name", label: "Name", type: "text", value: "" },
           
         ], { ok: "Create" });

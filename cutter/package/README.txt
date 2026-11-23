@@ -1,4 +1,4 @@
-BISAK Kerf Cutter
+Kerf Cutter
 =================
 
 The program that runs on a laser PC. It talks to the laser over USB, watches the camera, and connects OUT to the Kerf Server (it listens on nothing).

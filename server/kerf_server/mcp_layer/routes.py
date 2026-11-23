@@ -74,7 +74,7 @@ def protected_resource(request: Request) -> dict[str, Any]:
         "resource": _resource(request),
         "authorization_servers": [cfg.sso_issuer] if cfg.sso_issuer else [],
         "bearer_methods_supported": ["header"],
-        "resource_name": "BISAK Kerf Server (read-only)",
+        "resource_name": "Kerf Server (read-only)",
     }
 
 

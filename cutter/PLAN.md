@@ -1,4 +1,4 @@
-# BISAK Kerf Cutter: implementation plan
+# Kerf Cutter: implementation plan
 
 Status: plan for review. Inputs: `docs/BRIEF.md` (sections 3, 4, 9, 10, 11), `docs/spike-results.md` (all four stations pass), `shared/openapi.yaml` (`/ws/cutter`, `CutterMessage`, `ServerMessage`), `server/kerf_server/devtools/fake_cutter.py` (the pretend Cutter the real one replaces).
 

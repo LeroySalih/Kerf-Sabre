@@ -30,7 +30,7 @@ def server(tmp_path):
     from kerf_server.config import Settings
     from kerf_server.security import issue_token
 
-    app = create_app(Settings.from_env(data_dir=tmp_path / "server", auth_mode="pins"))  # the Cutter uses a station token; people sign in with DINO, not under test here
+    app = create_app(Settings.from_env(data_dir=tmp_path / "server", auth_mode="pins", auto_approve_default=False))  # station token; DINO not under test; the test approves files itself
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]

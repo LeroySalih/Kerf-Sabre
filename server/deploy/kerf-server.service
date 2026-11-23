@@ -2,7 +2,7 @@
 # build the Editor (npm ci && npm run build in editor/), put Caddy or nginx in front for HTTPS, then:
 #   cp kerf-server.service /etc/systemd/system/ && systemctl enable --now kerf-server
 [Unit]
-Description=BISAK Kerf Server
+Description=Kerf Server
 After=network-online.target
 Wants=network-online.target
 

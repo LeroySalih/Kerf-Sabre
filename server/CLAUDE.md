@@ -1,4 +1,4 @@
-# server/ (BISAK Kerf Server)
+# server/ (Kerf Server)
 Python: FastAPI, SQLAlchemy (SQLite default, PostgreSQL via `KERF_DATABASE_URL`), ezdxf, shapely, jsonschema. Schemas and the API contract come from `shared/` (the server validates against them; `shared/tests` checks version agreement). Type hints, pytest. `README.md` documents the workflow and deployment.
 
 ## Layout

@@ -37,7 +37,7 @@ def list_schools(s: Session) -> list[dict]:
 def create_school(s: Session, school_id: str, name: str) -> School:
     school_id = (school_id or "").strip().lower()
     if not SCHOOL_ID_RE.match(school_id):
-        raise ApiError(422, "invalid", "A school ID is lower-case letters, digits and - (up to 32), e.g. bisak.")
+        raise ApiError(422, "invalid", "A school ID is lower-case letters, digits and - (up to 32), e.g. westfield-high.")
     if not (name or "").strip():
         raise ApiError(422, "invalid", "Give the school a name.")
     if s.get(School, school_id) is not None:

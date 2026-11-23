@@ -77,7 +77,7 @@ def handle(msg: Any, tools: dict[str, Tool], ctx_factory: Callable[[], Any], log
         return _ok(id_, {
             "protocolVersion": asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0],
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "kerf-server", "title": "BISAK Kerf Server", "version": __version__},
+            "serverInfo": {"name": "kerf-server", "title": "Kerf Server", "version": __version__},
             "instructions": INSTRUCTIONS,
         })
     if method == "ping":

@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kerf-server"
 version = "0.2.0"
-description = "BISAK Kerf Server: DXF clean-up, G-code post-processing, job queue and station relay"
+description = "Kerf Server: DXF clean-up, G-code post-processing, job queue and station relay"
+authors = [{ name = "mr-salih.org" }]
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",

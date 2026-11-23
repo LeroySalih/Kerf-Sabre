@@ -40,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         app.state.hub.close()
 
-    app = FastAPI(title="BISAK Kerf Server", version=__version__, lifespan=lifespan, docs_url=f"{API}/docs", openapi_url=f"{API}/openapi.json")
+    app = FastAPI(title="Kerf Server", version=__version__, lifespan=lifespan, docs_url=f"{API}/docs", openapi_url=f"{API}/openapi.json")
     app.state.settings = settings
     app.state.db = db
     app.state.throttle = IpThrottle()

@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.31 - naming only
+- `openapi.yaml`: the API title is "Kerf API" (it was named after a school). The product and its parts are Kerf Editor, Kerf Server and Kerf Cutter; the owner is mr-salih.org. No endpoint, field or behaviour changes.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.31`.
+
 ## 0.2.30 - the teacher's DINO classes with their pupils (additive)
 - `openapi.yaml`: `GET /groups` (teacher, admin): `[{id, name, subject, yearGroup, pupils: [pupil ID]}]`. With DINO sign-in it is the signed-in teacher's classes from DINO (`GET /oauth/groups`, scope `groups`, called with the teacher's own token); otherwise Kerf's own classes. IDs only. Sign-in now asks DINO for `profile groups` (`KERF_SSO_SCOPES`). The Editor's "Import pupils' files" lists these classes.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.30`.

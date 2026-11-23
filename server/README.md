@@ -1,4 +1,4 @@
-# BISAK Kerf Server
+# Kerf Server
 
 One server on one URL. It cleans pupils' DXF files, makes the G-code, keeps the queue, and tells the laser PCs when to cut.
 

@@ -1,2 +1,2 @@
-"""BISAK Kerf Server."""
+"""Kerf Server."""
 __version__ = "0.2.0"

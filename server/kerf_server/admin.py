@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init-db", help="create the tables and load the placeholder presets and machines")
     cs = sub.add_parser("create-school", help="create a school (with an optional first admin, whose token is printed once)")
-    cs.add_argument("--id", required=True, help="lower-case letters, digits and -, e.g. bisak")
+    cs.add_argument("--id", required=True, help="lower-case letters, digits and -, e.g. westfield-high")
     cs.add_argument("--name", required=True)
     cs.add_argument("--admin", help="ID of the school's first admin")
     sub.add_parser("list-schools", help="list the schools")

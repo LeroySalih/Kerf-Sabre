@@ -13,7 +13,7 @@ BUILT_NAME = "kerf-cutter.zip"  # what cutter/build_cutter.py makes
 FALCON_NAME = "kerf-cutter-creality-falcon.zip"  # what the Admin site hands out
 KINDS = ("practice", "creality-falcon")
 
-README = """BISAK Kerf Cutter: PRACTICE version
+README = """Kerf Cutter: PRACTICE version
 ===================================
 
 This is NOT the Creality Falcon Cutter. It behaves like a laser for testing (it connects to the Kerf Server, reports a camera

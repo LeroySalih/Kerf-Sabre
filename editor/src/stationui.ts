@@ -126,7 +126,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     if (aligning && root.contains(aligning.view.el)) return; // the picture and the outline are being worked on: do not rebuild them under the pupil's hand
 
     const head = h("header", { class: "st-head" },
-      h("strong", {}, "BISAK Kerf"), h("span", {}, `Laser: ${stationId}`),
+      h("strong", {}, "Kerf"), h("span", {}, `Laser: ${stationId}`),
       h("span", { class: `st-dot ${st?.online ? "on" : "off"}` }, st?.online ? `Connected · ${st.state ?? "…"}` : "Cutter not connected"),
       h("span", { class: "spacer" }),
       ...(st?.cameraAvailable ? [button(st.calibrated ? "Recalibrate camera" : "Calibrate camera", () => void calibrate(), st.calibrated ? "" : "on")] : []),
@@ -292,7 +292,7 @@ export function openStationPicker(session: Session, onPick: (stationId: string) 
     } catch (e) { list.replaceChildren(h("p", { class: "st-error", role: "alert" }, msg(e))); }
   };
   void draw();
-  root.replaceChildren(h("header", { class: "st-head" }, h("strong", {}, "BISAK Kerf"), h("span", {}, "Station pages"), h("span", { class: "spacer" }),
+  root.replaceChildren(h("header", { class: "st-head" }, h("strong", {}, "Kerf"), h("span", {}, "Station pages"), h("span", { class: "spacer" }),
     ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []), button("Sign out", onSignOut)), h("div", { class: "st-main" }, list));
 }
 

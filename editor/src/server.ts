@@ -1,4 +1,4 @@
-// Client for the BISAK Kerf Server (shared/openapi.yaml). The token and address live in this browser only.
+// Client for the Kerf Server (shared/openapi.yaml). The token and address live in this browser only.
 import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";

@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
             print("No token yet. Run once with: --url http://SERVER:8000 --token ks_... --station station-1", file=sys.stderr)
             return 2
         station = Station(cfg, log, save_config=lambda: cfgmod.save(cfg, path))
-        print(f"BISAK Kerf Cutter {__version__}: {cfg.station} -> {cfg.server_url}   (Ctrl+C to stop; a cut in progress is held and reset)")
+        print(f"Kerf Cutter {__version__}: {cfg.station} -> {cfg.server_url}   (Ctrl+C to stop; a cut in progress is held and reset)")
         try:
             asyncio.run(station.run())
         except KeyboardInterrupt:

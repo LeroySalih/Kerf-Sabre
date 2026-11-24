@@ -87,5 +87,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     dist = settings.editor_dist
     if dist and Path(dist).exists():
+        from .webpages import add_site_routes
+
+        add_site_routes(app, Path(dist))  # /, /pricing, /sign-in, /editor/, /admin/ (see webpages.py); then the files themselves
         app.mount("/", StaticFiles(directory=str(dist), html=True), name="editor")
     return app

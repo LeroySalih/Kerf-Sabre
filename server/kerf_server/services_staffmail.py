@@ -74,7 +74,9 @@ def _make_link(s: Session, acct: StaffAccount, purpose: str, lifetime: timedelta
 
 
 def _url(base: str, app: str, token: str) -> str:
-    return f"{base}/{'admin/' if app == 'admin' else ''}?signin={token}"
+    """The emailed link: Kerf's one sign-in page trades the token, then opens the Admin site or the Editor.
+    (Older links, ``/admin/?signin=`` and ``/?signin=``, still work: the Admin site and the Editor trade them too.)"""
+    return f"{base}/sign-in?signin={token}&app={'admin' if app == 'admin' else 'editor'}"
 
 
 def account_doc(a: StaffAccount) -> dict[str, Any]:

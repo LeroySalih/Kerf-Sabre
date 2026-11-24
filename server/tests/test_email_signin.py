@@ -53,7 +53,8 @@ class TestInvitesAndLinks:
         # later: ask for a link
         n = len(app.state.mailer.outbox)
         assert client.post(f"{API}/auth/email/start", json={"email": "ART@westfield.example", "app": "editor"}).json()["message"].startswith("If that address")
-        assert len(app.state.mailer.outbox) == n + 1 and "/?signin=" in app.state.mailer.outbox[-1].text
+        assert len(app.state.mailer.outbox) == n + 1 and "/sign-in?signin=" in app.state.mailer.outbox[-1].text
+        assert "&app=editor" in app.state.mailer.outbox[-1].text  # the sign-in page trades it, then opens the Editor
         assert client.post(f"{API}/auth/email/finish", json={"token": link_token(app)}).status_code == 200
         # removing them ends their sessions
         assert client.delete(f"{API}/staff/people/{tid}", headers=admin).status_code == 204
@@ -98,7 +99,7 @@ class TestDinoServers:
         with self.make(tmp_path, public_url="https://kerf.example.org") as c:
             root = auth(issue_token(c.app.state.db, "platform", "root"))
             assert c.post(f"{API}/schools", json={"id": "eastfield", "name": "Eastfield", "adminEmail": "a@eastfield.example"}, headers=root).status_code == 201
-            assert "https://kerf.example.org/admin/?signin=" in c.app.state.mailer.outbox[-1].text
+            assert re.search(r"https://kerf\.example\.org/sign-in\?signin=[A-Za-z0-9_-]+&app=admin", c.app.state.mailer.outbox[-1].text)
             t = c.post(f"{API}/auth/email/finish", json={"token": link_token(c.app)}).json()["token"]
             assert c.get(f"{API}/auth/me", headers=auth(t)).json()["school"] == "eastfield"
             stored = issue_token(c.app.state.db, "teacher", "T9", school="eastfield")  # a plain stored person token is still refused
@@ -125,7 +126,7 @@ class TestMailer:
         monkeypatch.setattr(em.urllib.request, "urlopen", fake)
         m = em.Mailer("re_test", "Kerf <kerf-no-reply@mr-salih.org>")
         with caplog.at_level("INFO", logger="kerf.email"):
-            m.send(em.sign_in_email("p@school.example", "https://kerf.example/?signin=abc", "Westfield", 15))
+            m.send(em.sign_in_email("p@school.example", "https://kerf.example/sign-in?signin=abc&app=admin", "Westfield", 15))
         assert seen["url"] == em.RESEND_URL and seen["auth"] == "Bearer re_test"
         assert seen["body"]["from"] == "Kerf <kerf-no-reply@mr-salih.org>" and seen["body"]["to"] == ["p@school.example"]
         assert "p@school.example" not in caplog.text and "signin=abc" not in caplog.text and "sent" in caplog.text

@@ -29,7 +29,7 @@ class Settings:
     data_dir: Path = Path("data")
     database_url: str = ""
     shared_dir: Path = field(default_factory=_find_shared)
-    #: Directory with the built Editor (editor/dist). When it exists the server also serves the Editor at "/".
+    #: Directory with the built Editor (editor/dist). When it exists the server also serves the website at "/", the Editor at "/editor/" (webpages.py).
     editor_dist: Path | None = None
     #: The portable Cutter zip made by cutter/build_cutter.py. None: use cutter/build/kerf-cutter.zip next to the repo's shared/ folder if it exists.
     cutter_zip: Path | None = None

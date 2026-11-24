@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.38
+  version: 0.2.39
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -311,6 +311,29 @@ paths:
         - {name: personId, in: path, required: true, schema: {type: string}}
       responses:
         "204": {description: Removed}
+  /auth/pupil:
+    post:
+      summary: Anyone. A pupil signs in with their Pupil Card. The school must have Group code sign-in on (403 sign_in_off). Wrong anything is the same 401; repeated wrong passwords lock the pupil for a while (429 locked); too many from one computer is 429 too_many_attempts. The password is two words; case, spaces and underscores between them do not matter
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [schoolCode, groupCode, pupilId, password], properties: {schoolCode: {type: string}, groupCode: {type: string, description: "The group's join code"}, pupilId: {type: string}, password: {type: string}}}
+      responses:
+        "200": {description: Signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {const: pupil}, id: {type: string}, classCode: {type: string}, expiresAt: {type: string, format: date-time}}}}}}
+        "401": {description: "`bad_login`"}
+  /classes/{code}/passwords:
+    post:
+      summary: Teacher. New two-word passwords for the group's pupils (all, or pupilIds), for printing Pupil Cards. Old passwords stop working and the pupils are signed out. Shown once
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {pupilIds: {type: array, items: {type: string}}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {type: array, items: {type: object, properties: {pupilId: {type: string}, password: {type: string}, displayName: {type: string}}}}}}}
   /classes:
     get:
       summary: Teacher. My classes (the ones I created, plus shared ones) and how many pupils are in each. Another teacher's class is invisible to me. Archived groups are left out unless archived=true (then only they are listed).
@@ -380,9 +403,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [pupilIds]
+              description: "Any of: pupilIds (IDs), pupils (IDs and/or names; no id: Kerf makes one), generate (that many new pupils with IDs Kerf makes)"
               properties:
                 pupilIds: {type: array, items: {type: string}, maxItems: 500}
+                pupils: {type: array, maxItems: 500, items: {type: object, properties: {id: {type: string}, name: {type: string, description: "Display name: staff and the pupil's card only"}}}}
+                generate: {type: integer, minimum: 0, maximum: 500}
       responses:
         "201":
           description: "PINs for the pupils that were new. A pupil already in another group of this school is added too (`added`, PIN unchanged); already-listed pupils keep their PIN; an ID that belongs to another school is reported in `conflicts`. 409 `limit_reached` (nothing added) past a free school's pupils-per-group limit"
@@ -391,12 +416,24 @@ paths:
               schema:
                 type: object
                 properties:
-                  created: {type: array, items: {type: object, properties: {pupilId: {type: string}, pin: {type: string}}}}
+                  created: {type: array, items: {type: object, properties: {pupilId: {type: string}, password: {type: string, description: "Two words, e.g. tiger-river. Shown only now"}, pin: {type: string, description: "The same as password (older clients)"}, displayName: {type: string}}}}
                   added: {type: array, items: {type: string}}
                   restored: {type: array, items: {type: string}, description: "Archived pupils brought back (files and PIN kept)"}
                   existing: {type: array, items: {type: string}}
                   conflicts: {type: array, items: {type: string}}
   /classes/{code}/pupils/{pupilId}:
+    put:
+      summary: Teacher. Set or clear (empty) a pupil's display name. Shown to staff and printed on the pupil's card; never logged, never shown to other pupils
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, properties: {displayName: {type: string}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {type: object, properties: {pupilId: {type: string}, displayName: {type: [string, "null"]}}}}}}
     delete:
       summary: Teacher. Remove a pupil from this group. Out of their last group the pupil is archived (signed out, cannot sign in, files and work kept); otherwise they stay in their other groups
       parameters:

@@ -20,14 +20,15 @@ def setup_class_with(client, tokens, ids=("P001", "P002"), code="9B-DT"):
     return {c["pupilId"]: c["pin"] for c in r.json()["created"]}
 
 
-def login(client, code="9B-DT", pid="P001", pin="00000"):
+def login(client, code="9B-DT", pid="P001", pin="zebra-zebra"):
     return client.post(f"{API}/auth/login", json={"classCode": code, "pupilId": pid, "pin": pin})
 
 
 class TestLogin:
     def test_pupil_logs_in_and_works_like_any_pupil(self, client, tokens):
         pins = setup_class_with(client, tokens)
-        assert all(len(p) == 5 and p.isdigit() for p in pins.values())
+        from kerf_server.services_passwords import WORDS
+        assert all(len(p.split("-")) == 2 and all(w in WORDS for w in p.split("-")) for p in pins.values())  # two words
         r = login(client, pin=pins["P001"])
         assert r.status_code == 200, r.text
         body = r.json()
@@ -74,7 +75,7 @@ class TestLogin:
         assert login(client, pin=pins["P001"]).status_code == 200  # four more wrong would not have locked: the count restarted
 
     def test_lockout_ends(self, tmp_path):
-        app = create_app(Settings.from_env(data_dir=tmp_path / "d", login_lockout_minutes=0.001))
+        app = create_app(Settings.from_env(data_dir=tmp_path / "d", login_lockout_minutes=0.02))
         from kerf_server.security import issue_token
 
         with TestClient(app) as c:
@@ -85,7 +86,7 @@ class TestLogin:
             assert login(c, pin=pins["P001"]).status_code == 429
             import time
 
-            time.sleep(0.2)
+            time.sleep(1.4)  # the lock lasts 1.2 s
             assert login(c, pin=pins["P001"]).status_code == 200
 
     def test_too_many_failures_from_one_address_slow_everyone_down(self, tmp_path):
@@ -164,7 +165,7 @@ class TestTeacherSide:
             login(client, pin="x")
         r = client.post(f"{API}/pupils/P001/reset-pin", headers=auth(tokens["teacher"]))
         new = r.json()["pin"]
-        assert new != pins["P001"] and len(new) == 5
+        assert new != pins["P001"] and new.count("-") == 1 and r.json()["password"] == new
         assert client.get(f"{API}/auth/me", headers=h).status_code == 401  # old session ended
         assert login(client, pin=pins["P001"]).status_code == 401
         assert login(client, pin=new).status_code == 200

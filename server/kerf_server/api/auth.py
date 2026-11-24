@@ -87,3 +87,14 @@ def email_finish(body: dict[str, Any] = Body(...), s: Session = Depends(get_sess
     from .. import services_staffmail as sm
 
     return sm.finish(s, cfg, body)
+
+
+@router.post("/auth/pupil")
+def pupil_card_login(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Pupils: sign in with the Pupil Card (`{schoolCode, groupCode, pupilId, password}`) -> `{token, role, id, classCode, expiresAt}`.
+    Works on every server whose school has Group code sign-in on; wrong anything is the same 401."""
+    for k in ("schoolCode", "groupCode", "pupilId", "password"):
+        if not isinstance(body.get(k), str) or not body[k].strip():
+            raise ApiError(422, "invalid", "Fill in your school code, group code, pupil ID and password.")
+    ip = request.client.host if request.client else "unknown"
+    return sc.group_login(s, cfg, request.app.state.throttle, ip, body["schoolCode"], body["groupCode"], body["pupilId"], body["password"])

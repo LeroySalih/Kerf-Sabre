@@ -1,7 +1,7 @@
 // The sign-in panel on the landing page and on /sign-in (proprietary site code). It starts the Editor's or the Admin site's own
 // sign-in (DINO, or a link by email) and, for an emailed link, trades the link for a session before going on to /editor/ or /admin/,
 // where the session is picked up again from this tab's sessionStorage. The decisions are in signinlogic.ts (tested).
-import { askForLink, cleanLinkFromAddress, finishEmailSignIn } from "../emailsignin";
+import { askForLink, cardSignIn, cleanLinkFromAddress, finishEmailSignIn } from "../emailsignin";
 import { ServerError } from "../server";
 import { takeProblem } from "../signinpage";
 import { beginSignIn, fetchAuthConfig } from "../sso";
@@ -75,6 +75,21 @@ export function mountPanel(root: HTMLElement): void {
         .finally(() => go.removeAttribute("aria-busy"));
     });
   }
+  const card = one<HTMLFormElement>("[data-pupil-card]");
+  card.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const field = (n: string) => card.querySelector<HTMLInputElement>(`[name="${n}"]`)!;
+    const empty = ["school", "group", "pupil", "password"].map(field).find((i) => !i.value.trim());
+    if (empty) { alert("Fill in all four boxes from your Pupil Card."); empty.focus(); return; }
+    const go = card.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    if (go.getAttribute("aria-busy")) return;
+    go.setAttribute("aria-busy", "true");
+    alert("");
+    void cardSignIn(base(), { schoolCode: field("school").value, groupCode: field("group").value, pupilId: field("pupil").value, password: field("password").value })
+      .then(() => location.replace(destinationFor("editor", station())))
+      .catch((e) => { alert(text(e)); field("password").select(); })
+      .finally(() => go.removeAttribute("aria-busy"));
+  });
   one<HTMLButtonElement>("[data-back-staff]").addEventListener("click", () => { choose("staff"); show("form", true); });
   one<HTMLButtonElement>("[data-back-pupil]").addEventListener("click", () => { choose("pupil"); show("form", true); });
 

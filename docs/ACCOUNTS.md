@@ -62,7 +62,7 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 
 - **Roll-out: free tools first.** No paid Server option is offered publicly yet. **Free schools register instantly**; a **paid school is approved by the site admin** (BISAK is the existing paid school).
 - **Group join codes:** Kerf generates one by default; the teacher may type their own when making the group (by hand or in the CSV), and may edit it later. **Unique within a school.**
-- **Pupil passwords:** Kerf's default is **two words** (e.g. `tiger-river`); the teacher reissues them (new card); pupils do not choose or change them.
+- **Pupil passwords:** Kerf's default is **two words** (e.g. `tiger-river`); the teacher reissues them (new card); pupils do not choose or change them. (Built, shared 0.2.39: Pupil Card sign-in on `/sign-in`, Pupil Cards printed from the class's pupils.)
 - **Pupils can be in several groups**, and a group can be **re-synced from its source** (e.g. DINO).
 - **Display names:** teachers may enter them; they are **printed on the Pupil Cards** (staff and the pupil's own card only, never in logs).
 - **Signing in without an import** (e.g. Google): the pupil is asked to **join** and waits; a teacher **approves** them from the group's page.

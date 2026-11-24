@@ -74,10 +74,33 @@ def pupils(code: str, who: Principal = Depends(require("teacher")), s: Session =
 
 @router.post("/classes/{code}/pupils", status_code=201)
 def add_pupils(code: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
-    ids = body.get("pupilIds")
-    if not isinstance(ids, list) or not ids or len(ids) > 500:
-        raise ApiError(422, "invalid", "Send pupilIds: a list of 1 to 500 pupil IDs.")
-    return sc.add_pupils(s, code, ids, who_teacher(who), who.school)
+    """`{pupilIds: [ID]}` and/or `{pupils: [{id?, name?}]}` and/or `{generate: N}` (Kerf makes the IDs). New pupils' two-word
+    passwords are in the answer, once."""
+    ids, entries, generate = body.get("pupilIds"), body.get("pupils"), body.get("generate", 0)
+    if ids is not None and (not isinstance(ids, list) or len(ids) > 500):
+        raise ApiError(422, "invalid", "pupilIds is a list of up to 500 pupil IDs.")
+    if entries is not None and (not isinstance(entries, list) or len(entries) > 500):
+        raise ApiError(422, "invalid", "pupils is a list of up to 500 {id?, name?}.")
+    if not isinstance(generate, int) or isinstance(generate, bool):
+        raise ApiError(422, "invalid", "generate is a whole number.")
+    if not ids and not entries and not generate:
+        raise ApiError(422, "invalid", "Send pupilIds, pupils or generate.")
+    return sc.add_pupils(s, code, ids or [], who_teacher(who), who.school, entries=entries or [], generate=generate)
+
+
+@router.post("/classes/{code}/passwords")
+def new_passwords(code: str, body: dict[str, Any] = Body(default={}), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """New two-word passwords for the group's pupils (all, or `{pupilIds}`), for printing Pupil Cards. Old passwords stop working."""
+    ids = body.get("pupilIds") if isinstance(body, dict) else None
+    if ids is not None and not isinstance(ids, list):
+        raise ApiError(422, "invalid", "pupilIds is a list.")
+    return sc.new_group_passwords(s, code, who_teacher(who), who.school, ids)
+
+
+@router.put("/classes/{code}/pupils/{pupil_id}")
+def set_pupil_name(code: str, pupil_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """A pupil's display name (`{displayName}`; empty clears it): staff and the pupil's own card only, never logged."""
+    return {"pupilId": pupil_id, "displayName": sc.set_display_name(s, code, pupil_id, body.get("displayName"), who_teacher(who), who.school)}
 
 
 @router.delete("/classes/{code}/pupils/{pupil_id}", status_code=204)
@@ -100,4 +123,5 @@ def delete_forever(pupil_id: str, who: Principal = Depends(require("admin")), s:
 
 @router.post("/pupils/{pupil_id}/reset-pin")
 def reset_pin(pupil_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
-    return {"pupilId": pupil_id, "pin": sc.reset_pin(s, pupil_id, who_teacher(who), who.school)}
+    password = sc.reset_pin(s, pupil_id, who_teacher(who), who.school)
+    return {"pupilId": pupil_id, "password": password, "pin": password}

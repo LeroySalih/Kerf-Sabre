@@ -51,3 +51,26 @@ describe("email sign-in", () => {
     expect(sent).toEqual({ email: "art@school.example", app: "editor" });
   });
 });
+
+describe("Pupil Card sign-in", () => {
+  it("sends the four answers and keeps the session for the Editor in this tab", async () => {
+    let sent: unknown = null;
+    const f = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/auth/pupil")) { sent = JSON.parse(String(init?.body)); return json({ token: "kp_card", role: "pupil", id: "20417", expiresAt: "2026-11-24T20:00:00Z" }); }
+      if (url.endsWith("/auth/me")) return json({ role: "pupil", id: "20417", school: "westfield-high" });
+      return json({}, 404);
+    }) as typeof fetch;
+    const st = new Mem();
+    const { cardSignIn } = await import("../src/emailsignin");
+    const s = await cardSignIn("", { schoolCode: " k7rpx ", groupCode: "9b-dt", pupilId: "20417 ", password: "Tiger River" }, f, st);
+    expect(sent).toEqual({ schoolCode: "k7rpx", groupCode: "9b-dt", pupilId: "20417", password: "Tiger River" });
+    expect(s).toMatchObject({ role: "pupil", id: "20417", email: true, token: "kp_card" });
+    expect(JSON.parse(st.getItem("kerf.email.editor")!).token).toBe("kp_card");
+  });
+
+  it("passes on the server's message when the card is wrong", async () => {
+    const f = (async () => json({ code: "bad_login", message: "That school code, group code, pupil ID or password is not right. Check your Pupil Card." }, 401)) as typeof fetch;
+    const { cardSignIn } = await import("../src/emailsignin");
+    await expect(cardSignIn("", { schoolCode: "A", groupCode: "B", pupilId: "C", password: "d" }, f, new Mem())).rejects.toThrow(/Check your Pupil Card/);
+  });
+});

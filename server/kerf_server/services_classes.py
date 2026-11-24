@@ -19,7 +19,6 @@ from .models import DEFAULT_SCHOOL, AuditEvent, GroupMember, Pupil, SchoolClass,
 from . import services_people as people
 from .security import hash_token, new_token
 
-PIN_DIGITS = 5
 CODE_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _SCRYPT = dict(n=2**14, r=8, p=1, dklen=32)
@@ -27,7 +26,19 @@ _DUMMY = None  # hash checked for unknown pupils so a wrong ID costs the same ti
 
 
 def new_pin() -> str:
-    return "".join(str(secrets.randbelow(10)) for _ in range(PIN_DIGITS))
+    """A new pupil's password: two words (`services_passwords`). The name is kept from when pupils had 5-digit PINs."""
+    from .services_passwords import new_password
+
+    return new_password()
+
+
+def new_pupil_id(s: Session) -> str:
+    """A pupil ID Kerf makes up: 5 digits (6 when 5 run short), not used anywhere on this server (pupil IDs are server-wide)."""
+    for digits in (5, 5, 5, 5, 6, 6, 6, 6, 7, 7):
+        pid = str(secrets.randbelow(9 * 10 ** (digits - 1)) + 10 ** (digits - 1))
+        if s.get(Pupil, pid) is None:
+            return pid
+    raise ApiError(500, "error", "Could not make a pupil ID. Try again.")
 
 
 def hash_pin(pin: str, salt: bytes | None = None) -> str:
@@ -227,46 +238,101 @@ def get_class(s: Session, code: str, teacher_id: str | None = None, school: str 
     return c
 
 
-def add_pupils(s: Session, code: str, pupil_ids: list[str], teacher_id: str | None = None, school: str | None = None) -> dict[str, list]:
-    """New IDs get a PIN (returned here, the only time it is ever visible). A pupil already in another group of the same
-    school is added to this one too (`added`, no new PIN). Existing members are left alone; IDs taken in another school are `conflicts`."""
+def add_pupils(s: Session, code: str, pupil_ids: list[str] | None = None, teacher_id: str | None = None, school: str | None = None,
+               entries: list[dict] | None = None, generate: int = 0) -> dict[str, list]:
+    """Add pupils to a group. `pupil_ids`: IDs as before; `entries`: `[{id?, name?}]` (no id: Kerf makes one; a name is the
+    teacher's display name, printed on Pupil Cards and shown to staff only); `generate`: that many new pupils with IDs Kerf makes.
+    New pupils get a two-word password (returned here as `password` and, for older clients, `pin`: the only time it is ever
+    visible). A pupil already in another group of the same school is added to this one too (`added`, password unchanged)."""
     from .services_schools import check_limit
 
     cls = get_class(s, code, teacher_id, school)
-    ids: list[str] = []
-    for raw in pupil_ids:
-        pid = str(raw).strip()
-        if not ID_RE.match(pid):
-            raise ApiError(422, "invalid", f"'{pid[:30]}' is not a valid pupil ID (letters, digits, - and _). IDs, never names.")
-        if pid not in ids:
-            ids.append(pid)
+    wanted: list[tuple[str | None, str | None]] = [(str(raw).strip(), None) for raw in (pupil_ids or [])]
+    for e in entries or []:
+        if not isinstance(e, dict):
+            raise ApiError(422, "invalid", "Each pupil is {id?, name?}.")
+        raw_id = str(e.get("id") or "").strip() or None
+        wanted.append((raw_id, people.clean_name(e.get("name"))))
+    if not isinstance(generate, int) or generate < 0 or generate > 500:
+        raise ApiError(422, "invalid", "generate is a number from 0 to 500.")
+    wanted += [(None, None)] * generate
+    if not wanted:
+        raise ApiError(422, "invalid", "Give at least one pupil.")
+    seen: set[str] = set()
+    plan: list[tuple[str, str | None, str | None]] = []  # (kind, pupil ID or None for "make one", name)
     out: dict[str, list] = {"created": [], "added": [], "restored": [], "existing": [], "conflicts": []}
-    plan: list[tuple[str, str]] = []
-    for pid in ids:
-        row = s.get(Pupil, pid)
-        if row is None:
-            plan.append(("created", pid))
-        elif in_group(s, cls.code, pid):
-            out["existing"].append(pid)
-        elif pupil_school(s, row) == cls.school_id:
-            plan.append(("restored" if row.archived_at else "added", pid))
+    for pid, name in wanted:
+        if pid is not None:
+            if not ID_RE.match(pid):
+                raise ApiError(422, "invalid", f"'{pid[:30]}' is not a valid pupil ID (letters, digits, - and _). IDs, never names.")
+            if pid in seen:
+                continue
+            seen.add(pid)
+            row = s.get(Pupil, pid)
+            if row is None:
+                plan.append(("created", pid, name))
+            elif in_group(s, cls.code, pid):
+                out["existing"].append(pid)
+            elif pupil_school(s, row) == cls.school_id:
+                plan.append(("restored" if row.archived_at else "added", pid, name))
+            else:
+                out["conflicts"].append(pid)
         else:
-            out["conflicts"].append(pid)
+            plan.append(("created", None, name))
     check_limit(s, cls.school_id, "pupilsPerGroup", len(member_ids(s, cls.code)), len(plan))
-    for kind, pid in plan:
+    for kind, pid, name in plan:
         if kind == "created":
-            pin = new_pin()
-            s.add(Pupil(pupil_id=pid, class_code=cls.code, pin_hash=hash_pin(pin)))
+            pid = pid or new_pupil_id(s)
+            password = new_pin()
+            s.add(Pupil(pupil_id=pid, class_code=cls.code, pin_hash=hash_pin(password)))
             s.flush()
-            out["created"].append({"pupilId": pid, "pin": pin})
+            if name:
+                people.remember(s, pid, cls.school_id, name)
+            out["created"].append({"pupilId": pid, "password": password, "pin": password, **({"displayName": name} if name else {})})
         else:
+            assert pid is not None
             out[kind].append(pid)
-            if kind == "restored":  # an archived pupil comes back with their files and PIN
+            if kind == "restored":  # an archived pupil comes back with their files and password
                 row = s.get(Pupil, pid)
                 row.archived_at, row.class_code = None, cls.code  # type: ignore[union-attr]
+            if name:
+                people.remember(s, pid, cls.school_id, name)
         s.add(GroupMember(class_code=cls.code, pupil_id=pid))
     s.flush()
     return out
+
+
+def new_group_passwords(s: Session, code: str, teacher_id: str | None = None, school: str | None = None, pupil_ids: list[str] | None = None) -> list[dict]:
+    """New passwords for a group's pupils (all, or those listed), for printing Pupil Cards. Their old passwords stop working and
+    they are signed out. Returned once, never again."""
+    cls = get_class(s, code, teacher_id, school)
+    ids = member_ids(s, cls.code)
+    if pupil_ids is not None:
+        want = {str(p) for p in pupil_ids}
+        ids = [p for p in ids if p in want]
+    named = people.names(s, cls.school_id, ids)
+    out = []
+    for pid in ids:
+        row = s.get(Pupil, pid)
+        if row is None:
+            continue
+        password = new_pin()
+        row.pin_hash, row.failed_attempts, row.locked_until = hash_pin(password), 0, None
+        revoke_sessions(s, pid)
+        out.append({"pupilId": pid, "password": password, **({"displayName": named[pid]} if pid in named else {})})
+    return out
+
+
+def set_display_name(s: Session, code: str, pupil_id: str, name: object, teacher_id: str | None = None, school: str | None = None) -> str | None:
+    """A teacher types (or clears) a pupil's display name: shown to staff and printed on the pupil's card, never logged."""
+    cls = get_class(s, code, teacher_id, school)
+    if not in_group(s, cls.code, pupil_id):
+        raise ApiError(404, "not_found", "That pupil is not in this class.")
+    clean = people.clean_name(name)
+    if clean is None:
+        people.forget(s, pupil_id)
+        return None
+    return people.remember(s, pupil_id, cls.school_id, clean)
 
 
 def _may_manage(s: Session, pupil: Pupil, teacher_id: str | None, school: str | None) -> bool:
@@ -373,25 +439,22 @@ def class_pupils(s: Session, code: str, teacher_id: str | None = None, school: s
 BAD = ApiError(401, "bad_login", "That class code, pupil ID or PIN is not right.")
 
 
-def login(s: Session, cfg: Settings, throttle: IpThrottle, ip: str, class_code: str, pupil_id: str, pin: str) -> dict:
-    """Returns the login result. Wrong anything gives the same 401; repeated wrong PINs lock the pupil for a while."""
+def _password_login(s: Session, cfg: Settings, throttle: IpThrottle, ip: str, row: Pupil | None, code: str, password: str, method: str | None) -> dict:
+    """The shared end of both pupil logins. Wrong anything gives the same 401; repeated wrong passwords lock the pupil for a while."""
     global _DUMMY
-    if throttle.blocked(ip, cfg):
-        raise ApiError(429, "too_many_attempts", "Too many wrong tries from this computer. Wait a few minutes.")
-    code, pid = norm_code(class_code or ""), (pupil_id or "").strip()
-    row = None
-    if ID_RE.match(pid) and code in groups_of(s, pid):  # any group the pupil is in that is not archived
-        row = s.get(Pupil, pid)
+    from .services_passwords import normalise
+
+    typed = normalise(password)
     if row is None:
-        _DUMMY = _DUMMY or hash_pin("00000")
-        check_pin(str(pin), _DUMMY)  # same work as a real check
+        _DUMMY = _DUMMY or hash_pin("tiger-river")
+        check_pin(typed, _DUMMY)  # same work as a real check
         throttle.fail(ip)
         raise ApiError(401, "bad_login", BAD.message)
     now = utcnow()
     if row.locked_until and as_utc(row.locked_until) > now:
         mins = max(1, int((as_utc(row.locked_until) - now).total_seconds() // 60) + 1)
-        raise ApiError(429, "locked", f"Too many wrong PINs. This ID is locked for about {mins} more minute{'s' if mins != 1 else ''}. Ask your teacher for a new PIN.")
-    if not check_pin(str(pin), row.pin_hash):
+        raise ApiError(429, "locked", f"Too many wrong passwords. This pupil ID is locked for about {mins} more minute{'s' if mins != 1 else ''}. Ask your teacher if you have lost your card.")
+    if not check_pin(typed, row.pin_hash) and (str(password) == typed or not check_pin(str(password), row.pin_hash)):
         throttle.fail(ip)
         row.failed_attempts += 1
         if row.failed_attempts >= cfg.login_max_failures:
@@ -403,5 +466,47 @@ def login(s: Session, cfg: Settings, throttle: IpThrottle, ip: str, class_code: 
     expires = now + timedelta(hours=cfg.session_hours)
     cls = s.get(SchoolClass, code)
     s.add(Token(token_hash=hash_token(token), role="pupil", subject_id=row.pupil_id, label=f"login {code}", expires_at=expires,
-                school_id=(cls.school_id if cls else None) or DEFAULT_SCHOOL))
+                school_id=(cls.school_id if cls else None) or DEFAULT_SCHOOL, method=method))
     return {"token": token, "role": "pupil", "id": row.pupil_id, "classCode": code, "expiresAt": expires.isoformat().replace("+00:00", "Z")}
+
+
+def login(s: Session, cfg: Settings, throttle: IpThrottle, ip: str, class_code: str, pupil_id: str, pin: str) -> dict:
+    """The old class login (class code + pupil ID + PIN or password; development servers only)."""
+    if throttle.blocked(ip, cfg):
+        raise ApiError(429, "too_many_attempts", "Too many wrong tries from this computer. Wait a few minutes.")
+    code, pid = norm_code(class_code or ""), (pupil_id or "").strip()
+    row = s.get(Pupil, pid) if ID_RE.match(pid) and code in groups_of(s, pid) else None  # any group the pupil is in that is not archived
+    return _password_login(s, cfg, throttle, ip, row, code, pin, None)
+
+
+GROUP_BAD = "That school code, group code, pupil ID or password is not right. Check your Pupil Card."
+
+
+def group_login(s: Session, cfg: Settings, throttle: IpThrottle, ip: str, school_code: str, group_code: str, pupil_id: str, password: str) -> dict:
+    """Pupil Card sign-in: school code + group (join) code + pupil ID + two-word password -> a session token for this school
+    (`Token.method = "group"`, accepted alongside DINO). The school must have its Group code sign-in on."""
+    from .models import School
+    from .services_signin import allowed
+
+    if throttle.blocked(ip, cfg):
+        raise ApiError(429, "too_many_attempts", "Too many wrong tries from this computer. Wait a few minutes.")
+    sc = (school_code or "").strip().upper()
+    school = s.scalar(select(School).where(School.code == sc)) if sc else None
+    if school is not None and not allowed(s, school.id, "groupCode"):
+        raise ApiError(403, "sign_in_off", "Your school does not use Pupil Cards to sign in. Use your school's sign-in instead.")
+    jc, pid = norm_code(group_code or ""), (pupil_id or "").strip()
+    row = None
+    code = ""
+    if school is not None and jc and ID_RE.match(pid):
+        cls = next((c for c in s.scalars(select(SchoolClass).where(SchoolClass.school_id == school.id, SchoolClass.archived.is_not(True)))
+                    if join_code_of(c) == jc), None)
+        if cls is not None and in_group(s, cls.code, pid):
+            row, code = s.get(Pupil, pid), cls.code
+            if row is not None and row.archived_at is not None:
+                row = None
+    try:
+        return _password_login(s, cfg, throttle, ip, row, code, password, "group")
+    except ApiError as e:
+        if e.code == "bad_login":
+            raise ApiError(401, "bad_login", GROUP_BAD) from None
+        raise

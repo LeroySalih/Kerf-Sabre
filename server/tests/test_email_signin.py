@@ -1,4 +1,4 @@
-"""Staff sign in with an emailed link (shared 0.2.38): invites, one-time links, sessions alongside DINO, and the walls."""
+"""Staff sign in with an emailed link (shared 0.2.39): invites, one-time links, sessions alongside DINO, and the walls."""
 from __future__ import annotations
 
 import re

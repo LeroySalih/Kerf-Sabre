@@ -13,33 +13,33 @@
 
 <!-- ---- Pupil ---- -->
 <div class="kp-part" data-only="pupil">
-<form class="kp-form is-soon" aria-label="Sign in with your Pupil Card" data-pupil-card>
-<fieldset disabled class="kp-fieldset">
-<p class="kp-strong kp-row">Use your Pupil Card <span class="soon">Coming soon</span></p>
+<form class="kp-form" aria-label="Sign in with your Pupil Card" data-pupil-card novalidate>
+<fieldset class="kp-fieldset">
+<p class="kp-strong kp-row">Use your Pupil Card</p>
 <div class="kp-pair">
 <div class="kp-field">
 <label for="k-school">School code</label>
-<input id="k-school" name="school" type="text" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="K7QHM" class="kp-input kp-code">
+<input id="k-school" name="school" type="text" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="K7QHM" class="kp-input kp-code" required>
 </div>
 <div class="kp-field">
 <label for="k-group">Group code</label>
-<input id="k-group" name="group" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="9B-DT" class="kp-input">
+<input id="k-group" name="group" type="text" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="9B-DT" class="kp-input" required>
 </div>
 </div>
 <div class="kp-field">
 <label for="k-pupil">Pupil ID</label>
-<input id="k-pupil" name="pupil" type="text" inputmode="numeric" autocomplete="username" placeholder="20417" class="kp-input">
+<input id="k-pupil" name="pupil" type="text" maxlength="64" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="20417" class="kp-input" required>
 </div>
 <div class="kp-field">
 <label for="k-pass">Password</label>
-<input id="k-pass" name="password" type="password" autocomplete="current-password" placeholder="tiger-river" aria-describedby="k-pass-help" class="kp-input">
+<input id="k-pass" name="password" type="password" autocomplete="current-password" placeholder="tiger-river" aria-describedby="k-pass-help" autocapitalize="off" spellcheck="false" class="kp-input" required>
 <span id="k-pass-help" class="kp-hint">Two words with a dash, like tiger-river.</span>
 </div>
 <div class="kp-note">
 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 2px"><rect x="2" y="5" width="20" height="14" rx="2"></rect><circle cx="8" cy="12" r="2.5"></circle><path d="M13 10h5M13 14h3"></path></svg>
 <span>Your teacher gives you a card with these. Ask them if you've lost it.</span>
 </div>
-<button type="button" class="kp-primary">Sign in</button>
+<button type="submit" class="kp-primary">Sign in</button>
 </fieldset>
 </form>
 <div class="kp-divider"><span></span><span>or use your school's sign-in</span><span></span></div>

@@ -1,6 +1,6 @@
 # Walkthrough: a new school joins Kerf
 
-This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.38 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
+This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.39 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
 
 The example school is **Westfield High** (school ID `westfield-high`). The teacher is `you@westfield-high.example` and the colleague is `colleague@westfield-high.example`.
 
@@ -46,7 +46,7 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
    - **Classes**: one row per group, showing its join code, note, teacher and number of pupils. The buttons are **New class…**, **Pupils…**, **Edit…** (change the note or join code) and **Archive** (archived groups can be brought back with **Show archived classes**).
    - **Pupils**: every pupil in the school by group, shown by pupil ID only, with **Remove**. Pupils removed from their last group appear under "Archived pupils", where **Delete for good…** deletes them permanently.
    - **Materials**: the laser settings for each material (power, speed, passes and kerf). Changing them only matters once the school has the laser.
-   - **School**: the school's name, its **School code**, the plan ("Plan: Free" plus what the terms give, for example "free tools only · " followed by the group, pupil and file limits), and a **How people sign in** table with a tick box for each of **Group code**, **Email link**, **DINO**, **Google** and **Microsoft**. Every method except Email link and DINO is marked "Coming soon: can be set now, starts working when it is released." DINO's box is greyed out with "Linked to another school on this server." You cannot switch off every way staff sign in.
+   - **School**: the school's name, its **School code**, the plan ("Plan: Free" plus what the terms give, for example "free tools only · " followed by the group, pupil and file limits), and a **How people sign in** table with a tick box for each of **Group code**, **Email link**, **DINO**, **Google** and **Microsoft**. Every method except Email link, Group code and DINO is marked "Coming soon: can be set now, starts working when it is released." DINO's box is greyed out with "Linked to another school on this server." You cannot switch off every way staff sign in.
    - **Staff**: **Invite staff…** and a list of people invited by email, showing Name, Email, Role and Status (**Invited**, or "Signed in" with a date). People still marked Invited have **Send again**. Everyone except you has **Remove**. Staff who sign in with DINO are not listed here.
 
 6. **Invite a colleague.** On **Staff**, press **Invite staff…**. Fill in **School email address**, **Name (optional)** (shown to your school's staff only) and **Role**: **Teacher**, **School admin** or **Technician (laser stations only)**. Press **Send invite**, and you see "An invite is on its way to colleague@westfield-high.example."
@@ -65,9 +65,11 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
 
 8. **Make a group and add pupils.**
    - On **Classes**, press **New class…**. Fill in **Class code (optional)** (leave it blank and Kerf makes one) and **Note (optional)** (for example "Year 9 set 2", never a pupil's name). Press **Create**.
-   - Press **Pupils…** on the new row, open the class, press **Add pupils…** and paste the pupils' IDs (described as their DINO IDs), one per line. An ID already used in another school is not added ("Used in another school, not added").
-   - **Pupils at a new school cannot sign in yet.** Today pupils sign in only with DINO, and DINO sign-ins belong to the one school the server links to DINO (`KERF_SSO_SCHOOL`). Westfield High cannot switch DINO on. The group code sign-in that the School page describes ("Pupils type the school code, their group code, their pupil ID and the password on their card") has no sign-in screen yet. So a new school can set up groups, but its pupils cannot use them.
-   - Pupils, or anyone else, can still design in the Editor: **Work without signing in** on the sign-in page opens the Editor, and the work stays in that browser. The **Use your Pupil Card** form on the sign-in page is shown but marked **Coming soon**.
+   - Press **Pupils…** on the new row (or open the class), then **Add pupils…**. Type one pupil per line: a name (for example `Zoë Adams`; Kerf makes a 5-digit pupil ID), an ID (for example a DINO ID), or `ID, Name`. Two columns pasted from a spreadsheet work too. You can also ask Kerf to **make N more pupils with no names**. Press **Add and make cards**.
+   - Kerf gives every new pupil a **two-word password**, for example `tiger-river`. Their **Pupil Cards** open in a new tab, eight to an A4 page: the school name, the pupil's name (or "Pupil 23192"), **School code**, **Group code**, **Pupil ID**, **Password**, and where to sign in. Print them straight away: the passwords are not shown again. (If the browser blocks the new tab, allow pop-ups for the site.)
+   - Lost a card? **New password…** on that pupil makes a new password and card. **New passwords and cards…** does it for the whole group. Old passwords stop working and the pupils are signed out. **Name…** sets or clears a pupil's name (shown to staff and printed on their card only).
+   - **Pupils sign in** at `https://kerf.mr-salih.org/sign-in`, on the **I'm a pupil** tab, under **Use your Pupil Card**: they type the four things on their card and press **Sign in**, and the Editor opens. Capital letters and spaces instead of the dash in the password do not matter. Five wrong passwords lock that pupil ID for about 5 minutes. Pupil Card sign-in works only while **Group code** is ticked on the **School** page (it is, for a new school).
+   - Pupils can also design without signing in: **Work without signing in** on the sign-in page opens the Editor, and the work stays in that browser.
 
 9. **What the free plan includes.** Kerf's built-in default terms are:
    - features: the free tools only (no laser, no activities);
@@ -82,9 +84,8 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
 ## Not built yet
 
 - **Self-registration**: a teacher cannot sign their school up. The site admin creates every school (step 2).
-- **Pupil sign-in for new schools**: there is no sign-in screen for the school code, group code and password, and no Pupil Cards. Only the school linked to DINO has working pupil sign-in.
 - **Google and Microsoft sign-in**: the tick boxes exist but say "Coming soon". They also stay greyed out until Kerf is registered with Google and Microsoft.
-- **Public pages**: the landing, pricing and sign-in pages are built. Things on them that do not work yet are greyed out and marked **Coming soon**: Pupil Card sign-in, Google and Microsoft, **Register your school (free)**, prices, **Talk to us**, and the Privacy, Terms and Contact links.
+- **Public pages**: the landing, pricing and sign-in pages are built. Things on them that do not work yet are greyed out and marked **Coming soon**: Google and Microsoft, **Register your school (free)**, prices, **Talk to us**, and the Privacy, Terms and Contact links.
 - **Payment**: moving a school to paid is a manual switch for the site admin.
 
 ## If something goes wrong

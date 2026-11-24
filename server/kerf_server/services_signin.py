@@ -22,7 +22,7 @@ NEW_SCHOOL = {"dino": False, "google": False, "microsoft": False, "groupCode": T
 #: A school from before per-school sign-in: it used DINO only.
 LEGACY = {"dino": True, "google": False, "microsoft": False, "groupCode": False, "email": False}
 #: Methods whose sign-in screens exist yet. The others can be set ahead but say "coming".
-AVAILABLE = {"dino", "email"}
+AVAILABLE = {"dino", "email", "groupCode"}
 
 
 def methods(row: School | None) -> dict[str, Any]:

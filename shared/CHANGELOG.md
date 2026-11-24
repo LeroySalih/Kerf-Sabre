@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.39 - Pupil Card sign-in (additive)
+- `POST /auth/pupil {schoolCode, groupCode, pupilId, password}`: pupils sign in with their Pupil Card, on any server, when their school has Group code sign-in on (`403 sign_in_off` otherwise). The group code is the group's join code. Wrong anything is one `401 bad_login`; per-pupil lockout and per-computer throttle as before. The session is a normal pupil token for that school.
+- New pupils get a **two-word password** (e.g. `tiger-river`) instead of a 5-digit PIN; `created[].password` (and `pin`, the same, for older clients). Case, spaces, dots and underscores between the words do not matter when signing in.
+- `POST /classes/{code}/pupils` also takes `pupils: [{id?, name?}]` (no id: Kerf makes a 5-digit one; `name` is a display name) and `generate: N`. `POST /classes/{code}/passwords {pupilIds?}`: new passwords for a group (old ones stop working), for printing Pupil Cards. `PUT /classes/{code}/pupils/{pupilId} {displayName}`. `POST /pupils/{id}/reset-pin` also returns `password`.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.39`.
+
 ## 0.2.38 - staff email sign-in links and invites (additive)
 - `POST /auth/email/start {email, app}`: a one-time sign-in link (15 minutes) is emailed to each school where the address has a staff account and the school's `email` sign-in is on. Same answer for unknown addresses; limited per address and per computer. `POST /auth/email/finish {token}` trades the link's token for a session token (works once). Links open `/admin/?signin=<token>` or `/?signin=<token>`.
 - School admins: `GET /staff/people`, `POST /staff/invite {email, role, name?}` (a 7-day invite link), `DELETE /staff/people/{personId}`. Site admins: `POST /schools` takes `adminEmail` (and `adminName`) to invite the school's first admin; the answer carries `adminInvite`.

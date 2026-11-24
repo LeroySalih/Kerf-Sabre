@@ -26,7 +26,7 @@ MAX_PENDING = 10  # requests one pupil may have waiting at once
 
 
 def _doc(r: JoinRequest, c: SchoolClass | None) -> dict[str, Any]:
-    return {"id": r.id, "groupCode": sc.join_code_of(c) if c else r.class_code, "groupLabel": c.label if c else None, "status": r.status,
+    return {"id": r.id, "groupCode": (sc.join_code_of(c) or c.code) if c else r.class_code, "groupLabel": c.label if c else None, "status": r.status,
             "createdAt": iso(r.created_at), "decidedAt": iso(r.decided_at)}
 
 
@@ -47,7 +47,7 @@ def ask(s: Session, who, group_code: str) -> tuple[dict[str, Any], bool]:
         raise ApiError(403, "forbidden", "Only pupils ask to join a group. Staff add pupils from the group's page.")
     c = find_group(s, who.school, group_code)
     if sc.in_group(s, c.code, who.id):
-        raise ApiError(409, "already_member", f"You are already in {sc.join_code_of(c)}.")
+        raise ApiError(409, "already_member", f"You are already in {sc.join_code_of(c) or c.code}.")
     row = s.scalar(select(JoinRequest).where(JoinRequest.class_code == c.code, JoinRequest.pupil_id == who.id, JoinRequest.status == "pending"))
     if row is not None:
         return _doc(row, c), False

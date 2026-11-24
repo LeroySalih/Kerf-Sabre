@@ -41,6 +41,9 @@ def seed(db: Database, settings: Settings) -> None:
         from .services_terms import ensure_terms
 
         ensure_terms(s)
+        from .services_dinoimport import ensure_dino_codes
+
+        ensure_dino_codes(s)
         if machine_dir.exists():
             for f in sorted(machine_dir.glob("*.json")):
                 m = json.loads(f.read_text())

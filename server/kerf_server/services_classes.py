@@ -151,7 +151,21 @@ def needs_approval(s: Session, pupil_id: str) -> bool:
     return any(s.get(SchoolClass, c).require_approval is not False for c in codes)  # type: ignore[union-attr]
 
 
-def join_code_of(c: SchoolClass) -> str:
+DINO_ONLY = "This group comes from DINO: its pupils and name follow the DINO class. Use Sync with DINO (archiving it is still up to you)."
+
+
+def not_from_dino(c: SchoolClass) -> None:
+    """Refuse a change Kerf does not own for a group imported from DINO (pupils, names, passwords, note, join code); only
+    Sync with DINO changes its pupils. Archiving and the Kerf settings (approval, laser group) are still allowed."""
+    if c.source == "dino":
+        raise ApiError(409, "dino_group", DINO_ONLY)
+
+
+def join_code_of(c: SchoolClass) -> str | None:
+    """The code pupils type to sign in with a Pupil Card or ask to join. None for a group imported from DINO: its pupils come
+    from DINO (Sync with DINO) and sign in with DINO, so nobody joins it by code."""
+    if c.source == "dino":
+        return None
     return c.join_code or c.code
 
 
@@ -161,7 +175,8 @@ def class_info(s: Session, c: SchoolClass, pupil_count: int, join_requests: int 
         from .services_joinrequests import pending_count
 
         join_requests = pending_count(s, c)
-    return {"code": c.code, "joinCode": join_code_of(c), "label": c.label, "teacherId": c.teacher_id, "pupilCount": pupil_count,
+    return {"code": c.code, "joinCode": join_code_of(c), "label": c.label, "teacherId": c.teacher_id,
+            "teacherName": people.staff_name(s, c.school_id, c.teacher_id), "pupilCount": pupil_count,
             "requireApproval": c.require_approval is not False, "archived": bool(c.archived), "source": c.source or "manual", "laser": bool(c.laser),
             "joinRequests": join_requests}
 
@@ -194,6 +209,8 @@ def active_group_count(s: Session, school: str | None) -> int:
 def update_class(s: Session, code: str, teacher_id: str | None, label: str | None, require_approval: bool | None, school: str | None = None,
                  join_code: str | None = None, archived: bool | None = None) -> SchoolClass:
     c = get_class(s, code, teacher_id, school)
+    if join_code is not None or label is not None:
+        not_from_dino(c)
     if label is not None:
         c.label = label.strip()[:128] or None
     if require_approval is not None:
@@ -245,7 +262,7 @@ def get_class(s: Session, code: str, teacher_id: str | None = None, school: str 
 
 
 def add_pupils(s: Session, code: str, pupil_ids: list[str] | None = None, teacher_id: str | None = None, school: str | None = None,
-               entries: list[dict] | None = None, generate: int = 0) -> dict[str, list]:
+               entries: list[dict] | None = None, generate: int = 0, from_dino: bool = False) -> dict[str, list]:
     """Add pupils to a group. `pupil_ids`: IDs as before; `entries`: `[{id?, name?}]` (no id: Kerf makes one; a name is the
     teacher's display name, printed on Pupil Cards and shown to staff only); `generate`: that many new pupils with IDs Kerf makes.
     New pupils get a two-word password (returned here as `password` and, for older clients, `pin`: the only time it is ever
@@ -253,6 +270,8 @@ def add_pupils(s: Session, code: str, pupil_ids: list[str] | None = None, teache
     from .services_schools import check_limit
 
     cls = get_class(s, code, teacher_id, school)
+    if not from_dino:
+        not_from_dino(cls)
     wanted: list[tuple[str | None, str | None]] = [(str(raw).strip(), None) for raw in (pupil_ids or [])]
     for e in entries or []:
         if not isinstance(e, dict):
@@ -312,6 +331,7 @@ def new_group_passwords(s: Session, code: str, teacher_id: str | None = None, sc
     """New passwords for a group's pupils (all, or those listed), for printing Pupil Cards. Their old passwords stop working and
     they are signed out. Returned once, never again."""
     cls = get_class(s, code, teacher_id, school)
+    not_from_dino(cls)
     ids = member_ids(s, cls.code)
     if pupil_ids is not None:
         want = {str(p) for p in pupil_ids}
@@ -332,6 +352,7 @@ def new_group_passwords(s: Session, code: str, teacher_id: str | None = None, sc
 def set_display_name(s: Session, code: str, pupil_id: str, name: object, teacher_id: str | None = None, school: str | None = None) -> str | None:
     """A teacher types (or clears) a pupil's display name: shown to staff and printed on the pupil's card, never logged."""
     cls = get_class(s, code, teacher_id, school)
+    not_from_dino(cls)
     if not in_group(s, cls.code, pupil_id):
         raise ApiError(404, "not_found", "That pupil is not in this class.")
     clean = people.clean_name(name)
@@ -365,10 +386,12 @@ def reset_pin(s: Session, pupil_id: str, teacher_id: str | None = None, school: 
     return pin
 
 
-def remove_pupil(s: Session, code: str, pupil_id: str, teacher_id: str | None = None, school: str | None = None) -> None:
+def remove_pupil(s: Session, code: str, pupil_id: str, teacher_id: str | None = None, school: str | None = None, from_dino: bool = False) -> None:
     """Takes the pupil out of this group. Out of their last group they are **archived** (soft-deleted): signed out, cannot
     sign in, files, work and name kept. Only `delete_pupil_forever` (a school admin, logged) removes them for good."""
     cls = get_class(s, code, teacher_id, school)
+    if not from_dino:
+        not_from_dino(cls)
     m = s.get(GroupMember, (cls.code, pupil_id))
     row = s.get(Pupil, pupil_id)
     if m is None or row is None:

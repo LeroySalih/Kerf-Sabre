@@ -134,7 +134,7 @@ class TestTeacherSide:
     def test_classes_pupils_and_counts(self, client, tokens):
         setup_class_with(client, tokens, ids=("P001", "P002", "P003"))
         t = auth(tokens["teacher"])
-        assert client.get(f"{API}/classes", headers=t).json() == [{"code": "9B-DT", "label": "Y9 set 2", "teacherId": "T001", "pupilCount": 3, "requireApproval": True, "joinCode": "9B-DT", "archived": False, "source": "manual", "laser": False, "joinRequests": 0}]
+        assert client.get(f"{API}/classes", headers=t).json() == [{"code": "9B-DT", "label": "Y9 set 2", "teacherId": "T001", "pupilCount": 3, "requireApproval": True, "joinCode": "9B-DT", "archived": False, "source": "manual", "laser": False, "joinRequests": 0, "teacherName": None}]
         listing = client.get(f"{API}/classes/9b-dt/pupils", headers=t).json()
         assert [p["pupilId"] for p in listing] == ["P001", "P002", "P003"] and "pin" not in str(listing)
         assert client.post(f"{API}/classes", json={"code": "9b-dt"}, headers=t).status_code == 409

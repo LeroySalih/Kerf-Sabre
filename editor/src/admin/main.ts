@@ -111,8 +111,11 @@ async function shell(): Promise<void> {
     stopPage = typeof stop === "function" ? stop : () => {};
   }
 
+  // the person's name (from DINO or their staff account), else their ID; the ID stays on hover. DINO's name can arrive a moment later.
+  const whoName = el("span", { title: s.id }, s.name ?? s.id);
+  window.addEventListener("kerf-profile", () => { whoName.textContent = s.name ?? s.id; });
   const head = el("header", { class: `ad-head${platform ? " ad-platform" : ""}` }, el("span", { class: "brand" }, platform ? "Kerf Platform" : "Kerf Admin"),
-    el("span", { class: "who" }, platform ? `Site admin: ${s.id}` : `${schoolName ? schoolName + " · " : ""}${s.schoolCode ? `school code ${s.schoolCode} · ` : ""}${s.plan === "free" ? "Free plan · " : ""}${s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
+    el("span", { class: "who" }, platform ? `Site admin: ${s.name ?? s.id}` : `${schoolName ? schoolName + " · " : ""}${s.schoolCode ? `school code ${s.schoolCode} · ` : ""}${s.plan === "free" ? "Free plan · " : ""}${s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: `, whoName), el("span", { class: "spacer" }),
     ...(s.siteAdmin && s.role !== "platform" ? [btn(platform ? "My school" : "Kerf Platform", () => switchSite(platform ? "school" : "platform"))] : []),
     ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/editor/" }, "Editor")] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);

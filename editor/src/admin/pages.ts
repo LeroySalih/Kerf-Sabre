@@ -115,23 +115,28 @@ const classes: Page = {
         const laser = el("input", { type: "checkbox", "aria-label": `Laser group ${c.code}` }) as HTMLInputElement;
         laser.checked = !!c.laser;
         laser.addEventListener("change", () => void attempt(() => updateClass(s, c.code, { laser: laser.checked }), redraw));
+        const fromDino = c.source === "dino";
         const edit = btn("Edit…", () => void (async () => {
           const v = await openDialog(`Class ${c.code}`, [
             { key: "label", label: "Note", type: "text", value: c.label ?? "", hint: "e.g. Year 10 set 2 after moving up a year" },
-            { key: "joinCode", label: "Join code", type: "text", value: c.joinCode ?? c.code, hint: "What pupils type to sign in. Unique in your school" },
+            // a group from DINO has no join code: its pupils come from DINO
+            ...(fromDino ? [] : [{ key: "joinCode", label: "Join code", type: "text" as const, value: c.joinCode ?? c.code, hint: "What pupils type to sign in. Unique in your school" }]),
           ], { ok: "Save" });
-          if (v) await attempt(() => updateClass(s, c.code, { label: String(v.label ?? "").trim(), joinCode: String(v.joinCode ?? "").trim() || c.code }), redraw);
+          if (v) await attempt(() => updateClass(s, c.code, { label: String(v.label ?? "").trim(), ...(fromDino ? {} : { joinCode: String(v.joinCode ?? "").trim() || c.code }) }), redraw);
         })());
-        const sync = c.source === "dino" && s.sso ? [btn("Sync with DINO…", () => void syncWithDino(s, c.code, redraw))] : [];
+        // the join code column: a DINO group is kept in step with DINO instead of being joined by code
+        const join = fromDino
+          ? (s.sso ? btn("Sync with DINO…", () => void syncWithDino(s, c.code, redraw)) : el("span", { class: "hint", title: "Sign in with DINO to sync it" }, "From DINO"))
+          : el("code", {}, c.joinCode ?? c.code);
         const archive = btn(c.archived ? "Bring back" : "Archive", () => {
           if (!c.archived && !confirm(`Archive ${c.code}? Its pupils can no longer sign in through it; their files and work are kept.`)) return;
           void attempt(() => updateClass(s, c.code, { archived: !c.archived }), redraw);
         });
-        return el("tr", {}, cell(el("b", {}, c.code)), cell(el("code", {}, c.joinCode ?? c.code)), cell(c.label ?? ""), cell(c.teacherId ?? "shared"), cell(String(c.pupilCount), ...(c.joinRequests ? [" ", el("span", { class: "st-dot wait", title: "Open Pupils… to let them in" }, waitingText(c.joinRequests))] : [])),
+        return el("tr", {}, cell(el("b", {}, c.code)), cell(join), cell(c.label ?? ""), cell(c.teacherId ? el("span", { title: c.teacherId }, c.teacherName ?? c.teacherId) : "shared"), cell(String(c.pupilCount), ...(c.joinRequests ? [" ", el("span", { class: "st-dot wait", title: "Open Pupils… to let them in" }, waitingText(c.joinRequests))] : [])),
           ...(isPaid(s) ? [cell(sel)] : []), ...(pickLaser ? [cell(laser)] : []),
           actions(btn("Pupils…", () => openClasses(s, { openFile: lookAtFile }, c.code)),
             ...(hasActivities(s) ? [btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")), btn("Progress…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "progress"))] : []),
-            ...sync, edit, archive));
+            ...(fromDino ? [] : [edit]), archive));
       })), ...(isPaid(s) ? [el("p", { class: "hint" }, "Changing the approval setting only affects files sent from now on. Files already waiting stay as they are.")] : []),
       ...(pickLaser ? [el("p", { class: "hint" }, `Your plan lets up to ${laserLimit} class${laserLimit === 1 ? "" : "es"} send files to the laser. Tick them under "Laser group".`)] : []));
     };
@@ -194,7 +199,7 @@ const pupils: Page = {
       const rows: HTMLElement[] = [];
       for (const { c, rows: ps } of all) for (const p of ps) {
         rows.push(el("tr", {}, cell(el("b", {}, pupilLabel(p.pupilId, p.displayName))), cell(c.code), cell(p.lastLogin ? new Date(p.lastLogin).toLocaleString() : "never"),
-          actions(btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${c.code}? If this is their last group they are archived: signed out, files kept.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
+          actions(...(c.source === "dino" ? [] : [btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${c.code}? If this is their last group they are archived: signed out, files kept.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger")]))));
       }
       const archived = gone.map((p) => el("tr", {}, cell(el("b", {}, pupilLabel(p.pupilId, p.displayName))), cell(p.lastGroup), cell(new Date(p.archivedAt).toLocaleDateString()),
         actions(...(s.role === "admin" ? [btn("Delete for good…", () => {

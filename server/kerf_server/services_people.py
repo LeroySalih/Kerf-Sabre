@@ -38,5 +38,19 @@ def names(s: Session, school: str | None, ids: Iterable[str]) -> dict[str, str]:
     return {p.person_id: p.display_name for p in s.scalars(select(Person).where(Person.person_id.in_(ids), Person.school_id == school))}
 
 
+def staff_name(s: Session, school: str | None, person_id: str | None) -> str | None:
+    """A member of staff's name for their own school's pages: the DINO name Kerf was given at sign-in, else the name on their
+    email account. None when Kerf has neither."""
+    if not person_id:
+        return None
+    named = names(s, school, [person_id]).get(person_id)
+    if named:
+        return named
+    from .models import StaffAccount
+
+    acct = s.get(StaffAccount, person_id)
+    return acct.name if acct is not None and acct.school_id == school and acct.name else None
+
+
 def forget(s: Session, person_id: str) -> None:
     s.execute(delete(Person).where(Person.person_id == person_id))

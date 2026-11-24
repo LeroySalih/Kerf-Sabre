@@ -99,8 +99,8 @@ export async function finishSignIn(app: App, search: string, loc: { origin: stri
 }
 
 async function sessionFor(_app: App, baseUrl: string, tokens: Tokens, f: Fetch): Promise<Session> {
-  const me = await request<{ role: string; id: string; school?: string | null; plan?: string | null; siteAdmin?: boolean; schoolCode?: string | null; features?: Session["features"]; limits?: Session["limits"] }>({ baseUrl, token: tokens.accessToken }, "GET", "/auth/me", undefined, f);
-  const s: Session = { baseUrl, token: tokens.accessToken, role: me.role, id: me.id, school: me.school, plan: me.plan, siteAdmin: me.siteAdmin, schoolCode: me.schoolCode, features: me.features, limits: me.limits, sso: true };
+  const me = await request<{ role: string; id: string; school?: string | null; plan?: string | null; siteAdmin?: boolean; schoolCode?: string | null; features?: Session["features"]; limits?: Session["limits"]; name?: string | null }>({ baseUrl, token: tokens.accessToken }, "GET", "/auth/me", undefined, f);
+  const s: Session = { baseUrl, token: tokens.accessToken, role: me.role, id: me.id, school: me.school, plan: me.plan, siteAdmin: me.siteAdmin, schoolCode: me.schoolCode, features: me.features, limits: me.limits, sso: true, ...(me.name ? { name: me.name } : {}) };
   // So staff see a name, not an ID (the server asks DINO). The name comes back too: it is kept in memory only, for the top bar.
   void sendProfile(s, f).then((r) => {
     if (!r?.name) return;

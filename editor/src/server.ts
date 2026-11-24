@@ -4,7 +4,7 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.42); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean; /** Signed in with an emailed link (staff): kept for this tab only, never in localStorage. */ email?: boolean;
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.43); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean; /** Signed in with an emailed link (staff): kept for this tab only, never in localStorage. */ email?: boolean;
   /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
   name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
@@ -14,14 +14,14 @@ export interface QueueEntry {
   extentMm?: Extent | null;
   ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; /** Staff only: the name DINO gave at sign-in. */ pupilName?: string | null; presetId?: string;
   station?: string | null; framedOn?: string | null; next?: boolean; estimatedS?: number | null; aheadS?: number | null; approvedAt?: string | null;
-  /** Staff only: the pupil's groups in the school, and the file's name (shared 0.2.42). */ pupilGroups?: { code: string; label?: string | null }[]; name?: string | null;
+  /** Staff only: the pupil's groups in the school, and the file's name (shared 0.2.43). */ pupilGroups?: { code: string; label?: string | null }[]; name?: string | null;
 }
 export interface StationInfo {
   id: string; online: boolean; state?: string | null; mpos?: number[] | null; currentJobId?: string | null; cutterVersion?: string | null;
   s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; calibrated?: boolean; lastSeen?: string | null;
   progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
 }
-export interface JobSummary { name?: string | null; activityId?: string | null; pupilId?: string; pupilName?: string; /** Staff only (shared 0.2.42). */ pupilGroups?: { code: string; label?: string | null }[]; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface JobSummary { name?: string | null; activityId?: string | null; pupilId?: string; pupilName?: string; /** Staff only (shared 0.2.43). */ pupilGroups?: { code: string; label?: string | null }[]; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {
@@ -93,7 +93,7 @@ export const getSchoolTerms = (s: Session, id: string, f?: Fetch) => request<{ p
 export const setSchoolTerms = (s: Session, id: string, t: Terms, f?: Fetch) => request<{ plan: string; terms: Terms | null; now: TermsNow }>(s, "PUT", `/schools/${encodeURIComponent(id)}/terms`, t, f);
 export const myTerms = (s: Session, f?: Fetch) => request<TermsNow>(s, "GET", "/school/terms", undefined, f);
 export const createSchool = (s: Session, id: string, name: string, adminId?: string, f?: Fetch, adminEmail?: string) => request<School & { admin?: { id: string; token: string }; adminInvite?: StaffPerson }>(s, "POST", "/schools", { id, name, ...(adminId ? { adminId } : {}), ...(adminEmail ? { adminEmail } : {}) }, f);
-/** Staff who sign in with an emailed link (shared 0.2.42). The email is shown to the school's admins only. */
+/** Staff who sign in with an emailed link (shared 0.2.43). The email is shown to the school's admins only. */
 export interface StaffPerson { id: string; email: string; role: "admin" | "teacher" | "technician"; name: string | null; status: "invited" | "active"; lastLogin: string | null; createdAt: string | null }
 export const listStaffPeople = (s: Session, f?: Fetch) => request<StaffPerson[]>(s, "GET", "/staff/people", undefined, f);
 export const inviteStaff = (s: Session, body: { email: string; role: StaffPerson["role"]; name?: string }, f?: Fetch) => request<StaffPerson>(s, "POST", "/staff/invite", body, f);
@@ -109,13 +109,13 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
   try { await f(`${s.baseUrl}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${s.token}` } }); } catch { /* offline: it will expire */ }
 }
 
-export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean; joinCode?: string; archived?: boolean; source?: string; /** A laser group (picked by a school admin while the plan limits them). */ laser?: boolean; /** Pupils waiting to join (shared 0.2.42). */ joinRequests?: number }
+export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; /** The teacher's name, when Kerf has one (shared 0.2.43). */ teacherName?: string | null; requireApproval?: boolean; joinCode?: string | null; archived?: boolean; source?: string; /** A laser group (picked by a school admin while the plan limits them). */ laser?: boolean; /** Pupils waiting to join (shared 0.2.43). */ joinRequests?: number }
 export interface ClassPupil { pupilId: string; displayName?: string; lastLogin: string | null; locked: boolean }
 export interface AddedPupils { /** New pupils and their two-word passwords (shown only now; `pin` is the same, for older code). */ created: { pupilId: string; pin: string; password?: string; displayName?: string }[]; /** Already in another group of the school: added to this one too, PIN unchanged. */ added?: string[]; /** Archived pupils brought back (files and PIN kept). */ restored?: string[]; existing: string[]; conflicts: string[] }
 export interface GroupInfo { id: string; name: string; subject: string | null; yearGroup: string | null; pupils: string[] }
 /** The teacher's classes with their pupil IDs (from DINO when signed in with DINO). */
 export const listGroups = (s: Session, f?: Fetch) => request<GroupInfo[]>(s, "GET", "/groups", undefined, f);
-/** A DINO class the teacher teaches, and the Kerf group it was imported as (shared 0.2.42). */
+/** A DINO class the teacher teaches, and the Kerf group it was imported as (shared 0.2.43). */
 export interface DinoClass { id: string; name: string; subject: string | null; yearGroup: string | null; pupilCount: number; importedAs: string | null; archived?: boolean }
 export const listDinoClasses = (s: Session, f?: Fetch) => request<DinoClass[]>(s, "GET", "/dino/classes", undefined, f);
 export const importDinoClasses = (s: Session, ids: string[], f?: Fetch) => request<{ dinoId: string; code: string; name: string; already: boolean; pupils?: number; conflicts?: string[] }[]>(s, "POST", "/dino/classes/import", { ids }, f);
@@ -123,10 +123,10 @@ export const syncDinoClass = (s: Session, code: string, apply: boolean, f?: Fetc
 export const listClasses = (s: Session, f?: Fetch, archived = false) => request<ClassInfo[]>(s, "GET", archived ? "/classes?archived=true" : "/classes", undefined, f);
 /** A blank code: Kerf makes one. */
 export const createClass = (s: Session, code: string, label: string, requireApproval = true, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { ...(code ? { code } : {}), label, requireApproval }, f);
-export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean; joinCode?: string; archived?: boolean; laser?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
+export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean; joinCode?: string | null; archived?: boolean; laser?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
 export const classPupils = (s: Session, code: string, f?: Fetch) => request<ClassPupil[]>(s, "GET", `/classes/${encodeURIComponent(code)}/pupils`, undefined, f);
 export const addPupils = (s: Session, code: string, pupilIds: string[], f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, { pupilIds }, f);
-/** Add pupils by ID and/or name; `generate` more with IDs Kerf makes (shared 0.2.42). */
+/** Add pupils by ID and/or name; `generate` more with IDs Kerf makes (shared 0.2.43). */
 export const addPupilsDetailed = (s: Session, code: string, body: { pupils?: { id?: string; name?: string }[]; generate?: number }, f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, body, f);
 /** New two-word passwords for a group's pupils (all, or these), for Pupil Cards. Old passwords stop working. */
 export const newPasswords = (s: Session, code: string, pupilIds?: string[], f?: Fetch) => request<{ pupilId: string; password: string; displayName?: string }[]>(s, "POST", `/classes/${encodeURIComponent(code)}/passwords`, pupilIds ? { pupilIds } : {}, f);

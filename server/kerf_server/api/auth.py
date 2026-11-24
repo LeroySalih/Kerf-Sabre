@@ -30,6 +30,8 @@ def me(p: Principal = Depends(current_principal), s: Session = Depends(get_sessi
     now = terms.effective(row) if p.school else None
     return {"role": p.role, "id": p.id, "school": p.school, "siteAdmin": p.site_admin, "plan": plan_of(row) if p.school else None,
             "schoolName": row.name if row else None, "schoolCode": row.code if row else None,
+            # staff see their own name (DINO's, from sign-in, or their staff account's); never sent for pupils or stations
+            "name": ps.staff_name(s, p.school, p.id) if p.role in ("teacher", "admin", "technician") else None,
             "features": now["features"] if now else None, "limits": now["limits"] if now else None}
 
 

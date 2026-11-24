@@ -76,9 +76,10 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
       return;
     }
     const code = open.code;
+    const fromDino = classes.find((c) => c.code === code)?.source === "dino"; // its pupils sign in with DINO: no Pupil Cards or passwords
     const list = el("div", {});
     if (open.waiting.length) {
-      // pupils who asked to join with the group code (shared 0.2.42): a teacher lets them in or says no
+      // pupils who asked to join with the group code (shared 0.2.43): a teacher lets them in or says no
       list.append(el("h3", {}, `Waiting to join (${open.waiting.length})`),
         el("p", { class: "hint" }, "These pupils typed this group's code and asked to join. Approve only pupils you expect in this group."));
       for (const w of open.waiting) {
@@ -89,10 +90,12 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
       }
     }
     list.append(el("h3", {}, `${code} (${open.pupils.length})`));
+    if (fromDino) list.append(el("p", { class: "hint" }, "This group comes from DINO: its pupils, their names and the group's name follow the DINO class. Pupils sign in with DINO. To bring it up to date, use Sync with DINO on the Classes page."));
     if (!open.pupils.length) list.append(el("p", { class: "hint" }, "No pupils yet."));
     for (const p of open.pupils) {
       list.append(el("div", { class: "filerow" },
         el("span", {}, `${pupilLabel(p.pupilId, p.displayName)}${p.displayName ? ` (${p.pupilId})` : ""} · ${p.lastLogin ? `last signed in ${new Date(p.lastLogin).toLocaleString()}` : "never signed in"}${p.locked ? " · locked for a few minutes (too many wrong passwords)" : ""}`),
+        ...(fromDino ? [] : [
         btn("Name…", () => void (async () => {
           const v = await openDialog(`Name for ${p.pupilId}`, [{ key: "name", label: "Name (optional)", type: "text", value: p.displayName ?? "", hint: "Shown to staff and printed on the pupil's card. Leave blank for none." }], { ok: "Save" });
           if (v) await run(() => setPupilName(session, code, p.pupilId, String(v.name ?? "").trim()));
@@ -101,22 +104,22 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
           if (!confirm(`Make a new password for ${pupilLabel(p.pupilId, p.displayName)}? Their old one stops working and they are signed out. You can print a new card.`)) return;
           void run(async () => printCards(session, classes.find((c) => c.code === code), code, await newPasswords(session, code, [p.pupilId])));
         }),
-        btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${code}? If this is their last group they are archived: signed out, files kept.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")));
+        btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${code}? If this is their last group they are archived: signed out, files kept.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")])));
     }
-    body.replaceChildren(list, el("div", { class: "krow" }, btn("‹ All classes", () => void run(async () => { open = null; })), btn("Activities and progress…", () => void openClassWork(session, code, hooks)), btn("New passwords and cards…", () => {
+    body.replaceChildren(list, el("div", { class: "krow" }, btn("‹ All classes", () => void run(async () => { open = null; })), btn("Activities and progress…", () => void openClassWork(session, code, hooks)), ...(fromDino ? [] : [btn("New passwords and cards…", () => {
       if (!open?.pupils.length) return;
       if (!confirm(`Make new passwords for all ${open.pupils.length} pupils in ${code} and print their Pupil Cards? Their old passwords stop working and they are signed out.`)) return;
       void run(async () => printCards(session, classes.find((c) => c.code === code), code, await newPasswords(session, code)));
-    }), btn("Add pupils…", () => void (async () => {
+    })]), ...(fromDino ? [] : [btn("Add pupils…", () => void (async () => {
       const want = await askPupils(code);
       if (!want) return;
       await run(async () => {
         const r = await addPupilsDetailed(session, code, { pupils: want.pupils, generate: want.generate });
-        await printCards(session, classes.find((c) => c.code === code), code, r.created.map((c) => ({ pupilId: c.pupilId, password: c.password ?? c.pin, displayName: c.displayName })));
-        const notes = [...(r.created.length ? [`Their Pupil Cards opened in a new tab: print them now, the passwords are not shown again.`] : []), ...(r.restored?.length ? [`Brought back from the archive (files and password kept): ${r.restored.join(", ")}`] : []), ...(r.added?.length ? [`Also added (already in another group, password unchanged): ${r.added.join(", ")}`] : []), ...(r.existing.length ? [`Already in the class: ${r.existing.join(", ")}`] : []), ...(r.conflicts.length ? [`Used in another school, not added: ${r.conflicts.join(", ")}`] : [])];
+        if (!fromDino) await printCards(session, classes.find((c) => c.code === code), code, r.created.map((c) => ({ pupilId: c.pupilId, password: c.password ?? c.pin, displayName: c.displayName })));
+        const notes = [...(r.created.length && !fromDino ? [`Their Pupil Cards opened in a new tab: print them now, the passwords are not shown again.`] : []), ...(r.restored?.length ? [`Brought back from the archive (files and password kept): ${r.restored.join(", ")}`] : []), ...(r.added?.length ? [`Also added (already in another group, password unchanged): ${r.added.join(", ")}`] : []), ...(r.existing.length ? [`Already in the class: ${r.existing.join(", ")}`] : []), ...(r.conflicts.length ? [`Used in another school, not added: ${r.conflicts.join(", ")}`] : [])];
         await infoDialog(r.created.length ? `${r.created.length} pupil${r.created.length === 1 ? "" : "s"} added to ${code}` : "Nobody new to add", notes);
       });
-    })(), "on")));
+    })(), "on")])));
   }
 
   void load().catch(async (e) => { await infoDialog("Couldn't load classes", [msg(e)]); dlg.close(); });

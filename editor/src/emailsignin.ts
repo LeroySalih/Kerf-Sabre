@@ -1,4 +1,4 @@
-// Staff sign-in with an emailed link (shared 0.2.42), for the Admin site and the Editor. The link brings the browser back to
+// Staff sign-in with an emailed link (shared 0.2.43), for the Admin site and the Editor. The link brings the browser back to
 // the same page with `?signin=<token>`; the token is traded once for an ordinary session token. That session is kept for
 // this tab only (sessionStorage), like a DINO sign-in, so closing the tab signs the person out. Tested in tests/emailsignin.test.ts.
 import { normaliseBase, request, type Session } from "./server";
@@ -30,8 +30,8 @@ export async function askForLink(baseUrl: string, email: string, app: App, f: Fe
 }
 
 async function sessionFrom(baseUrl: string, token: string, f: Fetch): Promise<Session> {
-  const me = await request<{ role: string; id: string; school?: string | null; plan?: string | null; siteAdmin?: boolean; schoolCode?: string | null; features?: Session["features"]; limits?: Session["limits"] }>({ baseUrl, token }, "GET", "/auth/me", undefined, f);
-  return { baseUrl, token, role: me.role, id: me.id, school: me.school, plan: me.plan, siteAdmin: me.siteAdmin, schoolCode: me.schoolCode, features: me.features, limits: me.limits, email: true };
+  const me = await request<{ role: string; id: string; school?: string | null; plan?: string | null; siteAdmin?: boolean; schoolCode?: string | null; features?: Session["features"]; limits?: Session["limits"]; name?: string | null }>({ baseUrl, token }, "GET", "/auth/me", undefined, f);
+  return { ...(me.name ? { name: me.name } : {}), baseUrl, token, role: me.role, id: me.id, school: me.school, plan: me.plan, siteAdmin: me.siteAdmin, schoolCode: me.schoolCode, features: me.features, limits: me.limits, email: true };
 }
 
 /** Trade the link's token for a session and keep it for this tab. Throws the server's message for a used or expired link. */
@@ -57,7 +57,7 @@ export async function finishRegistration(baseUrl: string, linkToken: string, f: 
   return s;
 }
 
-/** A pupil signs in with their Pupil Card (school code, group code, pupil ID, two-word password; shared 0.2.42). The session is kept
+/** A pupil signs in with their Pupil Card (school code, group code, pupil ID, two-word password; shared 0.2.43). The session is kept
  * for this tab like an emailed link's, under the Editor's key, so /editor/ picks it up. Throws the server's message when it is wrong. */
 export async function cardSignIn(baseUrl: string, card: { schoolCode: string; groupCode: string; pupilId: string; password: string }, f: Fetch = fetch, st: Storage = sessionStorage): Promise<Session> {
   const base = normaliseBase(baseUrl);

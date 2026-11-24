@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from . import services_classes as sc
 from .errors import ApiError
-from .models import SchoolClass
+from .models import Activity, GroupMember, JoinRequest, Pupil, SchoolClass
 from .security import Principal, bearer
 
 
@@ -36,6 +36,47 @@ def dino_classes(request: Request, who: Principal) -> list[dict[str, Any]]:
 
 def _linked(s: Session, school: str | None, dino_id: str) -> SchoolClass | None:
     return s.scalar(select(SchoolClass).where(SchoolClass.school_id == school, SchoolClass.source == "dino", SchoolClass.source_id == dino_id))
+
+
+def dino_code(s: Session, school: str | None, dino_id: str, keep: SchoolClass | None = None) -> str | None:
+    """The DINO class id as the group's code (e.g. `26-8D-DT`), if it can be one: letters, digits, - and _ up to 32, not used by
+    another group anywhere on Kerf (codes are server-wide) and not another group's join code in this school. None: Kerf makes one."""
+    code = sc.norm_code(dino_id)
+    if not sc.CODE_RE.match(code):
+        return None
+    taken = s.get(SchoolClass, code)
+    if taken is not None and taken is not keep:
+        return None
+    for other in s.scalars(select(SchoolClass).where(SchoolClass.school_id == school)):
+        if other is not keep and sc.join_code_of(other) == code:
+            return None
+    return code
+
+
+def rename_code(s: Session, c: SchoolClass, new: str) -> SchoolClass:
+    """Give a group a new code, moving everything that points at it (members, pupils' home group, activities, join requests).
+    The code is the table's key, so a copy is made under the new code and the old row removed. Files are not linked to groups."""
+    old = c.code
+    copy = SchoolClass(code=new, label=c.label, school_id=c.school_id, teacher_id=c.teacher_id, require_approval=c.require_approval,
+                       join_code=None if c.join_code in (None, new) else c.join_code, archived=c.archived, source=c.source,
+                       source_id=c.source_id, laser=c.laser, created_at=c.created_at)
+    s.add(copy)
+    s.flush()
+    for model in (GroupMember, Pupil, Activity, JoinRequest):
+        s.query(model).filter(model.class_code == old).update({model.class_code: new}, synchronize_session=False)
+    s.flush()
+    s.expire_all()
+    s.delete(s.get(SchoolClass, old))
+    s.flush()
+    return s.get(SchoolClass, new)  # type: ignore[return-value]
+
+
+def ensure_dino_codes(s: Session) -> None:
+    """Start-up: groups imported from DINO before their code was the DINO class id get it now, when it is free."""
+    for c in list(s.scalars(select(SchoolClass).where(SchoolClass.source == "dino", SchoolClass.source_id.is_not(None)))):
+        want = dino_code(s, c.school_id, c.source_id or "", keep=c)
+        if want and want != c.code:
+            rename_code(s, c, want)
 
 
 def listing(s: Session, who: Principal, groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -63,8 +104,8 @@ def import_classes(s: Session, who: Principal, groups: list[dict[str, Any]], ids
             continue
         label = g["name"] if not g.get("subject") or g["subject"] in g["name"] else f'{g["name"]} · {g["subject"]}'
         label = label[:128]
-        c = sc.create_class(s, None, label, teacher_id=who.id, school=who.school, source="dino", source_id=gid)
-        r = sc.add_pupils(s, c.code, g["pupils"], school=who.school) if g["pupils"] else {"created": [], "added": [], "restored": [], "existing": [], "conflicts": []}
+        c = sc.create_class(s, dino_code(s, who.school, gid), label, teacher_id=who.id, school=who.school, source="dino", source_id=gid)
+        r = sc.add_pupils(s, c.code, g["pupils"], school=who.school, from_dino=True) if g["pupils"] else {"created": [], "added": [], "restored": [], "existing": [], "conflicts": []}
         out.append({"dinoId": gid, "code": c.code, "name": g["name"], "already": False,
                     "pupils": len(r["created"]) + len(r["added"]) + len(r["restored"]), "conflicts": r["conflicts"]})
     return out
@@ -85,9 +126,9 @@ def sync(s: Session, who: Principal, groups: list[dict[str, Any]], code: str, ap
     out: dict[str, Any] = {"code": c.code, "name": g["name"], "add": add, "remove": remove, "applied": False}
     if apply:
         if add:
-            r = sc.add_pupils(s, c.code, add, school=who.school)
+            r = sc.add_pupils(s, c.code, add, school=who.school, from_dino=True)
             out["conflicts"] = r["conflicts"]
         for pid in remove:
-            sc.remove_pupil(s, c.code, pid, school=who.school)
+            sc.remove_pupil(s, c.code, pid, school=who.school, from_dino=True)
         out["applied"] = True
     return out

@@ -15,6 +15,25 @@ Owner: **mr-salih.org** (Leroy Salih). Kerf was built on his own time with his o
 | 7 | **Free tools first.** The first public release offers only the free tools (free schools register instantly); no paid Server option is offered yet. Paid schools are approved by the site admin (BISAK is one). | Paid features (queue, lasers, Cutter, Station pages, camera) stay behind a per-school plan switch set by the site admin; nothing in the free release can turn them on. |
 | 3 | **The Editor is free and open source under the GNU AGPL-3.0** (`AGPL-3.0-only`). **Kerf Server and Kerf Cutter are closed (proprietary, all rights reserved).** | The design Editor is published in a public repository under an open-source licence and works with no server. The Server, Cutter and the paid screens stay closed. |
 
+## What each tier is for (owner, 2026-11-24)
+
+The problems each tier solves for a school; features belong in the tier whose problem they solve.
+
+**Free tier**
+1. **A free alternative to paid software that fits a school environment.** A school gets laser design software at no cost. It is made for pupils and teachers:
+   - it runs in a browser on school computers with nothing to install;
+   - pupils have school accounts and groups, not personal licences;
+   - files are saved to Kerf;
+   - it is safe for children (IDs, not names, in logs).
+
+**Paid tier**
+- **Less work for the teacher between pupils' designs and the laser:**
+  - pupils send files straight to the queue;
+  - teachers approve, merge and reorder files;
+  - technicians run the Station pages and the camera;
+  - activities and feedback.
+- A free tier without the laser saves the school licence costs but not the teacher's time. So the site admin can give free schools a taste of the laser through **terms** (`docs/ACCOUNTS.md`), for example for a few groups or a few months.
+
 ## Consequences of decision 3 (open-source Editor)
 
 - **One repository, published Editor mirror.** Development stays in this one private repository (decision 4). The public Editor repository is a **read-only mirror generated from it** (for example a `git subtree split` of the open Editor files, pushed by CI on each release), never a separate code base. The paid screens first move out of `editor/` (to the Server's own web app) so that what is mirrored is exactly the open part.

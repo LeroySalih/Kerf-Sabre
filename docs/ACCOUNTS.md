@@ -72,6 +72,8 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 
 ## Free and paid (owner, 2026-11-23)
 
+What each tier is for (the problem it solves) is in `docs/PRODUCT.md`. The free tier is a free alternative to paid software that fits a school environment.
+
 | Free school | Paid school (approved by the site admin) |
 |---|---|
 | The Editor; pupil and staff accounts; groups; Pupil Cards; files saved to Kerf | Everything free, plus **activities and teacher feedback, approval, laser connection (Kerf Cutter), the queue, Station pages, the camera**, and the **teacher merging pupils' files** into one file (from the queue) |

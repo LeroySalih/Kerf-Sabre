@@ -1,6 +1,6 @@
 # Walkthrough: a new school joins Kerf
 
-This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.40 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, registration at `/register`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
+This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.41 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, registration at `/register`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
 
 The example school is **Westfield High** (school ID `westfield-high`). The teacher is `you@westfield-high.example` and the colleague is `colleague@westfield-high.example`.
 
@@ -74,6 +74,8 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
    - Lost a card? **New password…** on that pupil makes a new password and card. **New passwords and cards…** does it for the whole group. Old passwords stop working and the pupils are signed out. **Name…** sets or clears a pupil's name (shown to staff and printed on their card only).
    - **Pupils sign in** at `https://kerf.mr-salih.org/sign-in`, on the **I'm a pupil** tab, under **Use your Pupil Card**: they type the four things on their card and press **Sign in**, and the Editor opens. Capital letters and spaces instead of the dash in the password do not matter. Five wrong passwords lock that pupil ID for about 5 minutes. Pupil Card sign-in works only while **Group code** is ticked on the **School** page (it is, for a new school).
    - Pupils can also design without signing in: **Work without signing in** on the sign-in page opens the Editor, and the work stays in that browser.
+   - **A pupil asks to join another group.** A signed-in pupil opens their menu (their name or ID, top right in the Editor) and chooses **Join a group…**. They type the group code the teacher shows them (for example `9B-DT`) and press **Ask to join**; the dialog says "Asked to join 9B-DT: waiting for your teacher" and lists their requests as **Waiting**, **Joined** or **Declined**. Only groups of their own school are found ("There is no group with the code … in your school."). A pupil can have up to 10 requests waiting.
+   - **The teacher lets them in.** On **Classes**, the group shows "1 waiting to join" next to its pupil count (the **Pupils** page shows the school's total). **Pupils…** lists them under **Waiting to join**, by name if Kerf has one, otherwise "Pupil <ID>", with **Approve** and **Decline**. Approving adds the pupil to the group (making their Kerf account if they have none, or bringing back an archived pupil); a group already at the plan's 50-pupil limit says so and the request keeps waiting. Only the group's own teacher (or a school admin) sees and decides its requests.
 
 9. **What the free plan includes.** Kerf's built-in default terms are:
    - features: the free tools only (no laser, no activities);

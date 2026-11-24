@@ -155,9 +155,15 @@ def join_code_of(c: SchoolClass) -> str:
     return c.join_code or c.code
 
 
-def class_info(s: Session, c: SchoolClass, pupil_count: int) -> dict:
+def class_info(s: Session, c: SchoolClass, pupil_count: int, join_requests: int | None = None) -> dict:
+    """`join_requests`: pupils waiting to join (counted here when not given)."""
+    if join_requests is None:
+        from .services_joinrequests import pending_count
+
+        join_requests = pending_count(s, c)
     return {"code": c.code, "joinCode": join_code_of(c), "label": c.label, "teacherId": c.teacher_id, "pupilCount": pupil_count,
-            "requireApproval": c.require_approval is not False, "archived": bool(c.archived), "source": c.source or "manual", "laser": bool(c.laser)}
+            "requireApproval": c.require_approval is not False, "archived": bool(c.archived), "source": c.source or "manual", "laser": bool(c.laser),
+            "joinRequests": join_requests}
 
 
 def _check_join_code(s: Session, school: str | None, join_code: str, except_code: str | None = None) -> str:
@@ -397,7 +403,7 @@ def delete_pupil_forever(s: Session, who, pupil_id: str) -> dict:
 
     from sqlalchemy import delete as sql_delete
 
-    from .models import ActivityWork, Feedback, GcodeRow, Identity, Job, JobEvent, Workspace
+    from .models import ActivityWork, Feedback, GcodeRow, Identity, Job, JobEvent, JoinRequest, Workspace
 
     row = s.get(Pupil, pupil_id)
     if row is None or pupil_school(s, row) != who.school:
@@ -416,6 +422,7 @@ def delete_pupil_forever(s: Session, who, pupil_id: str) -> dict:
     s.execute(sql_delete(Workspace).where(Workspace.user_id == pupil_id, Workspace.school_id == who.school))
     s.execute(sql_delete(Identity).where(Identity.person_id == pupil_id, Identity.school_id == who.school))
     s.execute(sql_delete(GroupMember).where(GroupMember.pupil_id == pupil_id))
+    s.execute(sql_delete(JoinRequest).where(JoinRequest.pupil_id == pupil_id, JoinRequest.school_id == who.school))
     revoke_sessions(s, pupil_id)
     people.forget(s, pupil_id)
     s.delete(row)

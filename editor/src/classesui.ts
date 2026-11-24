@@ -8,6 +8,7 @@ import {
   type ClassInfo, type ClassPupil, type Session,
 } from "./server";
 import { openCards, parsePupilLines, type Card, type PupilLine } from "./pupilcards";
+import { decideJoinRequest, groupJoinRequests, waitingLabel, waitingText, type WaitingPupil } from "./joingroup";
 
 function askPupils(code: string): Promise<{ pupils: PupilLine[]; generate: number } | null> {
   return new Promise((resolve) => {
@@ -50,13 +51,16 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
   dlg.addEventListener("close", () => dlg.remove());
   dlg.showModal();
 
-  let open: { code: string; pupils: ClassPupil[] } | null = initialCode ? { code: initialCode, pupils: [] } : null;
+  let open: { code: string; pupils: ClassPupil[]; waiting: WaitingPupil[] } | null = initialCode ? { code: initialCode, pupils: [], waiting: [] } : null;
   let classes: ClassInfo[] = [];
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
 
   async function load(): Promise<void> {
     classes = await listClasses(session);
-    if (open) open = { code: open.code, pupils: await classPupils(session, open.code) };
+    if (open) {
+      const [pupils, waiting] = await Promise.all([classPupils(session, open.code), groupJoinRequests(session, open.code).catch(() => [] as WaitingPupil[])]);
+      open = { code: open.code, pupils, waiting };
+    }
     draw();
   }
 
@@ -64,7 +68,7 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
     if (!open) {
       const list = el("div", {}, el("h3", {}, `Classes (${classes.length})`));
       if (!classes.length) list.append(el("p", { class: "hint" }, "No classes yet. Create one, then add the pupils' DINO IDs."));
-      for (const c of classes) list.append(el("div", { class: "filerow" }, el("span", {}, `${c.code}${c.label ? ` · ${c.label}` : ""} · ${c.pupilCount} pupil${c.pupilCount === 1 ? "" : "s"}`), btn("Open", () => void run(async () => { open = { code: c.code, pupils: [] }; }))));
+      for (const c of classes) list.append(el("div", { class: "filerow" }, el("span", {}, `${c.code}${c.label ? ` · ${c.label}` : ""} · ${c.pupilCount} pupil${c.pupilCount === 1 ? "" : "s"}${c.joinRequests ? ` · ${waitingText(c.joinRequests)}` : ""}`), btn("Open", () => void run(async () => { open = { code: c.code, pupils: [], waiting: [] }; }))));
       body.replaceChildren(list, btn("New class…", () => void (async () => {
         const v = await openDialog("New class", [{ key: "code", label: "Class code", type: "text", value: "", hint: "Letters, digits, - and _" }, { key: "label", label: "Note (optional)", type: "text", value: "", hint: "For you, e.g. Y9 set 2. Not a pupil name" }], { ok: "Create" });
         if (v && String(v.code).trim()) await run(() => createClass(session, String(v.code).trim(), String(v.label).trim()));
@@ -72,7 +76,19 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
       return;
     }
     const code = open.code;
-    const list = el("div", {}, el("h3", {}, `${code} (${open.pupils.length})`));
+    const list = el("div", {});
+    if (open.waiting.length) {
+      // pupils who asked to join with the group code (shared 0.2.41): a teacher lets them in or says no
+      list.append(el("h3", {}, `Waiting to join (${open.waiting.length})`),
+        el("p", { class: "hint" }, "These pupils typed this group's code and asked to join. Approve only pupils you expect in this group."));
+      for (const w of open.waiting) {
+        list.append(el("div", { class: "filerow" },
+          el("span", {}, `${waitingLabel(w)}${w.createdAt ? ` · asked ${new Date(w.createdAt).toLocaleString()}` : ""}${w.archived ? " · archived: approving brings them back" : ""}`),
+          btn("Approve", () => void run(() => decideJoinRequest(session, code, w.id, true)), "on"),
+          btn("Decline", () => void run(() => decideJoinRequest(session, code, w.id, false)), "danger")));
+      }
+    }
+    list.append(el("h3", {}, `${code} (${open.pupils.length})`));
     if (!open.pupils.length) list.append(el("p", { class: "hint" }, "No pupils yet."));
     for (const p of open.pupils) {
       list.append(el("div", { class: "filerow" },

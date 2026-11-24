@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.40
+  version: 0.2.41
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -351,6 +351,67 @@ paths:
       responses:
         "200": {description: Signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {const: pupil}, id: {type: string}, classCode: {type: string}, expiresAt: {type: string, format: date-time}}}}}}
         "401": {description: "`bad_login`"}
+  /groups/join:
+    post:
+      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.41). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [groupCode], properties: {groupCode: {type: string, description: "The group's join code (case and spaces do not matter)"}}}
+      responses:
+        "201": {description: Asked, content: {application/json: {schema: {$ref: "#/components/schemas/MyJoinRequest"}}}}
+        "200": {description: Already waiting, content: {application/json: {schema: {$ref: "#/components/schemas/MyJoinRequest"}}}}
+        "403": {description: Only pupils ask}
+        "404": {description: "No (not archived) group with that code in my school"}
+        "409": {description: "`already_member`: I am in that group already; `too_many_requests`: 10 requests already waiting"}
+  /me/join-requests:
+    get:
+      summary: "Pupil. My requests to join groups, newest first (shared 0.2.41)"
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MyJoinRequest"}}}}}
+  /classes/{code}/join-requests:
+    get:
+      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.41). Other teachers and other schools: 404"
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, pupilId, status]
+                  properties:
+                    id: {type: integer}
+                    pupilId: {type: string}
+                    displayName: {type: string, description: "Only when Kerf has one; staff of the same school only"}
+                    status: {const: pending}
+                    archived: {type: boolean, description: "The pupil is archived: approving brings them back"}
+                    createdAt: {type: string, format: date-time}
+  /classes/{code}/join-requests/{requestId}/approve:
+    post:
+      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.41)"
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: requestId, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: Approved, content: {application/json: {schema: {$ref: "#/components/schemas/JoinDecision"}}}}
+        "404": {description: No such request for this group (or not my group)}
+        "409": {description: "`limit_reached` (the group is full on the school's plan), `already_decided`, or `conflict` (the pupil ID is used in another school)"}
+  /classes/{code}/join-requests/{requestId}/decline:
+    post:
+      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.41)"
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - {name: requestId, in: path, required: true, schema: {type: integer}}
+      responses:
+        "200": {description: Declined, content: {application/json: {schema: {$ref: "#/components/schemas/JoinDecision"}}}}
+        "404": {description: No such request for this group (or not my group)}
+        "409": {description: "`already_decided`"}
   /classes/{code}/passwords:
     post:
       summary: Teacher. New two-word passwords for the group's pupils (all, or pupilIds), for printing Pupil Cards. Old passwords stop working and the pupils are signed out. Shown once
@@ -1531,6 +1592,7 @@ components:
         archived: {type: boolean}
         source: {enum: [manual, csv, dino, google, microsoft], description: "Where the group came from"}
         laser: {type: boolean, description: "A laser group: may send files to the laser while the school's terms limit laser groups. Set by a school admin with PUT /classes/{code} {laser}"}
+        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.41)"}
     CameraCalibration:
       type: object
       required: [imageWidth, imageHeight, points, homography]
@@ -1558,6 +1620,23 @@ components:
         lastLogin: {type: [string, "null"], format: date-time}
         locked: {type: boolean}
         groups: {type: array, items: {type: string}, description: "Every (not archived) group this pupil is in"}
+    MyJoinRequest:
+      type: object
+      required: [id, groupCode, status]
+      properties:
+        id: {type: integer}
+        groupCode: {type: string, description: "The group's join code"}
+        groupLabel: {type: [string, "null"]}
+        status: {enum: [pending, approved, declined]}
+        createdAt: {type: string, format: date-time}
+        decidedAt: {type: [string, "null"], format: date-time}
+    JoinDecision:
+      type: object
+      properties:
+        id: {type: integer}
+        pupilId: {type: string}
+        status: {enum: [approved, declined]}
+        decidedAt: {type: string, format: date-time}
     AuthConfig:
       type: object
       required: [mode]

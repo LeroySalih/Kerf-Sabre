@@ -1,5 +1,6 @@
 // The pages of the admin site. Each page draws itself into a host element and may return a function that stops its refreshing.
 import { openClasses } from "../classesui";
+import { waitingText } from "../joingroup";
 import { openClassWork } from "../activitiesui";
 import { infoDialog, openDialog, type DialogValue } from "../dialog";
 import { profileFromForm, stationFields } from "../machineform";
@@ -124,7 +125,7 @@ const classes: Page = {
           if (!c.archived && !confirm(`Archive ${c.code}? Its pupils can no longer sign in through it; their files and work are kept.`)) return;
           void attempt(() => updateClass(s, c.code, { archived: !c.archived }), redraw);
         });
-        return el("tr", {}, cell(el("b", {}, c.code)), cell(el("code", {}, c.joinCode ?? c.code)), cell(c.label ?? ""), cell(c.teacherId ?? "shared"), cell(String(c.pupilCount)),
+        return el("tr", {}, cell(el("b", {}, c.code)), cell(el("code", {}, c.joinCode ?? c.code)), cell(c.label ?? ""), cell(c.teacherId ?? "shared"), cell(String(c.pupilCount), ...(c.joinRequests ? [" ", el("span", { class: "st-dot wait", title: "Open Pupils… to let them in" }, waitingText(c.joinRequests))] : [])),
           ...(isPaid(s) ? [cell(sel)] : []), ...(pickLaser ? [cell(laser)] : []),
           actions(btn("Pupils…", () => openClasses(s, { openFile: lookAtFile }, c.code)),
             ...(hasActivities(s) ? [btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")), btn("Progress…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "progress"))] : []),
@@ -157,7 +158,9 @@ const pupils: Page = {
           if (prompt(`Delete ${who} for good? Their account, files and work are removed and cannot be brought back. This is logged. Type the pupil ID to confirm.`) !== p.pupilId) return;
           void attempt(async () => { const r = await deletePupilForever(s, p.pupilId); await infoDialog("Deleted", [`${who} and ${r.filesDeleted} file${r.filesDeleted === 1 ? "" : "s"} were deleted.`]); }, redraw);
         }, "danger")] : []))));
-      host.replaceChildren(...(rows.length ? [table(["Pupil ID", "Class", "Last signed in", ""], rows)] : [empty(cls.length ? "No pupils yet. Open a class and add pupils' DINO IDs." : "No classes yet.")]),
+      const waiting = cls.reduce((n, c) => n + (c.joinRequests ?? 0), 0);
+      host.replaceChildren(...(waiting ? [el("p", { class: "ad-warn" }, `${waitingText(waiting)} a class. Open the class on the Classes page (Pupils…) to approve or decline.`)] : []),
+        ...(rows.length ? [table(["Pupil ID", "Class", "Last signed in", ""], rows)] : [empty(cls.length ? "No pupils yet. Open a class and add pupils' DINO IDs." : "No classes yet.")]),
         ...(cls.length ? [el("p", { class: "hint" }, "To add pupils, open the class on the Classes page.")] : []),
         ...(archived.length ? [el("h2", {}, "Archived pupils"), el("p", { class: "hint" }, "Out of every group: they cannot sign in, and their files are kept. Add a pupil to a group to bring them back." + (s.role === "admin" ? " Only a school admin can delete one for good." : "")),
           table(["Pupil ID", "Last group", "Archived", ""], archived)] : []));

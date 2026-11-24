@@ -3,6 +3,7 @@
 import { confirmDialog, infoDialog, openDialog } from "./dialog";
 import { sizeText } from "./stationlogic";
 import { openMyActivities } from "./activitiesui";
+import { openJoinGroup } from "./joingroupui";
 import { closeStation, openStation, openStationPicker } from "./stationui";
 import { addLocal, listLocal, removeLocal, type LocalDraft } from "./localdrafts";
 import type { Dimension } from "./dimensions";
@@ -128,6 +129,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     }
     ($("srv-files") as HTMLButtonElement).hidden = false; // everyone signed in has files of their own (staff look at pupils' files on the Admin site)
     ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil" || !hasActivities(session);
+    ($("srv-join") as HTMLButtonElement).hidden = session?.role !== "pupil"; // pupils ask to join another group; a teacher lets them in
     ($("srv-send") as HTMLButtonElement).hidden = !!session && !isPaid(session); // sending for cutting is the paid service; a free school saves and shares files
     const act = $("srv-activity") as HTMLElement;
     act.hidden = !(session?.role === "pupil" && activity);
@@ -620,6 +622,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     });
   });
   $("srv-files").addEventListener("click", () => (session ? void files() : (offline = false, render())));
+  $("srv-join").addEventListener("click", () => { if (session?.role === "pupil") void openJoinGroup(session); });
   window.addEventListener("beforeunload", (ev) => { if (session && (dirty() || ctx.tabs.othersDirty())) ev.preventDefault(); });
   render();
   /** Back from DINO (?code=&state=), or a reload of a tab that was signed in with DINO. */

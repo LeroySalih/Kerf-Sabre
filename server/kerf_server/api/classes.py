@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,12 +26,14 @@ def who_teacher(who: Principal) -> str | None:
 def list_classes(who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), archived: bool = False):
     """A teacher's own classes and any shared (unowned) ones in the school. An admin sees every class in the school.
     Archived groups are left out unless `?archived=true` (then only they are listed)."""
-    counts = sc.member_counts(s)
+    from .. import services_joinrequests as jr
+
+    counts, waiting = sc.member_counts(s), jr.pending_counts(s, who.school)
     q = select(SchoolClass).where(SchoolClass.school_id == who.school).order_by(SchoolClass.code)
     q = q.where(SchoolClass.archived.is_(True)) if archived is True else q.where(SchoolClass.archived.is_not(True))
     if not who.is_admin:
         q = q.where((SchoolClass.teacher_id == who.id) | SchoolClass.teacher_id.is_(None))
-    return [sc.class_info(s, c, counts.get(c.code, 0)) for c in s.scalars(q)]
+    return [sc.class_info(s, c, counts.get(c.code, 0), waiting.get(c.code, 0)) for c in s.scalars(q)]
 
 
 def _opt_text(body: dict[str, Any], key: str) -> str | None:
@@ -125,3 +128,46 @@ def delete_forever(pupil_id: str, who: Principal = Depends(require("admin")), s:
 def reset_pin(pupil_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     password = sc.reset_pin(s, pupil_id, who_teacher(who), who.school)
     return {"pupilId": pupil_id, "password": password, "pin": password}
+
+
+# ---------------------------------------------------------------- pupils ask to join a group (shared 0.2.41)
+
+@router.post("/groups/join")
+def ask_to_join(body: dict[str, Any] = Body(...), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
+    """Pupils: ask to join a group of my school by its join code (`{groupCode}`). 201 a new request, 200 the one already waiting;
+    404 no such group in my school; 409 `already_member`. A teacher who manages the group approves or declines it."""
+    from .. import services_joinrequests as jr
+
+    doc, made = jr.ask(s, who, str(body.get("groupCode") or ""))
+    return JSONResponse(doc, status_code=201 if made else 200)
+
+
+@router.get("/me/join-requests")
+def my_join_requests(who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
+    """Pupils: my requests to join groups (newest first), with the group's code and label and whether I am waiting, in or declined."""
+    from .. import services_joinrequests as jr
+
+    return jr.mine(s, who)
+
+
+@router.get("/classes/{code}/join-requests")
+def join_requests(code: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """Teachers who manage the group (admins: every group of the school): pupils waiting to join it."""
+    from .. import services_joinrequests as jr
+
+    return jr.for_group(s, code, who_teacher(who), who.school)
+
+
+@router.post("/classes/{code}/join-requests/{request_id}/approve")
+def approve_join(code: str, request_id: int, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """Add the pupil to the group (their account is made if Kerf has none; an archived pupil comes back). 409 `limit_reached` when full."""
+    from .. import services_joinrequests as jr
+
+    return jr.decide(s, who, code, request_id, True, who_teacher(who))
+
+
+@router.post("/classes/{code}/join-requests/{request_id}/decline")
+def decline_join(code: str, request_id: int, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    from .. import services_joinrequests as jr
+
+    return jr.decide(s, who, code, request_id, False, who_teacher(who))

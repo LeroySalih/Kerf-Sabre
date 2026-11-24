@@ -1,6 +1,6 @@
 # Kerf accounts, sign-in and the two admin sites (design)
 
-Status: **design agreed with the owner; being built in steps** (built so far: plans and school codes, per-school sign-in methods, groups with several pupils and join codes, the configurable terms, free schools registering themselves). Open questions at the end. One code base (PRODUCT.md decision 4): every school, BISAK included, uses exactly this.
+Status: **design agreed with the owner; being built in steps** (built so far: plans and school codes, per-school sign-in methods, groups with several pupils and join codes, the configurable terms, free schools registering themselves, pupils asking to join a group). Open questions at the end. One code base (PRODUCT.md decision 4): every school, BISAK included, uses exactly this.
 
 ## Two admin sites
 
@@ -65,7 +65,7 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 - **Pupil passwords:** Kerf's default is **two words** (e.g. `tiger-river`); the teacher reissues them (new card); pupils do not choose or change them. (Built, shared 0.2.39: Pupil Card sign-in on `/sign-in`, Pupil Cards printed from the class's pupils.)
 - **Pupils can be in several groups**, and a group can be **re-synced from its source** (e.g. DINO).
 - **Display names:** teachers may enter them; they are **printed on the Pupil Cards** (staff and the pupil's own card only, never in logs).
-- **Signing in without an import** (e.g. Google): the pupil is asked to **join** and waits; a teacher **approves** them from the group's page.
+- **Signing in without an import** (e.g. Google): the pupil is asked to **join** and waits; a teacher **approves** them from the group's page. (Built, shared 0.2.41: a signed-in pupil, with DINO or a Pupil Card today, chooses **Join a group…** in the Editor and types a group code of their own school; the group's teacher sees "N waiting to join" and approves or declines them in the group's pupils. Approving makes the pupil's Kerf account if there is none. Google and Microsoft sign-in will use the same path.)
 - **Staff:** a school can have **several admins**; **only admins invite teachers** (and technicians, admins).
 - **Support access:** the school turns on **"Allow support access"** on its own page before the site admin can enter it through Kerf; failing that, the site admin can **email the school's admins an access request link**. All support access is logged.
 - **Leaving:** pupils are **archived** (soft-deleted, cannot sign in) and **can be deleted** permanently. A **group can be renamed** (moving up a year) **or archived**.

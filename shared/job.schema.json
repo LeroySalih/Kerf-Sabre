@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": "0.2.40"
+      "const": "0.2.41"
     },
     "id": {
       "type": "string",

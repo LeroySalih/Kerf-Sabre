@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.41 - pupils ask to join a group; a teacher approves (additive)
+- `POST /groups/join {groupCode}` (pupils, however they signed in): finds the group by its **join code** in the pupil's own school (not archived; `404` otherwise) and makes a waiting request (`201`); a request already waiting is returned (`200`). `409 already_member`, `409 too_many_requests` (10 waiting). `GET /me/join-requests`: the pupil's own requests with `groupCode`, `groupLabel` and `status` (`pending`, `approved`, `declined`).
+- Teachers who manage the group (admins: every group of the school; anyone else `404`): `GET /classes/{code}/join-requests` (waiting pupils, with `displayName` when Kerf has one), `POST /classes/{code}/join-requests/{id}/approve` (adds the pupil to the group, making their account if Kerf has none, bringing back an archived pupil; `409 limit_reached` when the group is full on a free plan) and `.../decline`. Who decided and when is kept.
+- `ClassInfo.joinRequests`: the number waiting, for a badge.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.41`.
+
 ## 0.2.40 - free schools register themselves (additive)
 - `POST /auth/register {schoolName, name, email}` (anyone): stores a pending registration (only the SHA-256 of the link) and emails a confirmation link, `/sign-in?register=<token>`, that works once for 24 hours. Nothing is made until it is used. The same answer whatever happens; limited per address (3 per 15 minutes, quietly) and per computer (10 per day, `429`). `403 registration_closed` when the server has self-registration off (`KERF_REGISTRATION=false`).
 - `POST /auth/register/finish {token}`: makes the school on the **free** plan (ID from the name: lower case, dashes, at most 32 characters, `-2`, `-3`... on a clash; a school code; a copy of the default terms; group code and email sign-in on) and the person its first **admin** (an email account with their name), and returns a session like `/auth/email/finish` plus `school`, `schoolName`, `schoolCode`. `401 link_invalid` for a used, expired or unknown link.

@@ -264,6 +264,20 @@ class GroupMember(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class JoinRequest(Base):
+    """A pupil asked to join a group (by its join code) and waits for a teacher (shared 0.2.41). IDs only."""
+
+    __tablename__ = "join_requests"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    school_id: Mapped[str] = mapped_column(String(32), index=True)
+    class_code: Mapped[str] = mapped_column(String(32), ForeignKey("classes.code", ondelete="CASCADE"), index=True)
+    pupil_id: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(10), default="pending")  # pending | approved | declined
+    decided_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Pupil(Base):
     """A pupil who can log in with class code + pupil ID + PIN. Pupil ID only: there is no column for a name."""
 

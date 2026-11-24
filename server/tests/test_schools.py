@@ -101,6 +101,22 @@ class TestClassesAreSeparate:
         assert client.get(f"{API}/auth/me", headers=world["beta"]["pupil"]).json()["school"] == "beta"
 
 
+class TestJoinRequestsAreSeparate:
+    def test_a_pupil_asks_only_inside_their_school_and_only_its_staff_decide(self, client, world):
+        a, b = world["alpha"], world["beta"]
+        assert client.post(f"{API}/classes", json={"code": "A2"}, headers=a["teacher"]).status_code == 201
+        assert client.post(f"{API}/groups/join", json={"groupCode": "BETA"}, headers=a["pupil"]).status_code == 404
+        r = client.post(f"{API}/groups/join", json={"groupCode": "A2"}, headers=a["pupil"])
+        assert r.status_code == 201
+        rid = r.json()["id"]
+        for path in ("/classes/A2/join-requests",):
+            assert client.get(f"{API}{path}", headers=b["admin"]).status_code == 404
+        assert client.post(f"{API}/classes/A2/join-requests/{rid}/approve", headers=b["admin"]).status_code == 404
+        assert client.post(f"{API}/classes/BETA/join-requests/{rid}/decline", headers=b["teacher"]).status_code == 404
+        assert client.get(f"{API}/me/join-requests", headers=b["pupil"]).json() == []
+        assert client.post(f"{API}/classes/A2/join-requests/{rid}/approve", headers=a["admin"]).status_code == 200
+
+
 class TestFilesAndQueueAreSeparate:
     def submit(self, client, w):
         pid = client.get(f"{API}/auth/me", headers=w["pupil"]).json()["id"]

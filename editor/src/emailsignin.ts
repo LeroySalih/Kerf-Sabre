@@ -1,4 +1,4 @@
-// Staff sign-in with an emailed link (shared 0.2.45), for the Admin site and the Editor. The link brings the browser back to
+// Staff sign-in with an emailed link (shared 0.2.46), for the Admin site and the Editor. The link brings the browser back to
 // the same page with `?signin=<token>`; the token is traded once for an ordinary session token. That session is kept for
 // this tab only (sessionStorage), like a DINO sign-in, so closing the tab signs the person out. Tested in tests/emailsignin.test.ts.
 import { normaliseBase, request, type Session } from "./server";
@@ -57,7 +57,7 @@ export async function finishRegistration(baseUrl: string, linkToken: string, f: 
   return s;
 }
 
-/** A pupil signs in with their Pupil Card (school code, group code, pupil ID, two-word password; shared 0.2.45). The session is kept
+/** A pupil signs in with their Pupil Card (school code, group code, pupil ID, two-word password; shared 0.2.46). The session is kept
  * for this tab like an emailed link's, under the Editor's key, so /editor/ picks it up. Throws the server's message when it is wrong. */
 export async function cardSignIn(baseUrl: string, card: { schoolCode: string; groupCode: string; pupilId: string; password: string }, f: Fetch = fetch, st: Storage = sessionStorage): Promise<Session> {
   const base = normaliseBase(baseUrl);

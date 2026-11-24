@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.46 - station names unique within a school (additive)
+- `PUT /machines/{machineId}` answers `409 name_in_use` when another station in the same school already has that name (compared without regard to capitals or extra spaces). Stations saved before keep their names; the rule applies when a station is next saved.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.46`.
+
 ## 0.2.45 - school admins rename their school (additive)
 - `PATCH /school` also takes `name` (school admins only; a teacher sending it gets `403 forbidden` and may still send `autoApprove`). The name is trimmed, 1 to 128 characters, no control characters (`422 invalid` otherwise); the school ID and school code stay the same. `PATCH /schools/{id} {name}` (site admins) now follows the same rules: a name over 128 characters or with control characters is refused instead of cut short.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.45`.

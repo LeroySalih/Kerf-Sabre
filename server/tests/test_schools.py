@@ -416,3 +416,15 @@ class TestRemovingAStation:
             ws.send_json({"type": "status", "station": "alpha-laser", "state": "Idle", "mpos": [0, 0, 0]})
             r = client.delete(f"{API}/machines/alpha-laser", headers=a["admin"])
             assert r.status_code == 409 and r.json()["code"] == "station_online"
+
+
+def test_station_names_are_unique_within_a_school(client, tokens):
+    t = auth(tokens["teacher"])
+    one = client.get(f"{API}/machines/station-1", headers=t).json()
+    copy = {**one, "id": "station-9"}  # the same name as station-1
+    r = client.put(f"{API}/machines/station-9", json=copy, headers=t)
+    assert r.status_code == 409 and r.json()["code"] == "name_in_use" and "station-1" in r.json()["message"]
+    shout = {**one, "id": "station-9", "name": "  " + one["name"].upper() + " "}  # capitals and spaces do not make it different
+    assert client.put(f"{API}/machines/station-9", json=shout, headers=t).json()["code"] == "name_in_use"
+    assert client.put(f"{API}/machines/station-9", json={**one, "id": "station-9", "name": "Laser 9"}, headers=t).status_code == 200
+    assert client.put(f"{API}/machines/station-1", json=one, headers=t).status_code == 200  # saving a station under its own name is fine

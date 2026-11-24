@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.45
+  version: 0.2.46
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -160,7 +160,7 @@ paths:
       responses:
         "200": {description: OK}
     patch:
-      summary: "Admin or teacher. Switch auto-approve on or off (while on, new files skip approval and go straight to the queue) and/or rename the school (school admins only, shared 0.2.45). Send at least one field; everything is checked before anything changes. Returns the school document."
+      summary: "Admin or teacher. Switch auto-approve on or off (while on, new files skip approval and go straight to the queue) and/or rename the school (school admins only, shared 0.2.46). Send at least one field; everything is checked before anything changes. Returns the school document."
       requestBody:
         required: true
         content:
@@ -356,7 +356,7 @@ paths:
         "401": {description: "`bad_login`"}
   /groups/join:
     post:
-      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.45). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
+      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.46). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
       requestBody:
         required: true
         content:
@@ -370,12 +370,12 @@ paths:
         "409": {description: "`already_member`: I am in that group already; `too_many_requests`: 10 requests already waiting"}
   /me/join-requests:
     get:
-      summary: "Pupil. My requests to join groups, newest first (shared 0.2.45)"
+      summary: "Pupil. My requests to join groups, newest first (shared 0.2.46)"
       responses:
         "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MyJoinRequest"}}}}}
   /classes/{code}/join-requests:
     get:
-      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.45). Other teachers and other schools: 404"
+      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.46). Other teachers and other schools: 404"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
       responses:
@@ -397,7 +397,7 @@ paths:
                     createdAt: {type: string, format: date-time}
   /classes/{code}/join-requests/{requestId}/approve:
     post:
-      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.45)"
+      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.46)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -407,7 +407,7 @@ paths:
         "409": {description: "`limit_reached` (the group is full on the school's plan), `already_decided`, or `conflict` (the pupil ID is used in another school)"}
   /classes/{code}/join-requests/{requestId}/decline:
     post:
-      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.45)"
+      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.46)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -880,7 +880,7 @@ paths:
         "404": {description: Not one of the school's lasers}
         "409": {description: "station_online (its Cutter is connected) or station_in_use (files are queued for it or being cut)"}
     put:
-      summary: Create or replace a profile (teacher or school admin), e.g. from spike results. A new ID adds a laser to the school.
+      summary: Create or replace a profile (teacher or school admin), e.g. from spike results. A new ID adds a laser to the school. A station's name is unique within its school (capitals and extra spaces do not make a different name).
       requestBody:
         required: true
         content:
@@ -888,6 +888,7 @@ paths:
             schema: {$ref: "./machine-profile.schema.json"}
       responses:
         "200": {description: Updated}
+        "409": {description: "conflict (the laser ID is used by another school) or name_in_use (another station in this school has that name)"}
   /jobs:
     get:
       summary: List jobs (pupils see their own; teachers and stations see all)
@@ -1622,7 +1623,7 @@ components:
         archived: {type: boolean}
         source: {enum: [manual, csv, dino, google, microsoft], description: "Where the group came from"}
         laser: {type: boolean, description: "A laser group: may send files to the laser while the school's terms limit laser groups. Set by a school admin with PUT /classes/{code} {laser}"}
-        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.45)"}
+        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.46)"}
     CameraCalibration:
       type: object
       required: [imageWidth, imageHeight, points, homography]

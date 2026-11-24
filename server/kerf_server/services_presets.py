@@ -82,6 +82,11 @@ def put_machine(s: Session, school: str, machine_id: str, doc: dict[str, Any]) -
     if doc["id"] != machine_id:
         raise ApiError(422, "invalid", "The machine id in the body must match the URL.")
     row = s.get(MachineRow, machine_id)
+    name = " ".join(str(doc.get("name") or "").split())
+    if name:  # a station's name is unique within its school (capitals and extra spaces do not make a different name)
+        for other in s.scalars(select(MachineRow).where(MachineRow.school_id == school, MachineRow.id != machine_id)):
+            if " ".join(str((other.data or {}).get("name") or "").split()).casefold() == name.casefold():
+                raise ApiError(409, "name_in_use", f"Another station in your school is already called '{name}' ({other.id}). Give this one a different name.")
     if row is None:
         s.add(MachineRow(id=machine_id, school_id=school, data=doc))
     elif row.school_id != school:

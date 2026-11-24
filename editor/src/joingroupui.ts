@@ -1,4 +1,4 @@
-// The pupil's "Join a group…" dialog (shared 0.2.45): type a group code, then wait for the teacher. Words in joingroup.ts.
+// The pupil's "Join a group…" dialog (shared 0.2.46): type a group code, then wait for the teacher. Words in joingroup.ts.
 import { btn, el, modal, msg } from "./dom";
 import { askToJoin, cleanGroupCode, myJoinRequests, requestLine, STATUS_WORD, type JoinRequestDoc } from "./joingroup";
 import { ServerError, type Session } from "./server";

@@ -166,7 +166,7 @@ class Verifier:
             gid = g.get("id")
             if not isinstance(gid, str) or not 0 < len(gid) <= 64 or not set(gid) <= ID_OK:
                 continue
-            # a pupil is an ID, or {id, name} when DINO sends names (staff-only display names, shared 0.2.45)
+            # a pupil is an ID, or {id, name} when DINO sends names (staff-only display names, shared 0.2.46)
             from .services_people import clean_name
 
             names: dict[str, str] = {}

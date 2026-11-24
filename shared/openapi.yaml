@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.36
+  version: 0.2.37
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -1539,6 +1539,12 @@ components:
             properties:
               id: {type: string}
               ticket: {type: [integer, "null"]}
+    PupilGroup:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string}
+        label: {type: [string, "null"]}
     QueueEntry:
       type: object
       required: [ticket, jobId, status, position, own]
@@ -1548,6 +1554,8 @@ components:
         status: {enum: [approved, assigned, running]}
         position: {type: [integer, "null"], description: "1 = next. Null for jobs already on a laser"}
         pupilId: {type: [string, "null"], description: "Hidden (null) for other pupils' jobs when the caller is a pupil"}
+        pupilGroups: {type: array, items: {$ref: "#/components/schemas/PupilGroup"}, description: "Staff only: the pupil's (not archived) groups in this school, to find a pupil's files by group"}
+        name: {type: [string, "null"], description: "Staff only: the file's name"}
         own: {type: boolean}
         presetId: {type: string}
         station: {type: [string, "null"], description: "A teacher pinned the job to this station, or the laser it is cutting on"}

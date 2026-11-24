@@ -95,17 +95,21 @@ def entries(s: Session, who, cfg: Settings, station_id: str | None = None) -> li
     wait = waiting(s, who.school)
     nxt = head(s, who.school, station_id, cfg) if station_id else None
     named = people.names(s, who.school, (j.pupil_id for j in [*active, *wait])) if who.staff() else {}
+    from .services_classes import groups_by_pupil
+
+    groups = groups_by_pupil(s, who.school, (j.pupil_id for j in [*active, *wait])) if who.staff() else {}
     out: list[dict[str, Any]] = []
     ahead_s = 0.0
     for j in active:
-        out.append(_entry(j, who, None, None, nxt, named))
+        out.append(_entry(j, who, None, None, nxt, named, groups))
     for pos, j in enumerate(wait, 1):
-        out.append(_entry(j, who, pos, ahead_s, nxt, named))
+        out.append(_entry(j, who, pos, ahead_s, nxt, named, groups))
         ahead_s += float((j.estimate or {}).get("durationS") or 0)
     return out
 
 
-def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | None, named: dict[str, str] | None = None) -> dict[str, Any]:
+def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | None, named: dict[str, str] | None = None,
+           groups: dict[str, list[dict]] | None = None) -> dict[str, Any]:
     own = who.role == "pupil" and j.pupil_id == who.id
     show = who.staff() or own
     e: dict[str, Any] = {
@@ -117,6 +121,9 @@ def _entry(j: Job, who, position: int | None, ahead_s: float | None, nxt: Job | 
     }
     if show and named and j.pupil_id in named:
         e["pupilName"] = named[j.pupil_id]
+    if who.staff() and groups is not None:
+        e["pupilGroups"] = groups.get(j.pupil_id, [])
+        e["name"] = j.name
     if nxt is not None:
         e["next"] = j.id == nxt.id
     return e

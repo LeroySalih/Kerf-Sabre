@@ -46,7 +46,11 @@ def list_jobs(
         q = q.where((Job.station == station) | Job.station.is_(None))
     jobs = list(s.scalars(q.limit(limit) if limit else q))
     named = people.names(s, who.school, (j.pupil_id for j in jobs)) if who.staff() else {}
-    return [{**sj.to_doc(j), **({"pupilName": named[j.pupil_id]} if j.pupil_id in named else {})} for j in jobs]
+    from ..services_classes import groups_by_pupil
+
+    groups = groups_by_pupil(s, who.school, (j.pupil_id for j in jobs)) if who.staff() else None
+    return [{**sj.to_doc(j), **({"pupilName": named[j.pupil_id]} if j.pupil_id in named else {}),
+             **({"pupilGroups": groups.get(j.pupil_id, [])} if groups is not None else {})} for j in jobs]
 
 
 @router.post("/jobs", status_code=201)

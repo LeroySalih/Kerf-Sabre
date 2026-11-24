@@ -6,6 +6,7 @@ import { profileFromForm, stationFields } from "../machineform";
 import { materialFields, opText, overrideFields, presetFromForm, presetWithOverride } from "../materialform";
 import { presetLabel, type Preset } from "../presets";
 import { termsFields, termsFromForm, termsText, type Terms } from "../termsform";
+import { applyFilter, filterBar } from "../queuefilter";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
@@ -235,20 +236,31 @@ const PROCESSED = "done,failed,cancelled";
 
 /** Files that have left the queue: cut, failed, cancelled or rejected (newest first). Any of them can go back to the end of the queue. */
 function mountProcessed(host: HTMLElement, s: Session): () => void {
-  const draw = async (): Promise<void> => {
-    const [jobs, materials] = await Promise.all([listJobsByStatus(s, PROCESSED, undefined, 200), listPresets(s)]);
-    const mat = (id: string) => { const p = materials.find((m) => m.id === id); return p ? presetLabel(p) : `${id} (removed)`; };
-    const redraw = () => void draw().catch((e) => fail(host, e));
-    if (!jobs.length) return void host.replaceChildren(empty("Nothing has been processed yet."));
-    host.replaceChildren(table(["Sent", "Pupil", "File", "Material", "Result", ""], jobs.map((j) => el("tr", {},
-      cell(shortDate(j.createdAt)), cell(pupilLabel(j.pupilId, j.pupilName)),
-      cell(el("span", { title: j.id }, (j as JobSummary & { name?: string | null }).name || (j.ticket ? `Ticket ${j.ticket}` : j.id))),
+  let jobs: JobSummary[] = [];
+  let materials: Preset[] = [];
+  const bar = filterBar(() => show(), "kerf.admin.processedFilter");
+  const body = el("div");
+  host.replaceChildren(bar.el, body); // the bar stays put (and keeps its focus) while the list refreshes
+  const mat = (id: string) => { const p = materials.find((m) => m.id === id); return p ? presetLabel(p) : `${id} (removed)`; };
+  const redraw = () => void draw().catch((e) => fail(body, e));
+  function show(): void {
+    const rows = applyFilter(jobs, bar.get());
+    bar.update(jobs, rows.length, jobs.length);
+    if (!jobs.length) return void body.replaceChildren(empty("Nothing has been processed yet."));
+    if (!rows.length) return void body.replaceChildren(empty("No processed files match the filter."));
+    body.replaceChildren(table(["Sent", "Pupil", "Groups", "File", "Material", "Result", ""], rows.map((j) => el("tr", {},
+      cell(shortDate(j.createdAt)), cell(pupilLabel(j.pupilId, j.pupilName)), cell((j.pupilGroups ?? []).map((g) => g.code).join(", ")),
+      cell(el("span", { title: j.id }, j.name || (j.ticket ? `Ticket ${j.ticket}` : j.id))),
       cell(mat(j.preset.id)),
       cell(el("span", { class: `ad-tag ${j.status === "done" ? "ok" : "warn"}` }, STATUS_TEXT[j.status] ?? j.status), ...(j.statusReason ? [el("div", { class: "hint" }, j.statusReason)] : [])),
       actions(btn("Back to the queue", () => { if (confirm("Put this file back at the end of the queue?")) void attempt(() => requeueJob(s, j.id), redraw); }))))),
       el("p", { class: "hint" }, "The newest 200. A file put back gets a new ticket at the end of the queue, already approved."));
+  }
+  const draw = async (): Promise<void> => {
+    [jobs, materials] = await Promise.all([listJobsByStatus(s, PROCESSED, undefined, 200), listPresets(s)]);
+    show();
   };
-  return refreshing(host, draw, 10000);
+  return refreshing(body, draw, 10000);
 }
 
 // ---------------------------------------------------------------- materials (power, speed, passes, kerf; per-laser settings)

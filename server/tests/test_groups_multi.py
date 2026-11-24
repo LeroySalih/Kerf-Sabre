@@ -1,4 +1,4 @@
-"""Groups (docs/ACCOUNTS.md, shared 0.2.36): a pupil in several groups, join codes unique per school and editable,
+"""Groups (docs/ACCOUNTS.md, shared 0.2.37): a pupil in several groups, join codes unique per school and editable,
 archived groups, and a free school's limits (20 groups, 50 pupils per group, 20 files per pupil)."""
 from __future__ import annotations
 
@@ -135,3 +135,20 @@ class TestArchivedPupils:
         with app.state.db.session() as s:
             ev = s.query(AuditEvent).one()
             assert (ev.action, ev.subject_id, ev.actor_id) == ("pupil_deleted", "P001", "A001")
+
+
+class TestGroupsOnQueueAndFiles:
+    def test_staff_see_each_pupils_groups_pupils_do_not(self, client, tokens):
+        pins = setup_class_with(client, tokens, ids=("P001",))
+        t = auth(tokens["teacher"])
+        client.post(f"{API}/classes", json={"code": "ART", "label": "Year 9 art"}, headers=t)
+        client.post(f"{API}/classes/ART/pupils", json={"pupilIds": ["P001"]}, headers=t)
+        pt = auth(login(client, pin=pins["P001"]).json()["token"])
+        jid = client.post(f"{API}/jobs", json=job_doc(pupil="P001", status="submitted"), headers=pt).json()["id"]
+        client.post(f"{API}/jobs/{jid}/approve", json={}, headers=t)
+        want = [{"code": "9B-DT", "label": "Y9 set 2"}, {"code": "ART", "label": "Year 9 art"}]
+        q = client.get(f"{API}/queue", headers=t).json()
+        assert q[0]["pupilGroups"] == want
+        assert [j["pupilGroups"] for j in client.get(f"{API}/jobs", headers=t).json()] == [want]
+        assert "pupilGroups" not in client.get(f"{API}/queue", headers=pt).json()[0]
+        assert "pupilGroups" not in client.get(f"{API}/jobs", headers=pt).json()[0]

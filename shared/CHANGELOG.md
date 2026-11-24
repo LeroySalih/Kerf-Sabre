@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.37 - pupils' groups on queue entries and file lists (additive)
+- For staff (never pupils), `GET /queue` entries carry `pupilGroups` (`[{code, label}]`, the pupil's groups in the school, archived groups left out) and the file's `name`; `GET /jobs` items carry `pupilGroups`. The Admin queue, waiting files, processed files and the Station queue use them to filter by pupil name and group.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.37`.
+
 ## 0.2.36 - archived pupils; permanent delete only by a school admin (additive)
 - Removing a pupil from their last group **archives** them (it used to delete them): signed out, cannot sign in (a DINO pupil gets `403 archived`), files, work and display name kept. `GET /pupils/archived` lists them; adding one to a group brings them back (`restored` in the answer, same PIN).
 - `DELETE /pupils/{pupilId}` (school admins only): deletes an archived pupil for good with their files, G-code, history, activity work, feedback, open tabs, display name and sign-in links. `409 not_archived` for a pupil still in a group, `409 in_use` while a file is on a laser. Every permanent delete is recorded (who, which pupil, how many files; IDs only).

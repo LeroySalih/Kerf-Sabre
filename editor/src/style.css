@@ -286,3 +286,9 @@ td.cell.st-todo { background: #f9fafb; }
 .krow.left { justify-content: flex-start; margin-top: 4px; }
 .kwarn { color: #b45309; font-size: 12px; margin: 4px 0; }
 .kwarn:empty { display: none; }
+
+/* Find a pupil's files: the filter bar over the queue, waiting and processed files, and the Station queue (queuefilter.ts) */
+.qf-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 10px; }
+.qf-bar .qf-text { flex: 1 1 220px; min-width: 160px; max-width: 360px; padding: 5px 8px; }
+.qf-bar .qf-group { max-width: 240px; padding: 4px 6px; }
+.qf-bar .qf-count { white-space: nowrap; }

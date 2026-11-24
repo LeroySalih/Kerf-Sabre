@@ -111,6 +111,19 @@ def set_laser(s: Session, c: SchoolClass, on: bool) -> None:
     c.laser = on
 
 
+def groups_by_pupil(s: Session, school: str | None, pupil_ids) -> dict[str, list[dict]]:
+    """For staff lists: each pupil's (not archived) groups in this school as `[{code, label}]`, in one query."""
+    ids = list({p for p in pupil_ids if p})
+    if not ids:
+        return {}
+    out: dict[str, list[dict]] = {}
+    q = (select(GroupMember.pupil_id, SchoolClass.code, SchoolClass.label).join(SchoolClass, SchoolClass.code == GroupMember.class_code)
+         .where(GroupMember.pupil_id.in_(ids), SchoolClass.school_id == school, SchoolClass.archived.is_not(True)).order_by(SchoolClass.code))
+    for pid, code, label in s.execute(q):
+        out.setdefault(pid, []).append({"code": code, "label": label})
+    return out
+
+
 def pupil_school(s: Session, row: Pupil) -> str | None:
     c = s.get(SchoolClass, row.class_code)
     return c.school_id if c else None

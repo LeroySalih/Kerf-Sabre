@@ -11,6 +11,7 @@ import {
   listJobsByStatus, listQueue, listStations, moveInQueue, rejectJob,
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
+import { applyFilter, filterBar, type FilterBar } from "./queuefilter";
 import { formatClock, previewSvg, progressPct, remainingText, sizeOf, sizeText, stepState } from "./stationlogic";
 
 const POLL_MS = 2000;
@@ -65,6 +66,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
   let picked: string | null = null;
   let aligning: { jobId: string; view: AlignView } | null = null;
   let data: { queue: QueueEntry[]; station?: StationInfo; failed: boolean } = { queue: [], failed: false };
+  const qbar: FilterBar = filterBar(() => render(), `kerf.station.filter.${stationId}`);
 
   const say = (t: string, kind: "info" | "error" = "info") => { notice = t; noticeKind = kind; render(); };
   const guard = async (fn: () => Promise<unknown>) => {
@@ -135,8 +137,13 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       ...(session.role === "admin" || session.role === "teacher" ? [h("a", { class: "btnlink", href: "/" }, "Editor")] : []),
       ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []),
       button("Sign out", onSignOut));
+    const was = qbar.capture();
     const main = h("div", { class: "st-main" });
-    main.append(h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"), queueList(data.queue, stationId, { selected: next?.jobId ?? null, onPick: (e) => { if (!busy && !st?.currentJobId && !aligning) { picked = e.jobId ?? null; confirmed = false; notice = ""; void refresh(); } }, canPick: takeable })));
+    const shownQueue = applyFilter(data.queue, qbar.get());
+    qbar.update(data.queue, shownQueue.length, data.queue.length);
+    const qsec = h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"));
+    main.append(qsec);
+    qsec.append(queueList(shownQueue, stationId, { selected: next?.jobId ?? null, onPick: (e) => { if (!busy && !st?.currentJobId && !aligning) { picked = e.jobId ?? null; confirmed = false; notice = ""; void refresh(); } }, canPick: takeable }, data.queue.length));
     const panel = h("section", { class: "st-card st-job" });
     if (data.failed) panel.append(h("p", { class: "st-error", role: "alert" }, "Lost contact with the server. Trying again…"));
     if (st?.currentJobId) panel.append(...cuttingPanel(st, running));
@@ -144,6 +151,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     if (notice) panel.append(h("p", { class: noticeKind === "error" ? "st-error" : "st-note", role: "alert" }, notice));
     main.append(panel);
     root.replaceChildren(head, main);
+    qbar.attach(qsec, qsec.children[1] ?? null, was); // the filter sits under the heading and keeps its focus across refreshes
   }
 
   /** Calibrating changes what every pupil sees, so only a technician, teacher or admin (signed in with DINO) may do it. */
@@ -304,15 +312,15 @@ export function closeStation(): void {
   root.replaceChildren();
 }
 
-function queueList(queue: QueueEntry[], stationId: string, pick?: { selected: string | null; onPick: (e: QueueEntry) => void; canPick: (e: QueueEntry) => boolean }): Node {
-  if (!queue.length) return h("p", { class: "hint" }, "The queue is empty.");
+function queueList(queue: QueueEntry[], stationId: string, pick?: { selected: string | null; onPick: (e: QueueEntry) => void; canPick: (e: QueueEntry) => boolean }, total = queue.length): Node {
+  if (!queue.length) return h("p", { class: "hint" }, total ? "No files match the filter." : "The queue is empty.");
   const ul = h("ul", { class: "st-qlist" });
   for (const e of queue) {
     const label = e.status === "approved" ? (e.position === 1 ? "Next" : `${e.position}`) : e.status === "running" ? "Cutting" : "Starting";
     const where = e.station && e.station !== stationId ? ` (for ${e.station})` : e.framedOn && e.framedOn !== stationId ? ` (being set up on ${e.framedOn})` : "";
     const clickable = !!pick && pick.canPick(e);
     const li = h("li", { class: [e.next ? "next" : e.status !== "approved" ? "active" : "", clickable ? "pickable" : "", pick && e.jobId && e.jobId === pick.selected ? "picked" : ""].filter(Boolean).join(" ") },
-      h("b", {}, `#${e.ticket}`), ` ${pupilLabel(e.pupilId, e.pupilName)} `, h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : "");
+      h("b", {}, `#${e.ticket}`), ` ${pupilLabel(e.pupilId, e.pupilName)} `, ...(e.pupilGroups?.length ? [h("span", { class: "hint" }, `${e.pupilGroups.map((g) => g.code).join(", ")} `)] : []), h("span", { class: "tag" }, label), where, e.extentMm ? ` · ${sizeText(e.extentMm)}` : "", e.estimatedS ? ` · ${describeDuration(e.estimatedS)}` : "");
     if (clickable) {
       li.tabIndex = 0; li.setAttribute("role", "button"); li.title = "Show this file";
       li.addEventListener("click", () => pick!.onPick(e));
@@ -338,6 +346,9 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
   let queue: QueueEntry[] = [];
   let stations: StationInfo[] = [];
   let materials: Preset[] = [];
+  const bar = filterBar(() => draw(), "kerf.admin.queueFilter");
+  const body = h("div");
+  container.replaceChildren(bar.el, body); // the bar stays put (and keeps its focus) while the lists refresh
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
   let busy = false;
 
@@ -358,13 +369,20 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     if (v && v.preset !== current) await act(() => changeJobPreset(session, id, String(v.preset)));
   })();
 
+  const groupsText = (g?: { code: string }[]) => (g?.length ? ` · ${g.map((x) => x.code).join(", ")}` : "");
+
   function draw(): void {
-    const approvals = h("div", {}, h("h3", {}, `Waiting for approval (${waiting.length})`));
+    const f = bar.get();
+    const showWaiting = applyFilter(waiting, f);
+    const showQueue = applyFilter(queue, f);
+    bar.update([...waiting, ...queue], showWaiting.length + showQueue.length, waiting.length + queue.length);
+    const approvals = h("div", {}, h("h3", {}, `Waiting for approval (${showWaiting.length === waiting.length ? waiting.length : `${showWaiting.length} of ${waiting.length}`})`));
     if (!waiting.length) approvals.append(h("p", { class: "hint" }, "Nothing to approve. (Classes set to skip approval send files straight to the queue.)"));
-    for (const j of waiting) {
+    else if (!showWaiting.length) approvals.append(h("p", { class: "hint" }, "No waiting files match the filter."));
+    for (const j of showWaiting) {
       const sel = h("select", { title: "Pupils do not choose a laser: pick the one that should cut this file, or leave it on Any laser for the next free one" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
       approvals.append(h("div", { class: "filerow" },
-        h("span", {}, `${j.id} · ${pupilLabel(j.pupilId, j.pupilName)} · ${matName(j.preset.id)}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
+        h("span", {}, `${j.id} · ${pupilLabel(j.pupilId, j.pupilName)}${groupsText(j.pupilGroups)} · ${matName(j.preset.id)}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
         button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
         button("Material…", () => changeMaterial(j.id, j.preset.id)),
         button("Reject…", () => void (async () => {
@@ -372,10 +390,11 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
           if (v && String(v.reason).trim()) await act(() => rejectJob(session, j.id, String(v.reason).trim()));
         })())));
     }
-    const q = h("div", {}, h("h3", {}, `Queue (${queue.length})`));
+    const q = h("div", {}, h("h3", {}, `Queue (${showQueue.length === queue.length ? queue.length : `${showQueue.length} of ${queue.length}`})`));
     if (!queue.length) q.append(h("p", { class: "hint" }, "The queue is empty."));
-    for (const e of queue) {
-      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${pupilLabel(e.pupilId, e.pupilName)} · ${matName(e.presetId)}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
+    else if (!showQueue.length) q.append(h("p", { class: "hint" }, "No queued files match the filter."));
+    for (const e of showQueue) {
+      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${pupilLabel(e.pupilId, e.pupilName)}${groupsText(e.pupilGroups)}${e.name ? ` · ${e.name}` : ""} · ${matName(e.presetId)}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
       if (e.status === "approved" && e.jobId) {
         const id = e.jobId;
         row.append(
@@ -386,7 +405,7 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
       }
       q.append(row);
     }
-    container.replaceChildren(approvals, q);
+    body.replaceChildren(approvals, q);
   }
 
   return poller(load, 3000);

@@ -4,7 +4,7 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.36); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.37); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
   /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
   name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
@@ -14,13 +14,14 @@ export interface QueueEntry {
   extentMm?: Extent | null;
   ticket: number; jobId: string | null; status: string; position: number | null; own: boolean; pupilId?: string | null; /** Staff only: the name DINO gave at sign-in. */ pupilName?: string | null; presetId?: string;
   station?: string | null; framedOn?: string | null; next?: boolean; estimatedS?: number | null; aheadS?: number | null; approvedAt?: string | null;
+  /** Staff only: the pupil's groups in the school, and the file's name (shared 0.2.37). */ pupilGroups?: { code: string; label?: string | null }[]; name?: string | null;
 }
 export interface StationInfo {
   id: string; online: boolean; state?: string | null; mpos?: number[] | null; currentJobId?: string | null; cutterVersion?: string | null;
   s30?: number | null; laserMode?: boolean | null; cameraAvailable?: boolean; calibrated?: boolean; lastSeen?: string | null;
   progress?: { jobId: string; line: number; totalLines: number; estimatedS?: number; actualS?: number } | null;
 }
-export interface JobSummary { name?: string | null; activityId?: string | null; pupilId?: string; pupilName?: string; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
+export interface JobSummary { name?: string | null; activityId?: string | null; pupilId?: string; pupilName?: string; /** Staff only (shared 0.2.37). */ pupilGroups?: { code: string; label?: string | null }[]; ticket?: number | null; objects: JobObject[]; dimensions?: JobDimension[]; origin: Origin; id: string; status: string; statusReason?: string; createdAt: string; preset: { id: string; version: number }; estimate?: Receipt["estimate"]; warnings?: string[]; source?: string }
 
 export class ServerError extends Error {
   constructor(message: string, public status: number, public code: string, public details?: { path: string; message: string }[]) {

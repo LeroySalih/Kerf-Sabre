@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.43
+  version: 0.2.44
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -353,7 +353,7 @@ paths:
         "401": {description: "`bad_login`"}
   /groups/join:
     post:
-      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.43). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
+      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.44). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
       requestBody:
         required: true
         content:
@@ -367,12 +367,12 @@ paths:
         "409": {description: "`already_member`: I am in that group already; `too_many_requests`: 10 requests already waiting"}
   /me/join-requests:
     get:
-      summary: "Pupil. My requests to join groups, newest first (shared 0.2.43)"
+      summary: "Pupil. My requests to join groups, newest first (shared 0.2.44)"
       responses:
         "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MyJoinRequest"}}}}}
   /classes/{code}/join-requests:
     get:
-      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.43). Other teachers and other schools: 404"
+      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.44). Other teachers and other schools: 404"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
       responses:
@@ -394,7 +394,7 @@ paths:
                     createdAt: {type: string, format: date-time}
   /classes/{code}/join-requests/{requestId}/approve:
     post:
-      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.43)"
+      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.44)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -404,7 +404,7 @@ paths:
         "409": {description: "`limit_reached` (the group is full on the school's plan), `already_decided`, or `conflict` (the pupil ID is used in another school)"}
   /classes/{code}/join-requests/{requestId}/decline:
     post:
-      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.43)"
+      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.44)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -1619,7 +1619,7 @@ components:
         archived: {type: boolean}
         source: {enum: [manual, csv, dino, google, microsoft], description: "Where the group came from"}
         laser: {type: boolean, description: "A laser group: may send files to the laser while the school's terms limit laser groups. Set by a school admin with PUT /classes/{code} {laser}"}
-        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.43)"}
+        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.44)"}
     CameraCalibration:
       type: object
       required: [imageWidth, imageHeight, points, homography]

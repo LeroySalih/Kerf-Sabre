@@ -1,4 +1,4 @@
-"""Pupil Card sign-in (shared 0.2.43): school code + group code + pupil ID + two-word password, generated pupil IDs and
+"""Pupil Card sign-in (shared 0.2.44): school code + group code + pupil ID + two-word password, generated pupil IDs and
 display names, new passwords for a group, and the walls between schools."""
 from __future__ import annotations
 

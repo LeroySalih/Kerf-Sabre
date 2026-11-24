@@ -304,3 +304,12 @@ Cutter and station PCs (they keep station tokens; outbound only). Mapping planne
 3. **Roles.** DINO has `technician` as well as `teacher` and `admin`. Treat technician as Kerf `teacher`? Is every DINO `admin` also a Kerf school admin, or should Kerf admin be a separate flag?
 4. **Network.** The Kerf Server needs to reach `dino.mr-salih.org` to fetch the JWKS (only the first time and on rotation), and pupils' browsers need to reach it to sign in. Is that allowed from the school network and from the VPS?
 5. **Lifetimes.** 15-minute access and 7-day refresh are the defaults here. Is a pupil staying signed in for a week on a shared lab PC acceptable, or should the refresh token be much shorter (for example 10 hours, matching today's PIN session)?
+
+## A9. Pupils' names in `/oauth/groups` (for Kerf 0.2.44; a change in planner-004)
+
+Kerf shows staff their pupils by name on the Admin site (Classes, Pupils, the queue). Today `/oauth/groups` lists each class's pupils as plain IDs, so Kerf only learns a pupil's name when that pupil signs in to Kerf. To show every name as soon as a teacher imports or syncs a class:
+
+- In `GET /oauth/groups` (scope `groups`, teacher or admin callers only), give each pupil as an object: `"pupils": [{"id": "<user id>", "name": "<first_name last_name>"}, ...]`. Plain ID strings stay valid, so Kerf works with old and new answers alike.
+- Names only, never email addresses. Only classes the caller teaches (as today).
+- Kerf keeps the name as a staff-only display name (the school's decision, Kerf shared 0.2.22): never logged, never shown to other pupils, deleted when the pupil is removed for good. This replaces "Kerf must not store them" for names in the class list.
+- Kerf stores the names on **Import from DINO** and on every **Sync with DINO** (Kerf `services_dinoimport.remember_names`, `Verifier.groups`).

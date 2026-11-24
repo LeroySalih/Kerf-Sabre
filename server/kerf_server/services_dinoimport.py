@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import services_classes as sc
+from . import services_people as people
 from .errors import ApiError
 from .models import Activity, GroupMember, JoinRequest, Pupil, SchoolClass
 from .security import Principal, bearer
@@ -79,6 +80,15 @@ def ensure_dino_codes(s: Session) -> None:
             rename_code(s, c, want)
 
 
+def remember_names(s: Session, school: str | None, g: dict[str, Any]) -> int:
+    """Keep the pupils' names DINO sent with the class (staff-only display names; never logged). Returns how many."""
+    n = 0
+    for pid, name in (g.get("names") or {}).items():
+        if people.remember(s, pid, school, name):
+            n += 1
+    return n
+
+
 def listing(s: Session, who: Principal, groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """For the import dialog: each DINO class, how many pupils, and the Kerf group it is already imported as (if any)."""
     out = []
@@ -106,6 +116,7 @@ def import_classes(s: Session, who: Principal, groups: list[dict[str, Any]], ids
         label = label[:128]
         c = sc.create_class(s, dino_code(s, who.school, gid), label, teacher_id=who.id, school=who.school, source="dino", source_id=gid)
         r = sc.add_pupils(s, c.code, g["pupils"], school=who.school, from_dino=True) if g["pupils"] else {"created": [], "added": [], "restored": [], "existing": [], "conflicts": []}
+        remember_names(s, who.school, g)
         out.append({"dinoId": gid, "code": c.code, "name": g["name"], "already": False,
                     "pupils": len(r["created"]) + len(r["added"]) + len(r["restored"]), "conflicts": r["conflicts"]})
     return out
@@ -124,6 +135,7 @@ def sync(s: Session, who: Principal, groups: list[dict[str, Any]], code: str, ap
     want = set(g["pupils"])
     add, remove = sorted(want - now), sorted(now - want)
     out: dict[str, Any] = {"code": c.code, "name": g["name"], "add": add, "remove": remove, "applied": False}
+    remember_names(s, who.school, g)  # names are display only: kept even when the teacher only looks at the changes
     if apply:
         if add:
             r = sc.add_pupils(s, c.code, add, school=who.school, from_dino=True)

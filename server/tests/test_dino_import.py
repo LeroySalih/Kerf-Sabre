@@ -1,4 +1,4 @@
-"""Import DINO classes as Kerf groups and re-sync them (shared 0.2.43)."""
+"""Import DINO classes as Kerf groups and re-sync them (shared 0.2.44)."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -146,3 +146,18 @@ def test_auth_me_carries_a_staff_members_own_name(sso_app):  # noqa: F811
             people.remember(s, "P1", "main", "Zoe Adams")
         assert c.get(f"{API}/auth/me", headers=auth(mint(sub="T1", roles=["admin"]))).json()["name"] == "Leroy Salih"
         assert c.get(f"{API}/auth/me", headers=auth(mint(sub="P1", roles=["pupil"]))).json()["name"] is None  # never for pupils
+
+
+def test_pupil_names_from_dino_are_kept_for_staff(sso_app):  # noqa: F811
+    with_names = [{"id": "26-11-DT", "name": "26-11-DT", "pupils": [{"id": "P1", "name": "Zoë Adams"}, "P2", {"id": "bad id", "name": "x"}]}]
+    dino(sso_app, with_names)
+    with TestClient(sso_app) as c:
+        t = auth(mint(sub="T1", roles=["teacher"]))
+        assert c.get(f"{API}/groups", headers=t).json()[0] == {"id": "26-11-DT", "name": "26-11-DT", "subject": None, "yearGroup": None, "pupils": ["P1", "P2"]}  # IDs only there
+        code = c.post(f"{API}/dino/classes/import", json={"ids": ["26-11-DT"]}, headers=t).json()[0]["code"]
+        names = {p["pupilId"]: p.get("displayName") for p in c.get(f"{API}/classes/{code}/pupils", headers=t).json()}
+        assert names == {"P1": "Zoë Adams", "P2": None}
+        dino(sso_app, [{**with_names[0], "pupils": [{"id": "P1", "name": "Zoë Adams"}, {"id": "P2", "name": "Ben Cole"}]}])
+        c.post(f"{API}/classes/{code}/dino-sync", json={"apply": True}, headers=t)  # sync picks up names too
+        names = {p["pupilId"]: p.get("displayName") for p in c.get(f"{API}/classes/{code}/pupils", headers=t).json()}
+        assert names == {"P1": "Zoë Adams", "P2": "Ben Cole"}

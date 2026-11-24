@@ -21,7 +21,7 @@ def groups(request: Request, who: Principal = Depends(require("teacher")), s: Se
     sso = getattr(request.app.state, "sso", None)
     if sso is not None and who.role in SSO_ROLES:
         try:
-            return sso.groups(bearer(request) or "")
+            return [{k: v for k, v in g.items() if k != "names"} for g in sso.groups(bearer(request) or "")]  # IDs only here
         except Exception as e:  # DINO down, `groups` scope missing (the token pre-dates it: sign in again), bad answer
             raise ApiError(502, "groups_unavailable", "Could not get your classes from DINO. Sign out and in again, then retry.") from e
     from ..services_classes import member_ids

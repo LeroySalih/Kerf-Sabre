@@ -166,11 +166,24 @@ class Verifier:
             gid = g.get("id")
             if not isinstance(gid, str) or not 0 < len(gid) <= 64 or not set(gid) <= ID_OK:
                 continue
-            pupils = sorted({p for p in g.get("pupils") or [] if isinstance(p, str) and 0 < len(p) <= 64 and set(p) <= ID_OK})
+            # a pupil is an ID, or {id, name} when DINO sends names (staff-only display names, shared 0.2.44)
+            from .services_people import clean_name
+
+            names: dict[str, str] = {}
+            ids: set[str] = set()
+            for p in g.get("pupils") or []:
+                pid = p if isinstance(p, str) else p.get("id") if isinstance(p, dict) else None
+                if not isinstance(pid, str) or not 0 < len(pid) <= 64 or not set(pid) <= ID_OK:
+                    continue
+                ids.add(pid)
+                name = clean_name(p.get("name")) if isinstance(p, dict) else None
+                if name:
+                    names[pid] = name
+            pupils = sorted(ids)
             def text(k: str) -> str | None:
                 v = g.get(k)
                 return v.strip()[:64] if isinstance(v, str) and v.strip() else None
-            out.append({"id": gid, "name": text("name") or gid, "subject": text("subject"), "yearGroup": text("yearGroup"), "pupils": pupils})
+            out.append({"id": gid, "name": text("name") or gid, "subject": text("subject"), "yearGroup": text("yearGroup"), "pupils": pupils, "names": names})
         return sorted(out, key=lambda g: g["id"])
 
     def principal(self, token: str):

@@ -2,6 +2,10 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.44 - pupils' names from DINO classes (additive)
+- When DINO's class list gives a pupil as `{id, name}` (it gives plain IDs today), Kerf keeps the name as the pupil's staff-only display name on Import from DINO and on every Sync with DINO (even one that only shows the changes). `GET /groups` still returns IDs only. Names are never logged and never shown to pupils.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.44`.
+
 ## 0.2.43 - DINO groups use the DINO class id, have no join code; teachers by name (additive)
 - A group imported from DINO gets the DINO class id as its code (e.g. `26-8D-DT`) when no other group on Kerf uses it; groups imported before get it at server start-up (members, activities and join requests move with it). It has **no join code** (`ClassInfo.joinCode: null`): Pupil Card sign-in and join requests do not find it, and `PUT /classes/{code} {joinCode}` answers `409 dino_group`. Keep it up to date with `POST /classes/{code}/dino-sync`.
 - Only Sync with DINO changes a DINO group's pupils: adding or removing pupils, their names, new passwords and editing the group's note or join code answer `409 dino_group`. Archiving it, and Kerf's own settings (approval, laser group), still work.

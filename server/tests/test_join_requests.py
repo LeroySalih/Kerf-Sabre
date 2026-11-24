@@ -1,4 +1,4 @@
-"""Pupils ask to join a group; a teacher approves (shared 0.2.43). The walls: a pupil only finds groups of their own school, and only
+"""Pupils ask to join a group; a teacher approves (shared 0.2.44). The walls: a pupil only finds groups of their own school, and only
 a teacher who may manage the group (admins: every group of the school) sees or decides its requests."""
 from __future__ import annotations
 

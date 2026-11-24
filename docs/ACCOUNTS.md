@@ -1,6 +1,6 @@
 # Kerf accounts, sign-in and the two admin sites (design)
 
-Status: **design agreed with the owner; being built in steps** (built so far: plans and school codes, per-school sign-in methods, groups with several pupils and join codes, the configurable terms). Open questions at the end. One code base (PRODUCT.md decision 4): every school, BISAK included, uses exactly this.
+Status: **design agreed with the owner; being built in steps** (built so far: plans and school codes, per-school sign-in methods, groups with several pupils and join codes, the configurable terms, free schools registering themselves). Open questions at the end. One code base (PRODUCT.md decision 4): every school, BISAK included, uses exactly this.
 
 ## Two admin sites
 
@@ -60,7 +60,7 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 
 ## More answers (owner, 2026-11-23)
 
-- **Roll-out: free tools first.** No paid Server option is offered publicly yet. **Free schools register instantly**; a **paid school is approved by the site admin** (BISAK is the existing paid school).
+- **Roll-out: free tools first.** No paid Server option is offered publicly yet. **Free schools register instantly**; a **paid school is approved by the site admin** (BISAK is the existing paid school). (Built, shared 0.2.40: a teacher registers at `/register` with the school's name, their name and school email; a confirmation link (24 hours, once) makes the free school and signs them in as its admin. Nothing is made before the link is used. `KERF_REGISTRATION=false` closes it; `KERF_ADMIN_EMAIL` is told of each new school.)
 - **Group join codes:** Kerf generates one by default; the teacher may type their own when making the group (by hand or in the CSV), and may edit it later. **Unique within a school.**
 - **Pupil passwords:** Kerf's default is **two words** (e.g. `tiger-river`); the teacher reissues them (new card); pupils do not choose or change them. (Built, shared 0.2.39: Pupil Card sign-in on `/sign-in`, Pupil Cards printed from the class's pupils.)
 - **Pupils can be in several groups**, and a group can be **re-synced from its source** (e.g. DINO).

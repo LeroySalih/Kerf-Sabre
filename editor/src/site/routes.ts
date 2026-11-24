@@ -3,6 +3,7 @@
 //   /            the landing page        (site/index.html)
 //   /pricing     the pricing page        (site/pricing.html)
 //   /sign-in     one sign-in page for everyone (site/sign-in.html)
+//   /register    a free school registers itself (site/register.html)
 //   /editor/     the Kerf Editor         (index.html)
 //   /admin/      the Admin site          (admin/index.html)
 
@@ -18,4 +19,4 @@ export function editorForward(search: string): string | null {
 }
 
 /** The built file for each site address (paths inside editor/dist; the same files are the Vite inputs). */
-export const SITE_FILES: Record<string, string> = { "/": "site/index.html", "/pricing": "site/pricing.html", "/sign-in": "site/sign-in.html", "/editor/": "index.html" };
+export const SITE_FILES: Record<string, string> = { "/": "site/index.html", "/pricing": "site/pricing.html", "/sign-in": "site/sign-in.html", "/register": "site/register.html", "/editor/": "index.html" };

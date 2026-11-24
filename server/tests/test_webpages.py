@@ -22,6 +22,7 @@ def site(tmp_path):
     (dist / "site" / "index.html").write_text("<html><head></head><body>LANDING</body></html>")
     (dist / "site" / "pricing.html").write_text("<html><head></head><body>PRICING</body></html>")
     (dist / "site" / "sign-in.html").write_text("<html><head></head><body>SIGN-IN</body></html>")
+    (dist / "site" / "register.html").write_text("<html><head></head><body>REGISTER</body></html>")
     (dist / "assets" / "app.js").write_text("console.log(1)")
     (dist / "sw.js").write_text("// sw")
     app = create_app(Settings.from_env(data_dir=tmp_path / "d", editor_dist=dist, resend_api_key=""))
@@ -34,6 +35,7 @@ class TestPages:
         assert "LANDING" in site.get("/").text
         assert "PRICING" in site.get("/pricing").text
         assert "SIGN-IN" in site.get("/sign-in").text
+        assert "REGISTER" in site.get("/register").text
         r = site.get("/editor/")
         assert r.status_code == 200 and "EDITOR" in r.text and r.headers["content-type"].startswith("text/html")
         assert "ADMIN" in site.get("/admin/").text

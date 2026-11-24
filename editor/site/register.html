@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Register your school on Kerf</title>
+<meta name="description" content="Register your school on Kerf for free: the laser design Editor, pupil and staff accounts, groups and Pupil Cards.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<!-- Kerf's public website: proprietary to mr-salih.org (see editor/LICENSING.md). The theme is read before the page draws, so it never flashes. -->
+<script>try{if(localStorage.getItem("kerf.site.theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<script type="module" src="/src/site/main.ts"></script>
+</head>
+<body data-page="register">
+<div style="font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif; font-size: 18px; line-height: 1.6; background-color: var(--alt); background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px); background-size: 22px 22px; color: var(--text); min-height: 100vh; display: flex; flex-direction: column">
+
+<header style="border-bottom: 1px solid var(--border); background: var(--bg)">
+<nav aria-label="Main" style="max-width: 1200px; margin: 0 auto; padding: 14px clamp(20px, 5vw, 40px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<a href="/" style="display: flex; align-items: center; gap: 10px; min-height: 44px; text-decoration: none; color: var(--text)">
+<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="8" fill="#f97316"></rect><path d="M11 9v16M11 17l9-8M14.5 14l6.5 11" stroke="#18181b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+<span style="font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.01em">Kerf</span>
+</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px">
+<a href="/pricing" style="color: var(--text); text-decoration: none; padding: 10px 0">Pricing</a>
+<a href="/sign-in" style="color: var(--text); text-decoration: none; padding: 10px 0">Sign in</a>
+<button type="button" data-theme-toggle aria-pressed="false" style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--field); background: transparent; color: var(--text); font: inherit; font-size: 16px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+<span>Dark theme</span>
+</button>
+</div>
+</nav>
+</header>
+
+<main style="flex: 1">
+<div style="max-width: 1100px; margin: 0 auto; padding: clamp(28px, 6vw, 64px) clamp(16px, 5vw, 40px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 40px 64px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 20px">
+<h1 style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: clamp(1.9rem, 4.5vw, 3rem); line-height: 1.12; letter-spacing: -0.02em; text-wrap: balance">Bring your school to the workshop.</h1>
+<p style="margin: 0; color: var(--muted); max-width: 40ch">Register in a minute. Your school starts on the free plan, and you become its Kerf admin.</p>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; max-width: 42ch">
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>The Kerf Editor for every pupil: design, save and export for the laser.</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Accounts for your teachers, groups for your classes and printed Pupil Cards to sign in with.</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>No card details. Sending files straight to the laser is part of the paid plan, which we set up with you later.</span></li>
+</ul>
+</div>
+<div style="display: flex; justify-content: center">
+<!-- The registration panel (sign-in panel style, kp-* classes). src/site/register.ts runs it. -->
+<section class="kp" data-register-panel aria-labelledby="kerf-register-title">
+
+<div class="kp-view" data-view="form">
+<h2 id="kerf-register-title" class="kp-title">Register your school</h2>
+<p class="kp-alert" data-alert role="alert" hidden></p>
+<form class="kp-form" aria-label="Register your school" data-register-form novalidate>
+<div class="kp-field">
+<label for="r-school">School name</label>
+<input id="r-school" name="schoolName" type="text" maxlength="128" autocomplete="organization" placeholder="Westfield High School" class="kp-input kp-email" required>
+</div>
+<div class="kp-field">
+<label for="r-name">Your name</label>
+<input id="r-name" name="name" type="text" maxlength="128" autocomplete="name" placeholder="Sam Taylor" class="kp-input kp-email" required>
+</div>
+<div class="kp-field">
+<label for="r-email">Your school email</label>
+<input id="r-email" name="email" type="email" maxlength="254" autocomplete="email" placeholder="name@westfieldhigh.example" aria-describedby="r-email-help" class="kp-input kp-email" required>
+<span id="r-email-help" class="kp-hint">We email you a link to confirm. It works once, for 24 hours.</span>
+</div>
+<label class="kp-check"><input type="checkbox" name="agreed" required><span>I work at this school and may sign it up.</span></label>
+<button type="submit" class="kp-primary">Register free</button>
+</form>
+</div>
+
+<div class="kp-view kp-gap16" data-view="sent" role="status" hidden>
+<span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M2 7l10 7 10-7"></path></svg></span>
+<h2 class="kp-title">Check your email</h2>
+<p class="kp-p">If that address can receive email, a link to confirm your school is on its way. Check your junk folder.</p>
+<p class="kp-p kp-box">The link works once, for 24 hours. Nothing is set up until you press it.</p>
+<button type="button" class="kp-secondary" data-back>Use a different email address</button>
+</div>
+
+<div class="kp-view kp-gap16" data-view="closed" hidden>
+<span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8"></path></svg></span>
+<h2 class="kp-title">Registration is closed</h2>
+<p class="kp-p" role="alert">Kerf is not taking new schools at the moment. Please try again later.</p>
+<p class="kp-p kp-box">The Editor still works without an account, and your work stays in your browser.</p>
+<a href="/editor/?offline=1" class="kp-foot-link">Work without signing in</a>
+</div>
+
+<div class="kp-foot" data-foot>
+<div class="kp-col">
+<a href="/sign-in?app=admin" class="kp-foot-link">Already registered? Sign in</a>
+<span class="kp-hint">Staff of a school that uses Kerf: sign in or ask your school's Kerf admin to invite you.</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+
+<footer style="border-top: 1px solid var(--border); background: var(--bg)">
+<div style="max-width: 1200px; margin: 0 auto; padding: 16px clamp(20px, 5vw, 40px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; font-size: 15px">
+<span style="color: var(--muted)">Kerf by mr-salih.org</span>
+<nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 0 20px">
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Privacy <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Terms <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Contact <span class="soon">Coming soon</span></span>
+</nav>
+</div>
+</footer>
+</div>
+</body>
+</html>

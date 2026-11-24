@@ -5,7 +5,7 @@
 - ``/``          the landing page (``site/index.html``), or, for the queries that used to open the Editor at ``/``
                  (a Station link, DINO coming back, an emailed link, "work without signing in"), a redirect to ``/editor/`` with the same
                  query. DINO's registered redirect URIs stay ``<origin>/`` and ``<origin>/admin/``.
-- ``/pricing``   the pricing page; ``/sign-in`` the one sign-in page for everyone.
+- ``/pricing``   the pricing page; ``/sign-in`` the one sign-in page for everyone; ``/register`` a free school registers itself.
 - ``/editor/``   the Kerf Editor (``index.html``); ``/admin/`` the Admin site. Both are served with
                  ``<meta name="kerf-sign-in" content="/sign-in">``, which tells them to send a signed-out person to ``/sign-in``.
 
@@ -62,6 +62,10 @@ def add_site_routes(app: FastAPI, dist: Path) -> None:
     @app.api_route("/pricing", methods=["GET", "HEAD"], include_in_schema=False)
     def pricing() -> Response:
         return page("site/pricing.html")
+
+    @app.api_route("/register", methods=["GET", "HEAD"], include_in_schema=False)
+    def register() -> Response:
+        return page("site/register.html")
 
     @app.api_route("/sign-in", methods=["GET", "HEAD"], include_in_schema=False)
     def sign_in() -> Response:

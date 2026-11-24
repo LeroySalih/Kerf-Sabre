@@ -17,7 +17,7 @@ const siteIncludes = (): Plugin => ({
   },
 });
 
-/** `npm run dev` answers the same addresses as the Kerf Server (src/site/routes.ts): / (or the Editor for its old queries), /pricing, /sign-in, /editor/. */
+/** `npm run dev` answers the same addresses as the Kerf Server (src/site/routes.ts): / (or the Editor for its old queries), /pricing, /sign-in, /register, /editor/. */
 const siteRoutes = (): Plugin => ({
   name: "kerf-site-routes",
   configureServer(server) {
@@ -37,10 +37,10 @@ const siteRoutes = (): Plugin => ({
 
 export default defineConfig({
   plugins: [siteIncludes(), siteRoutes()],
-  // The Editor (index.html, served at /editor/), the teacher/admin site (/admin/) and the public website (site/: /, /pricing, /sign-in).
+  // The Editor (index.html, served at /editor/), the teacher/admin site (/admin/) and the public website (site/: /, /pricing, /sign-in, /register).
   build: { rollupOptions: { input: {
     main: page("./index.html"), admin: page("./admin/index.html"),
-    site: page("./site/index.html"), pricing: page("./site/pricing.html"), signin: page("./site/sign-in.html"),
+    site: page("./site/index.html"), pricing: page("./site/pricing.html"), signin: page("./site/sign-in.html"), register: page("./site/register.html"),
   } } },
   // Machine profiles live in ../shared and are imported at build time.
   server: { fs: { allow: [".."] }, ...(serverUrl ? { proxy: { "/api": { target: serverUrl, changeOrigin: true } } } : {}) },

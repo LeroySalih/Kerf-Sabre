@@ -1,7 +1,7 @@
 // The sign-in panel on the landing page and on /sign-in (proprietary site code). It starts the Editor's or the Admin site's own
 // sign-in (DINO, or a link by email) and, for an emailed link, trades the link for a session before going on to /editor/ or /admin/,
 // where the session is picked up again from this tab's sessionStorage. The decisions are in signinlogic.ts (tested).
-import { askForLink, cardSignIn, cleanLinkFromAddress, finishEmailSignIn } from "../emailsignin";
+import { askForLink, cardSignIn, cleanLinkFromAddress, finishEmailSignIn, finishRegistration } from "../emailsignin";
 import { ServerError } from "../server";
 import { takeProblem } from "../signinpage";
 import { beginSignIn, fetchAuthConfig } from "../sso";
@@ -98,7 +98,22 @@ export function mountPanel(root: HTMLElement): void {
   const problem = takeProblem();
   if (problem && view === "form") alert(problem);
 
-  if (plan.token) {
+  if (plan.register) {
+    // a new school's confirmation link: the busy view says what is happening; a spent link gets the expired view, worded for registering
+    one<HTMLElement>('[data-view="busy"] .kp-title').textContent = "Setting up your school";
+    one<HTMLElement>("[data-expired-text]").textContent = "That link has expired or has already been used. If you have already confirmed your school, ask for a sign-in link below. Otherwise, register again.";
+    one<HTMLElement>("[data-register-again]").hidden = false;
+  }
+  if (plan.token && plan.register) {
+    const token = plan.token;
+    cleanLinkFromAddress(); // a reload or a bookmark never reuses the (now used) link
+    void finishRegistration(base(), token)
+      .then(() => location.replace(destinationFor("admin")))
+      .catch((e) => {
+        if (e instanceof ServerError && linkIsSpent(e.status) && e.code !== "registration_closed") { show("expired"); return; }
+        choose("staff"); show("form"); alert(text(e));
+      });
+  } else if (plan.token) {
     const app = plan.app ?? "admin";
     const token = plan.token;
     cleanLinkFromAddress(); // a reload or a bookmark never reuses the (now used) link

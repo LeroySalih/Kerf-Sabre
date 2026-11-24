@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.39
+  version: 0.2.40
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -287,6 +287,34 @@ paths:
       responses:
         "200": {description: Signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {enum: [admin, teacher, technician]}, id: {type: string}, name: {type: [string, "null"]}, expiresAt: {type: string, format: date-time}}}}}}
         "401": {description: "`link_invalid`: expired, used or unknown"}
+  /auth/register:
+    post:
+      summary: "Anyone. Register a free school (shared 0.2.40). Stores a pending registration and emails a confirmation link (`/sign-in?register=<token>`, works once, for 24 hours); nothing is made until it is used. The answer is the same whatever happens (it never says whether the address already has accounts). Limited per address (quietly) and per computer (429)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [schoolName, name, email], properties: {schoolName: {type: string, maxLength: 128}, name: {type: string, maxLength: 128, description: "The person registering: stored as the first admin's name, never logged"}, email: {type: string, description: "Their school email: the link goes here and it becomes the admin's sign-in address. Never logged"}}}
+      responses:
+        "200": {description: "Always the same message", content: {application/json: {schema: {type: object, properties: {message: {type: string}}}}}}
+        "403": {description: "`registration_closed`: the server has self-registration off (KERF_REGISTRATION)"}
+        "422": {description: A box is empty, too long, or not an email address}
+        "429": {description: "`too_many_attempts`: too many registrations from this computer today"}
+        "503": {description: "`email_not_set_up`: the server has no public address for links"}
+  /auth/register/finish:
+    post:
+      summary: "Anyone. Use a registration link's token (the `register` query parameter). Makes the school on the free plan (an ID made from its name, unique with -2, -3...; a school code; a copy of Kerf's default terms; group code and email sign-in on) and the person its first admin (an email account), and signs them in. A link works once (shared 0.2.40)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [token], properties: {token: {type: string}}}
+      responses:
+        "200": {description: Registered and signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {const: admin}, id: {type: string}, name: {type: [string, "null"]}, expiresAt: {type: string, format: date-time}, school: {type: string}, schoolName: {type: string}, schoolCode: {type: string}}}}}}
+        "401": {description: "`link_invalid`: expired, used or unknown"}
+        "403": {description: "`registration_closed`"}
   /staff/people:
     get:
       summary: School admin. Staff who sign in with an emailed link (invited or active)
@@ -1535,6 +1563,8 @@ components:
       required: [mode]
       properties:
         mode: {enum: [pins, planner, both], description: "pins = class login only; planner = planner-004 sign-in only; both = either"}
+        email: {type: boolean, description: "Staff may ask for an emailed sign-in link"}
+        registration: {type: boolean, description: "Free schools may register themselves at /register (POST /auth/register). False: the page says registration is closed (shared 0.2.40)"}
         sso:
           type: [object, "null"]
           description: "Present unless mode is pins. The Editor and Admin start an Authorization Code + PKCE (S256) sign-in against `authorizeUrl`; no client secret."

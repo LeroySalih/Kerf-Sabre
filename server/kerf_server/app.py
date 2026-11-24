@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,10 +21,30 @@ from .sso import Verifier
 from .stations import Hub
 
 API = "/api/v1"
+_LINK_IN_QUERY = re.compile(r"((?:signin|register)=)[^&\s]+")
+
+
+class HideLinks(logging.Filter):
+    """The web server's access log would print an emailed sign-in or registration link's token (`/sign-in?signin=…`,
+    `?register=…`). Links are never logged, so the token is replaced with `…`."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(_LINK_IN_QUERY.sub(r"\1…", a) if isinstance(a, str) else a for a in record.args)
+        elif isinstance(record.msg, str):
+            record.msg = _LINK_IN_QUERY.sub(r"\1…", record.msg)
+        return True
+
+
+def _hide_links_in_access_log() -> None:
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, HideLinks) for f in access.filters):
+        access.addFilter(HideLinks())
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    _hide_links_in_access_log()
     if settings.auth_mode not in ("pins", "planner", "both"):
         raise ValueError(f"KERF_AUTH_MODE must be pins, planner or both, not {settings.auth_mode!r}")
     if settings.sso_enabled and not settings.sso_issuer.startswith(("https://", "http://")):

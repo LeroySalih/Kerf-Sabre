@@ -86,7 +86,7 @@
 <div class="kp-view kp-gap16" data-view="expired" hidden>
 <span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
 <h2 class="kp-title" data-title>Link expired</h2>
-<p class="kp-p" role="alert">That sign-in link has expired or has already been used. Ask for a new one.</p>
+<p class="kp-p" role="alert" data-expired-text>That sign-in link has expired or has already been used. Ask for a new one.</p>
 <form class="kp-form kp-form-tight" aria-label="Ask for a new sign-in link" data-email-form novalidate>
 <div class="kp-field">
 <label for="k-email-exp">School email address</label>
@@ -96,6 +96,7 @@
 <button type="submit" class="kp-primary">Send me a new link</button>
 <p class="kp-hint">The new link works once, for 15 minutes.</p>
 </form>
+<a href="/register" class="kp-foot-link" data-register-again hidden>Register your school again</a>
 <button type="button" class="kp-textbtn" data-back-pupil>Back to all sign-in options</button>
 </div>
 
@@ -105,6 +106,6 @@
 <a href="/editor/?offline=1" class="kp-foot-link">Work without signing in</a>
 <span class="kp-hint">Opens the Editor. Your work stays in this browser.</span>
 </div>
-<span class="kp-foot-link is-soon" aria-disabled="true">New school? Register free <span class="soon">Coming soon</span></span>
+<a href="/register" class="kp-foot-link">New school? Register free</a>
 </div>
 </section>

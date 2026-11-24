@@ -1,6 +1,6 @@
 # Walkthrough: a new school joins Kerf
 
-This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.39 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
+This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.40 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, registration at `/register`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
 
 The example school is **Westfield High** (school ID `westfield-high`). The teacher is `you@westfield-high.example` and the colleague is `colleague@westfield-high.example`.
 
@@ -8,37 +8,41 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
 
 - The production `.env` (`server/deploy/.env`) needs:
   - `RESEND_API`: the Resend key. Without it, emails are not sent. The server keeps them in memory instead, which is for development only.
-  - `KERF_PUBLIC_URL=https://kerf.mr-salih.org`. Every link in an email is built from this address. Without it, inviting someone or asking for a sign-in link fails with `503 email_not_set_up` ("Email sign-in is not set up on this server yet (KERF_PUBLIC_URL is missing).").
+  - `KERF_PUBLIC_URL=https://kerf.mr-salih.org`. Every link in an email is built from this address. Without it, registering, inviting someone or asking for a sign-in link fails with `503 email_not_set_up` ("Email sign-in is not set up on this server yet (KERF_PUBLIC_URL is missing).").
+  - Optional: `KERF_ADMIN_EMAIL=<your address>` to get one line ("A new free school registered on Kerf: Westfield High (westfield-high).") whenever a school registers. `KERF_REGISTRATION=false` closes registration (the page then says "Registration is closed").
 - Run `./deploy.sh` on the server to put the latest `main` live. It backs up first, then pulls and rebuilds.
 - To use the Platform pages in a browser, go to `https://kerf.mr-salih.org/sign-in`, choose **I'm staff** and press **Sign in with DINO**, using a DINO account whose ID is listed in `KERF_SITE_ADMINS`. A stored platform token also counts as a site admin, but only through the API (for example with `curl`). The Admin site no longer has a box to paste a token into.
 
 ## The steps
 
-1. **The school asks to join.** Schools cannot sign themselves up yet (see "Not built yet"). The teacher contacts Kerf (mr-salih.org) and gives the school's name and their school email address.
+1. **The teacher registers the school.** On the landing page, the pricing page or the sign-in page, press **Register your school (free)** (or **Register free**, or **New school? Register free**). This opens `https://kerf.mr-salih.org/register`. Fill in:
+   - **School name**: `Westfield High`.
+   - **Your name**: for example `Sam Taylor` (shown to your school's staff; never logged).
+   - **Your school email**: `you@westfield-high.example`.
+   - Tick **I work at this school and may sign it up**.
 
-2. **The site admin creates the school.** In the Admin site (`https://kerf.mr-salih.org/admin/`), signed in with DINO, press **Kerf Platform** in the header. Then go to **Schools** and press **New school…**. Fill in:
-   - **School ID**: `westfield-high` (lower-case letters, digits and `-`, up to 32 characters).
-   - **Name**: `Westfield High`.
-   - **First admin's email (optional)**: `you@westfield-high.example`.
+   Press **Register free**. The panel then says **Check your email**: "If that address can receive email, a link to confirm your school is on its way. Check your junk folder." and "The link works once, for 24 hours. Nothing is set up until you press it." The answer is the same whatever happens, so the page never says whether the address already has an account. Each address can register 3 times per 15 minutes, and each computer 10 times a day ("Too many schools registered from this computer today. Try again tomorrow."). Behind the scenes this is `POST /auth/register {schoolName, name, email}`.
 
-   Press **Create**. You then see "An invite is on its way to you@westfield-high.example." The new school:
+   *Alternative:* the site admin can still create a school by hand, for example a paid school. In the Admin site, signed in with DINO, press **Kerf Platform**, then **Schools** → **New school…** and fill in **School ID**, **Name** and **First admin's email (optional)**. The first admin then gets an invite email ("You are invited to Kerf (Westfield High)", a 7-day link to `/sign-in?signin=…&app=admin`) instead of the confirmation email below, and goes on from step 4. This is `POST /schools {id, name, adminEmail, adminName}`.
+
+2. **The teacher gets a confirmation email.**
+   - From: `Kerf <kerf-no-reply@mr-salih.org>`.
+   - Subject: **Confirm your school on Kerf (Westfield High)**.
+   - Body: "Thank you for registering Westfield High on Kerf, the free laser design tools for schools. Press the button to confirm. Kerf then sets up Westfield High on the free plan, makes you its admin and signs you in. Next you add your teachers, make groups and print Pupil Cards for your pupils. The link works once, for 24 hours. Nothing is set up until you press it."
+   - An orange **Confirm my school** button, with the address written out below it.
+   - Footer: "If you did not register a school on Kerf, you can ignore this email: nothing will be set up."
+
+   The link goes to `https://kerf.mr-salih.org/sign-in?register=…`.
+
+3. **The teacher clicks the link, and the school is made.** The sign-in page says **Setting up your school**, then opens the Admin site, signed in as **School admin**. The new school:
+   - has the school ID made from its name: `westfield-high` (lower case, dashes, up to 32 characters; if that ID is taken, `westfield-high-2`, `-3` and so on);
    - is on the **Free** plan, with its own copy of Kerf's default terms (see step 9);
    - gets a 5-character school code, for example `K7RPX` (the letters and digits are chosen so none look alike);
    - has two sign-in methods switched on: **Group code** and **Email link**. **DINO**, **Google** and **Microsoft** are off.
 
-   Behind the scenes this is `POST /schools {id, name, adminEmail, adminName}`. If the invite email cannot be sent, nothing is created, so you can fix the problem and press **Create** again.
+   A link that was used already, or is more than 24 hours old, shows "That link has expired or has already been used. If you have already confirmed your school, ask for a sign-in link below. Otherwise, register again." with a box to ask for a sign-in link and **Register your school again**.
 
-3. **The teacher gets an invite email.**
-   - From: `Kerf <kerf-no-reply@mr-salih.org>`.
-   - Subject: **You are invited to Kerf (Westfield High)**.
-   - Heading: "You are invited to Kerf".
-   - Body: "You have been invited to Kerf, the laser design and cutting service used by Westfield High, as a school admin. Press the button to sign in for the first time. The link works once, for 7 days. Later, ask for a new sign-in link on the sign-in page."
-   - An orange **Sign in to Kerf** button, with the address written out below it.
-   - Footer: "If you were not expecting this, you can ignore it."
-
-   The link goes to `https://kerf.mr-salih.org/sign-in?signin=…&app=admin`.
-
-4. **The teacher clicks the link.** The sign-in page opens, says it is signing them in, then opens the Admin site, signed in as **School admin**. The link is removed from the address bar, so it cannot be bookmarked or used again. The sign-in lasts about 10 hours, and only in that browser tab: closing the tab signs them out.
+4. **Signed in.** The link is removed from the address bar, so it cannot be bookmarked or used again. The sign-in lasts about 10 hours, and only in that browser tab: closing the tab signs them out. Later they sign in as in step 7.
 
 5. **What the teacher sees.**
    - The header shows **Kerf Admin**, then "Westfield High · school code K7RPX · Free plan · School admin: st-…". The last part is their Kerf person ID, not their name. On the right are **Editor** and **Sign out**.
@@ -50,7 +54,7 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
    - **Staff**: **Invite staff…** and a list of people invited by email, showing Name, Email, Role and Status (**Invited**, or "Signed in" with a date). People still marked Invited have **Send again**. Everyone except you has **Remove**. Staff who sign in with DINO are not listed here.
 
 6. **Invite a colleague.** On **Staff**, press **Invite staff…**. Fill in **School email address**, **Name (optional)** (shown to your school's staff only) and **Role**: **Teacher**, **School admin** or **Technician (laser stations only)**. Press **Send invite**, and you see "An invite is on its way to colleague@westfield-high.example."
-   - The colleague gets the same email as in step 3, but with "as a teacher" (or "as a technician (laser stations)").
+   - The colleague gets an invite email: subject **You are invited to Kerf (Westfield High)**, "You have been invited to Kerf, the laser design and cutting service used by Westfield High, as a teacher" (or "as a technician (laser stations)"), and an orange **Sign in to Kerf** button. The link works once, for 7 days, and opens the Admin site.
    - Until they use the link, they show as **Invited**. **Send again** sends a fresh 7-day link.
    - A colleague who has already signed in cannot be invited again. They should ask for a sign-in link instead (step 7).
    - A free school's technician sees nothing in the Admin site ("Your school is on Kerf's free plan, which has no Station pages."). Technicians are only useful on the paid plan.
@@ -83,9 +87,8 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
 
 ## Not built yet
 
-- **Self-registration**: a teacher cannot sign their school up. The site admin creates every school (step 2).
 - **Google and Microsoft sign-in**: the tick boxes exist but say "Coming soon". They also stay greyed out until Kerf is registered with Google and Microsoft.
-- **Public pages**: the landing, pricing and sign-in pages are built. Things on them that do not work yet are greyed out and marked **Coming soon**: Google and Microsoft, **Register your school (free)**, prices, **Talk to us**, and the Privacy, Terms and Contact links.
+- **Public pages**: the landing, pricing and sign-in pages are built. Things on them that do not work yet are greyed out and marked **Coming soon**: Google and Microsoft, prices, **Talk to us**, and the Privacy, Terms and Contact links.
 - **Payment**: moving a school to paid is a manual switch for the site admin.
 
 ## If something goes wrong
@@ -95,4 +98,5 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
 - **"Email sign-in is switched off for your school. Ask your school's Kerf admin."** (`sign_in_off`): an admin has unticked **Email link** on the **School** page. Asking for a link then sends nothing, but still shows the usual "If that address belongs…" message.
 - **Removed staff**: **Remove** signs the person out at once and cancels their unused links. Their sign-in requests send nothing, and an old link gives the "expired or already been used" message. An admin can invite them again from **Staff**.
 - **"Your sign-in is no longer valid. Sign in again."**: the session ended, either after about 10 hours or because you were removed. Ask for a new link.
-- **`503 email_not_set_up`** when creating a school or inviting someone: `KERF_PUBLIC_URL` is missing on the server (owner: see "Before you try this").
+- **"Registration is closed"** on `/register`: the server has `KERF_REGISTRATION=false`. The site admin can still create the school (step 1, alternative).
+- **`503 email_not_set_up`** when registering, creating a school or inviting someone: `KERF_PUBLIC_URL` is missing on the server (owner: see "Before you try this").

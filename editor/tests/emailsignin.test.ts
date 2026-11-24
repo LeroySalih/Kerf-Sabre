@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askForLink, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "../src/emailsignin";
+import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, finishRegistration, readLinkToken, restoreEmailSignIn } from "../src/emailsignin";
 
 class Mem implements Storage {
   m = new Map<string, string>();
@@ -72,5 +72,30 @@ describe("Pupil Card sign-in", () => {
     const f = (async () => json({ code: "bad_login", message: "That school code, group code, pupil ID or password is not right. Check your Pupil Card." }, 401)) as typeof fetch;
     const { cardSignIn } = await import("../src/emailsignin");
     await expect(cardSignIn("", { schoolCode: "A", groupCode: "B", pupilId: "C", password: "d" }, f, new Mem())).rejects.toThrow(/Check your Pupil Card/);
+  });
+});
+
+describe("a new school's registration link (shared 0.2.40)", () => {
+  it("makes the school, keeps the admin's session for the Admin site in this tab", async () => {
+    const sent: unknown[] = [];
+    const f = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/auth/register/finish")) { sent.push(JSON.parse(String(init?.body))); return json({ token: "ka_new", role: "admin", id: "st-9", name: "Sam Taylor", school: "westfield-high" }); }
+      if (url.endsWith("/auth/me")) return json({ role: "admin", id: "st-9", school: "westfield-high", plan: "free", schoolCode: "K7QHM" });
+      return json({}, 404);
+    }) as typeof fetch;
+    const st = new Mem();
+    const s = await finishRegistration("", TOKEN, f, st);
+    expect(sent).toEqual([{ token: TOKEN }]);
+    expect(s).toMatchObject({ role: "admin", school: "westfield-high", plan: "free", name: "Sam Taylor", email: true });
+    expect(JSON.parse(st.getItem("kerf.email.admin")!)).toEqual({ token: "ka_new", baseUrl: "" });
+  });
+  it("passes on the server's words for a spent link", async () => {
+    const f = (async () => json({ code: "link_invalid", message: "That link has expired or has already been used." }, 401)) as typeof fetch;
+    await expect(finishRegistration("", TOKEN, f, new Mem())).rejects.toMatchObject({ status: 401, code: "link_invalid", message: "That link has expired or has already been used." });
+  });
+  it("takes the link out of the address", () => {
+    const seen: string[] = [];
+    cleanLinkFromAddress({ pathname: "/sign-in", search: `?register=${TOKEN}` } as Location, { replaceState: (_a: unknown, _b: string, u: string) => seen.push(u) } as unknown as History);
+    expect(seen).toEqual(["/sign-in"]);
   });
 });

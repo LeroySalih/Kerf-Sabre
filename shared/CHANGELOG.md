@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.40 - free schools register themselves (additive)
+- `POST /auth/register {schoolName, name, email}` (anyone): stores a pending registration (only the SHA-256 of the link) and emails a confirmation link, `/sign-in?register=<token>`, that works once for 24 hours. Nothing is made until it is used. The same answer whatever happens; limited per address (3 per 15 minutes, quietly) and per computer (10 per day, `429`). `403 registration_closed` when the server has self-registration off (`KERF_REGISTRATION=false`).
+- `POST /auth/register/finish {token}`: makes the school on the **free** plan (ID from the name: lower case, dashes, at most 32 characters, `-2`, `-3`... on a clash; a school code; a copy of the default terms; group code and email sign-in on) and the person its first **admin** (an email account with their name), and returns a session like `/auth/email/finish` plus `school`, `schoolName`, `schoolCode`. `401 link_invalid` for a used, expired or unknown link.
+- `GET /auth/config` carries `registration` (and documents `email`). Paid schools are still approved by the site admin.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.40`.
+
 ## 0.2.39 - Pupil Card sign-in (additive)
 - `POST /auth/pupil {schoolCode, groupCode, pupilId, password}`: pupils sign in with their Pupil Card, on any server, when their school has Group code sign-in on (`403 sign_in_off` otherwise). The group code is the group's join code. Wrong anything is one `401 bad_login`; per-pupil lockout and per-computer throttle as before. The session is a normal pupil token for that school.
 - New pupils get a **two-word password** (e.g. `tiger-river`) instead of a 5-digit PIN; `created[].password` (and `pin`, the same, for older clients). Case, spaces, dots and underscores between the words do not matter when signing in.

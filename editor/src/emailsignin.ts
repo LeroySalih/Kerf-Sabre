@@ -1,4 +1,4 @@
-// Staff sign-in with an emailed link (shared 0.2.39), for the Admin site and the Editor. The link brings the browser back to
+// Staff sign-in with an emailed link (shared 0.2.40), for the Admin site and the Editor. The link brings the browser back to
 // the same page with `?signin=<token>`; the token is traded once for an ordinary session token. That session is kept for
 // this tab only (sessionStorage), like a DINO sign-in, so closing the tab signs the person out. Tested in tests/emailsignin.test.ts.
 import { normaliseBase, request, type Session } from "./server";
@@ -14,10 +14,11 @@ export const readLinkToken = (search: string): string | null => {
   return t && /^[A-Za-z0-9_-]{20,200}$/.test(t) ? t : null;
 };
 
-/** Take `signin=` out of the address so a reload or a bookmark never shows the (already used) link. */
+/** Take `signin=` (or a registration link's `register=`) out of the address so a reload or a bookmark never shows the (already used) link. */
 export function cleanLinkFromAddress(loc: Location = location, hist: History = history): void {
   const q = new URLSearchParams(loc.search);
   q.delete("signin");
+  q.delete("register");
   const rest = q.toString();
   try { hist.replaceState(null, "", `${loc.pathname}${rest ? `?${rest}` : ""}`); } catch { /* fine */ }
 }
@@ -44,7 +45,19 @@ export async function finishEmailSignIn(app: App, baseUrl: string, linkToken: st
   return s;
 }
 
-/** A pupil signs in with their Pupil Card (school code, group code, pupil ID, two-word password; shared 0.2.39). The session is kept
+/** A new school's registration link (shared 0.2.40): the server makes the free school and its first admin, and signs them in. The
+ * session is kept for this tab under the Admin site's key, so /admin/ picks it up. Throws the server's message for a used or expired link. */
+export async function finishRegistration(baseUrl: string, linkToken: string, f: Fetch = fetch, st: Storage = sessionStorage): Promise<Session> {
+  const base = normaliseBase(baseUrl);
+  const r = await request<{ token: string; name?: string | null; expiresAt?: string }>({ baseUrl: base, token: "" }, "POST", "/auth/register/finish", { token: linkToken }, f);
+  const s = await sessionFrom(base, r.token, f);
+  if (r.name) s.name = r.name;
+  if (r.expiresAt) s.expiresAt = r.expiresAt;
+  try { st.setItem(key("admin"), JSON.stringify({ token: r.token, baseUrl: base } satisfies Saved)); } catch { /* fine: it lasts until the page reloads */ }
+  return s;
+}
+
+/** A pupil signs in with their Pupil Card (school code, group code, pupil ID, two-word password; shared 0.2.40). The session is kept
  * for this tab like an emailed link's, under the Editor's key, so /editor/ picks it up. Throws the server's message when it is wrong. */
 export async function cardSignIn(baseUrl: string, card: { schoolCode: string; groupCode: string; pupilId: string; password: string }, f: Fetch = fetch, st: Storage = sessionStorage): Promise<Session> {
   const base = normaliseBase(baseUrl);

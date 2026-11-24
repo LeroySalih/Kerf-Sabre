@@ -6,6 +6,7 @@ import "@fontsource/atkinson-hyperlegible/latin-400.css";
 import "@fontsource/atkinson-hyperlegible/latin-700.css";
 import "./site.css";
 import { mountPanel } from "./panel";
+import { mountRegister } from "./register";
 import { otherTheme, readTheme, saveTheme, type Theme } from "./theme";
 
 const store = (): Storage | null => { try { return localStorage; } catch { return null; } };
@@ -25,3 +26,5 @@ document.querySelectorAll<HTMLButtonElement>("[data-theme-toggle]").forEach((b) 
 
 const panel = document.querySelector<HTMLElement>("[data-signin-panel]");
 if (panel) mountPanel(panel);
+const register = document.querySelector<HTMLElement>("[data-register-panel]");
+if (register) mountRegister(register);

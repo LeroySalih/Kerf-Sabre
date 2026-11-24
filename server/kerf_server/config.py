@@ -83,6 +83,10 @@ class Settings:
     #: kept in memory (`app.state.outbox`) instead of sent, for development and tests.
     resend_api_key: str = ""
     email_from: str = "Kerf <kerf-no-reply@mr-salih.org>"
+    #: Free schools may register themselves at /register (`POST /auth/register`). Off: `403 registration_closed` and the page says so.
+    registration: bool = True
+    #: Kerf's own address: when set, one line (school name and ID, never the person's email) is emailed here when a school registers.
+    admin_email: str = ""
     #: The `aud` an MCP token must carry. Empty: the MCP resource URL (<public_url>/mcp).
     mcp_audience: str = ""
     log_max_bytes: int = 5_000_000
@@ -139,6 +143,8 @@ class Settings:
             public_url=e.get("KERF_PUBLIC_URL", "").strip().rstrip("/"),
             resend_api_key=(e.get("RESEND_API") or e.get("KERF_RESEND_API_KEY") or "").strip(),
             email_from=e.get("KERF_EMAIL_FROM", "Kerf <kerf-no-reply@mr-salih.org>").strip(),
+            registration=_bool(e.get("KERF_REGISTRATION"), True),
+            admin_email=e.get("KERF_ADMIN_EMAIL", "").strip(),
             mcp_audience=e.get("KERF_MCP_AUDIENCE", "").strip(),
             cors_origins=tuple(o.strip() for o in e.get("KERF_CORS_ORIGINS", "").split(",") if o.strip()),
         )

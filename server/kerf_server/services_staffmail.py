@@ -47,9 +47,9 @@ class LinkThrottle:
     def __init__(self) -> None:
         self.hits: dict[str, deque[float]] = defaultdict(deque)
 
-    def allow(self, key: str, limit: int) -> bool:
+    def allow(self, key: str, limit: int, window_s: float = WINDOW_S) -> bool:
         q, now = self.hits[key], time.monotonic()
-        while q and now - q[0] > WINDOW_S:
+        while q and now - q[0] > window_s:
             q.popleft()
         if len(q) >= limit:
             return False

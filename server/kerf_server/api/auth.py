@@ -98,3 +98,21 @@ def pupil_card_login(request: Request, body: dict[str, Any] = Body(...), s: Sess
             raise ApiError(422, "invalid", "Fill in your school code, group code, pupil ID and password.")
     ip = request.client.host if request.client else "unknown"
     return sc.group_login(s, cfg, request.app.state.throttle, ip, body["schoolCode"], body["groupCode"], body["pupilId"], body["password"])
+
+
+@router.post("/auth/register")
+def register(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Anyone: register a free school (`{schoolName, name, email}`). Emails a confirmation link (24 hours, once); nothing is made
+    until it is used. The same answer whatever happens. `403 registration_closed` when the server has registration off."""
+    from .. import services_registration as reg
+
+    ip = request.client.host if request.client else "unknown"
+    return reg.start(s, request.app.state.mailer, cfg, request.app.state.link_throttle, str(request.base_url), ip, body)
+
+
+@router.post("/auth/register/finish")
+def register_finish(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Anyone: use a registration link (`{token}`): makes the free school and its first admin and signs them in."""
+    from .. import services_registration as reg
+
+    return reg.finish(s, request.app.state.mailer, cfg, body)

@@ -83,6 +83,23 @@ class SignInLink(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class PendingRegistration(Base):
+    """A free school asked for at /register, waiting for its emailed confirmation link (24 hours). Nothing else exists until the
+    link is used, so a junk address creates no school. Only the link's SHA-256 is stored; the email is used only to send the link
+    and becomes the first admin's address. Never logged."""
+
+    __tablename__ = "pending_registrations"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    school_name: Mapped[str] = mapped_column(String(128))
+    name: Mapped[str] = mapped_column(String(128))
+    email: Mapped[str] = mapped_column(String(254))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The school made when the link was used.
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Job(Base):
     __tablename__ = "jobs"
     id: Mapped[str] = mapped_column(String(32), primary_key=True)

@@ -13,8 +13,8 @@
   --grid: #26262b; --dot: #2e2e33;
   color-scheme: dark;
 }
-body[data-page="sign-in"] { --dot: #dcdce0; }
-:root[data-theme="dark"] body[data-page="sign-in"] { --dot: #2e2e33; }
+body[data-page="sign-in"], body[data-page="register"] { --dot: #dcdce0; }
+:root[data-theme="dark"] body[data-page="sign-in"], :root[data-theme="dark"] body[data-page="register"] { --dot: #2e2e33; }
 
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif; }
@@ -90,4 +90,6 @@ details[open] > summary svg { transform: rotate(180deg); }
 .kp-textbtn { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--acc); font: inherit; font-weight: 700; font-size: 16px; text-decoration: underline; cursor: pointer; }
 .kp-foot { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 16px; }
 .kp-col { display: flex; flex-direction: column; }
+.kp-check { display: flex; gap: 12px; align-items: flex-start; font-size: 17px; cursor: pointer; }
+.kp-check input { flex: none; width: 24px; height: 24px; margin: 1px 0 0; accent-color: #f97316; cursor: pointer; }
 .kp-foot-link { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; color: var(--acc); font-weight: 700; }

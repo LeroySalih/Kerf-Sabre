@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { EDITOR_QUERY_KEYS, SITE_FILES, editorForward } from "../src/site/routes";
 import { OFFLINE_EDITOR, destinationFor, dinoAppFor, emailAppFor, linkIsSpent, planSignIn } from "../src/site/signinlogic";
+import { checkRegistration, registrationOpen, viewAfter } from "../src/site/registerlogic";
 import { otherTheme, readTheme, saveTheme, THEME_KEY } from "../src/site/theme";
 import { PROBLEM_KEY, goToSignInPage, signInPageFor, takeProblem } from "../src/signinpage";
 import { beginSignIn, finishSignIn, type SsoConfig } from "../src/sso";
@@ -34,26 +35,26 @@ describe("which queries at / are forwarded to the Editor", () => {
     expect(editorForward("?stations=1")).toBeNull();
   });
   it("maps the site's addresses to the built files", () => {
-    expect(SITE_FILES).toEqual({ "/": "site/index.html", "/pricing": "site/pricing.html", "/sign-in": "site/sign-in.html", "/editor/": "index.html" });
+    expect(SITE_FILES).toEqual({ "/": "site/index.html", "/pricing": "site/pricing.html", "/sign-in": "site/sign-in.html", "/register": "site/register.html", "/editor/": "index.html" });
   });
 });
 
 describe("the sign-in page's first view", () => {
   it("is the form, on the pupil tab, for someone who came by themselves", () => {
-    expect(planSignIn("")).toEqual({ view: "form", role: "pupil", app: null, token: null });
-    expect(planSignIn("?app=editor")).toEqual({ view: "form", role: "pupil", app: "editor", token: null });
+    expect(planSignIn("")).toEqual({ view: "form", role: "pupil", app: null, token: null, register: false });
+    expect(planSignIn("?app=editor")).toEqual({ view: "form", role: "pupil", app: "editor", token: null, register: false });
   });
   it("opens the staff tab when the Admin site sent them", () => {
     expect(planSignIn("?app=admin")).toMatchObject({ view: "form", role: "staff", app: "admin" });
     expect(planSignIn("?app=nonsense")).toMatchObject({ role: "pupil", app: null });
   });
   it("trades an emailed link, for the app the link names (the Admin site by default)", () => {
-    expect(planSignIn(`?signin=${TOKEN}&app=admin`)).toEqual({ view: "busy", role: "staff", app: "admin", token: TOKEN });
+    expect(planSignIn(`?signin=${TOKEN}&app=admin`)).toEqual({ view: "busy", role: "staff", app: "admin", token: TOKEN, register: false });
     expect(planSignIn(`?signin=${TOKEN}&app=editor`)).toMatchObject({ view: "busy", app: "editor", token: TOKEN });
     expect(planSignIn(`?signin=${TOKEN}`)).toMatchObject({ app: "admin" });
   });
   it("shows the expired view for a broken link or when told the link did not work", () => {
-    expect(planSignIn("?signin=short&app=editor")).toEqual({ view: "expired", role: "staff", app: "editor", token: null });
+    expect(planSignIn("?signin=short&app=editor")).toEqual({ view: "expired", role: "staff", app: "editor", token: null, register: false });
     expect(planSignIn("?signin=<script>")).toMatchObject({ view: "expired", token: null });
     expect(planSignIn("?app=admin&link=expired")).toMatchObject({ view: "expired", app: "admin" });
   });
@@ -152,5 +153,41 @@ describe("the theme switch", () => {
     expect(readTheme(broken)).toBe("light");
     expect(() => saveTheme(broken, "dark")).not.toThrow();
     expect(readTheme(null)).toBe("light");
+  });
+});
+
+describe("registering a school (shared 0.2.40)", () => {
+  const ok = { schoolName: "  Westfield   High ", name: "Sam Taylor", email: " head@westfield.example ", agreed: true };
+  it("tidies a good form into what the server is sent", () => {
+    expect(checkRegistration(ok)).toEqual({ ok: true, body: { schoolName: "Westfield High", name: "Sam Taylor", email: "head@westfield.example" } });
+  });
+  it("names the first problem and its box", () => {
+    expect(checkRegistration({ ...ok, schoolName: " " })).toMatchObject({ ok: false, field: "schoolName" });
+    expect(checkRegistration({ ...ok, schoolName: "x".repeat(129) })).toMatchObject({ ok: false, field: "schoolName" });
+    expect(checkRegistration({ ...ok, name: "" })).toMatchObject({ ok: false, field: "name" });
+    expect(checkRegistration({ ...ok, name: "sam@westfield.example" })).toMatchObject({ ok: false, field: "name" });
+    expect(checkRegistration({ ...ok, email: "" })).toMatchObject({ ok: false, field: "email" });
+    expect(checkRegistration({ ...ok, email: "not an email" })).toMatchObject({ ok: false, field: "email", message: "That is not an email address." });
+    expect(checkRegistration({ ...ok, email: "a@b" })).toMatchObject({ ok: false, field: "email" });
+    expect(checkRegistration({ ...ok, agreed: false })).toMatchObject({ ok: false, field: "agreed" });
+    expect(checkRegistration({ schoolName: "", name: "", email: "", agreed: false })).toMatchObject({ field: "schoolName" });
+  });
+  it("is open unless the server says registration: false", () => {
+    expect(registrationOpen({ mode: "planner", registration: true })).toBe(true);
+    expect(registrationOpen({ mode: "planner" })).toBe(true); // an older server
+    expect(registrationOpen(null)).toBe(true);
+    expect(registrationOpen({ registration: false })).toBe(false);
+  });
+  it("shows the sent view, the closed view, or the form with the message", () => {
+    expect(viewAfter(null)).toBe("sent");
+    expect(viewAfter("registration_closed")).toBe("closed");
+    expect(viewAfter("too_many_attempts")).toBe("form");
+  });
+  it("a confirmation link on /sign-in sets up the school and opens the Admin site", () => {
+    expect(planSignIn(`?register=${TOKEN}`)).toEqual({ view: "busy", role: "staff", app: "admin", token: TOKEN, register: true });
+    expect(planSignIn(`?register=${TOKEN}&app=editor`)).toMatchObject({ app: "admin", register: true });
+    expect(planSignIn("?register=short")).toEqual({ view: "expired", role: "staff", app: "admin", token: null, register: true });
+    expect(planSignIn("?register=<script>aaaaaaaaaaaaaaaaaaaa")).toMatchObject({ view: "expired", token: null });
+    expect(destinationFor("admin")).toBe("/admin/");
   });
 });

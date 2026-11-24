@@ -182,7 +182,8 @@ class Verifier:
 
 def auth_config(cfg: Settings) -> dict[str, Any]:
     """What `GET /auth/config` tells the Editor and Admin: how to sign in here."""
-    out: dict[str, Any] = {"mode": cfg.auth_mode, "sso": None, "email": True}  # staff may ask for an emailed sign-in link (if their school allows it)
+    out: dict[str, Any] = {"mode": cfg.auth_mode, "sso": None, "email": True,  # staff may ask for an emailed sign-in link (if their school allows it)
+                           "registration": cfg.registration}  # free schools may register themselves at /register
     if cfg.sso_enabled:
         o = cfg.sso_issuer
         out["sso"] = {

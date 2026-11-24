@@ -87,3 +87,21 @@ def invite_email(to: str, link: str, school_name: str, role: str, days: int) -> 
     small = "If you were not expecting this, you can ignore it."
     text = f"You are invited to Kerf\n\n{lines[0]}\n{lines[1]}\n\n{link}\n\n{small}\n"
     return Email(to, f"You are invited to Kerf ({school_name})", text, _html("You are invited to Kerf", lines, link, "Sign in to Kerf", small), "invite")
+
+
+def register_email(to: str, link: str, school_name: str, hours: int) -> Email:
+    """Confirm a school that registered at /register. Nothing exists until the link is used."""
+    lines = [f"Thank you for registering {school_name} on Kerf, the free laser design tools for schools.",
+             f"Press the button to confirm. Kerf then sets up {school_name} on the free plan, makes you its admin and signs you in. "
+             "Next you add your teachers, make groups and print Pupil Cards for your pupils.",
+             f"The link works once, for {hours} hours. Nothing is set up until you press it."]
+    small = "If you did not register a school on Kerf, you can ignore this email: nothing will be set up."
+    text = "Confirm your school on Kerf\n\n" + "\n".join(lines) + f"\n\n{link}\n\n{small}\n"
+    return Email(to, f"Confirm your school on Kerf ({school_name})", text, _html("Confirm your school on Kerf", lines, link, "Confirm my school", small), "registration link")
+
+
+def school_registered_email(to: str, school_name: str, school_id: str) -> Email:
+    """One line for Kerf's owner (`KERF_ADMIN_EMAIL`): which school registered. Never the person's email."""
+    line = f"A new free school registered on Kerf: {school_name} ({school_id})."
+    html = f'<p style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111827">{escape(line)}</p>'
+    return Email(to, f"New school on Kerf: {school_name}", line + "\n", html, "school registered")

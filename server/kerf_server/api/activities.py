@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import services_activities as sa
 from .. import services_jobs as sj
-from ..deps import PAID, get_session
+from ..deps import ACTIVITIES, get_session
 from ..errors import ApiError
 from ..security import Principal, require
 
@@ -17,33 +17,33 @@ T = Depends(require("teacher"))
 
 
 # ---- teacher
-@router.get("/classes/{code}/activities", dependencies=PAID)
+@router.get("/classes/{code}/activities", dependencies=ACTIVITIES)
 def list_activities(code: str, who: Principal = T, s: Session = Depends(get_session)):
     return sa.list_activities(s, who, code)
 
 
-@router.post("/classes/{code}/activities", status_code=201, dependencies=PAID)
+@router.post("/classes/{code}/activities", status_code=201, dependencies=ACTIVITIES)
 def create_activity(code: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
     return sa.activity_doc(sa.create_activity(s, who, code, body))
 
 
-@router.post("/classes/{code}/activities-copy", status_code=201, dependencies=PAID)
+@router.post("/classes/{code}/activities-copy", status_code=201, dependencies=ACTIVITIES)
 def copy_activities(code: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
     return [sa.activity_doc(a) for a in sa.copy_activities(s, who, code, body)]
 
 
-@router.put("/classes/{code}/activities/{activity_id}", dependencies=PAID)
+@router.put("/classes/{code}/activities/{activity_id}", dependencies=ACTIVITIES)
 def update_activity(code: str, activity_id: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
     return sa.activity_doc(sa.update_activity(s, who, code, activity_id, body))
 
 
-@router.delete("/classes/{code}/activities/{activity_id}", status_code=204, dependencies=PAID)
+@router.delete("/classes/{code}/activities/{activity_id}", status_code=204, dependencies=ACTIVITIES)
 def archive_activity(code: str, activity_id: str, who: Principal = T, s: Session = Depends(get_session)):
     sa.archive_activity(s, who, code, activity_id)
     return Response(status_code=204)
 
 
-@router.post("/classes/{code}/activities-order", dependencies=PAID)
+@router.post("/classes/{code}/activities-order", dependencies=ACTIVITIES)
 def reorder(code: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
     ids = body.get("ids")
     if not isinstance(ids, list):
@@ -53,17 +53,17 @@ def reorder(code: str, body: dict[str, Any] = Body(...), who: Principal = T, s: 
     return sa.list_activities(s, who, code)
 
 
-@router.get("/classes/{code}/progress", dependencies=PAID)
+@router.get("/classes/{code}/progress", dependencies=ACTIVITIES)
 def progress(code: str, who: Principal = T, s: Session = Depends(get_session)):
     return sa.progress(s, who, code)
 
 
-@router.get("/classes/{code}/activities/{activity_id}/work/{pupil_id}", dependencies=PAID)
+@router.get("/classes/{code}/activities/{activity_id}/work/{pupil_id}", dependencies=ACTIVITIES)
 def pupil_work(code: str, activity_id: str, pupil_id: str, who: Principal = T, s: Session = Depends(get_session)):
     return sa.pupil_work(s, who, code, activity_id, pupil_id)
 
 
-@router.post("/classes/{code}/activities/{activity_id}/work/{pupil_id}/feedback", status_code=201, dependencies=PAID)
+@router.post("/classes/{code}/activities/{activity_id}/work/{pupil_id}/feedback", status_code=201, dependencies=ACTIVITIES)
 def give_feedback(code: str, activity_id: str, pupil_id: str, body: dict[str, Any] = Body(...), who: Principal = T, s: Session = Depends(get_session)):
     f = sa.add_feedback(s, who, code, activity_id, pupil_id, body)
     s.flush()
@@ -77,17 +77,17 @@ def pupil_files(code: str, pupil_id: str, who: Principal = T, s: Session = Depen
 
 
 # ---- pupil
-@router.get("/activities", dependencies=PAID)
+@router.get("/activities", dependencies=ACTIVITIES)
 def my_activities(who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
     return sa.my_activities(s, who)
 
 
-@router.get("/activities/{activity_id}", dependencies=PAID)
+@router.get("/activities/{activity_id}", dependencies=ACTIVITIES)
 def my_activity(activity_id: str, who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
     return sa.my_activity(s, who, activity_id)
 
 
-@router.post("/activities/{activity_id}/submit", dependencies=PAID)
+@router.post("/activities/{activity_id}/submit", dependencies=ACTIVITIES)
 def submit(activity_id: str, body: dict[str, Any] | None = Body(None), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
     job_id = (body or {}).get("jobId")
     return sa.submit(s, who, activity_id, str(job_id) if job_id else None)

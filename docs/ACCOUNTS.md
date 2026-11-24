@@ -1,6 +1,6 @@
 # Kerf accounts, sign-in and the two admin sites (design)
 
-Status: **design agreed with the owner in outline; open questions at the end; not built yet.** One code base (PRODUCT.md decision 4): every school, BISAK included, uses exactly this.
+Status: **design agreed with the owner; being built in steps** (built so far: plans and school codes, per-school sign-in methods, groups with several pupils and join codes, the configurable terms). Open questions at the end. One code base (PRODUCT.md decision 4): every school, BISAK included, uses exactly this.
 
 ## Two admin sites
 
@@ -86,6 +86,29 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 - **Permanent delete** of an archived pupil: school admins only, and logged.
 - **BISAK** keeps every paid feature as an approved paid school.
 
+## Terms: a configurable free tier (owner, 2026-11-24; built, shared 0.2.35)
+
+The owner's point: a free tier with no laser saves a school per-pupil licences but not the teacher's work (they still
+export pupils' files to the laser). Sending files straight to the laser is the feature that matters, so the free tier
+may include it for a limited number of groups or for a while, and the site admin decides.
+
+- **Terms** = features (`laser`: queue, approval, sending, Station pages, camera; `activities`) + limits (groups per school,
+  pupils per group, files per pupil, **laser groups**) + **grants** (extras for a while). Examples: "3 months of everything"
+  (a grant: 3 months, laser + activities, no group limit); "10 groups on the laser for 12 months" (a grant: 12 months,
+  laser, laser groups 10).
+- The site admin sets **Kerf's default terms** (Platform > Default terms) and can change **one school's** terms (Platform >
+  Schools > Terms…).
+- **When a school registers, the default is copied to it**, grant months becoming dates; later changes to the default never
+  touch it. Free schools that existed before terms got a copy of the default at start-up.
+- A **paid** school has everything with no limits (terms do not apply).
+- While laser groups are limited, a **school admin picks** which groups send to the laser (Classes > Laser group). A pupil
+  in none of them is told to ask their teacher.
+- When a grant ends, its features and raised limits stop at once: nothing is deleted (groups over a limit stay; no new
+  ones), and files already in the queue wait until the laser is back on the plan.
+- Built-in default until the site admin changes it: the free tools, 20 groups, 50 pupils per group, 20 files per pupil,
+  no grants.
+
 ## Remaining questions
 
-- Which service sends the email (Postmark, Resend or Amazon SES)?
+- (answered: email goes through **Resend**; the key is `RESEND_API` in the production `.env`.)
+- Terms: should a school see a warning before a grant ends (e.g. 14 days ahead, by email to its admins)?

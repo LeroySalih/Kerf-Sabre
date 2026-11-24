@@ -29,6 +29,9 @@ class School(Base):
     #: Which sign-in methods the school's admins have switched on, e.g. {"dino": true, "groupCode": true, "googleDomain": "..."}
     #: (`services_signin`). NULL: a school from before per-school sign-in, which used DINO only.
     sign_in: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    #: A free school's own terms (`services_terms`): a copy of Kerf's default terms made when it registered, edited only by
+    #: the site admin. NULL for a paid school (everything) or a free school from before terms (given a copy at start-up).
+    terms: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -176,7 +179,18 @@ class SchoolClass(Base):
     #: Where the group came from: manual, csv, dino, google, microsoft (NULL = manual), and the provider's own group id.
     source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     source_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    #: One of the school's laser groups, picked by a school admin while its terms limit how many groups may send to the laser.
+    laser: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PlatformSetting(Base):
+    """Kerf-wide settings the site admin changes (e.g. the default terms copied to every new school)."""
+
+    __tablename__ = "platform_settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class GroupMember(Base):

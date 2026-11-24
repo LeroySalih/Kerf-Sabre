@@ -17,18 +17,25 @@ def get_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
-def paid_school(request: Request):
-    """Dependency for the paid service (queue, approval, lasers, Station pages, camera, activities): refuses a free school with 403 paid_feature.
-    A site admin with no school (the Platform) and a school made before plans existed pass."""
-    from .security import current_principal
-    from .services_schools import require_paid
+def feature(name: str):
+    """Dependency: refuses a school whose terms leave out this feature (`laser` or `activities`) with 403 paid_feature.
+    A site admin with no school (the Platform) and a paid school pass."""
 
-    who = current_principal(request)
-    if who.school is None:
+    def dep(request: Request):
+        from .security import current_principal
+        from .services_terms import require as require_feature
+
+        who = current_principal(request)
+        if who.school is None:
+            return who
+        with request.app.state.db.session() as s:
+            require_feature(s, who.school, name)
         return who
-    with request.app.state.db.session() as s:
-        require_paid(s, who.school)
-    return who
+
+    return dep
 
 
-PAID = [Depends(paid_school)]
+#: Sending to the laser: the queue, approval, Station pages and lasers, the Cutter download, the camera.
+PAID = [Depends(feature("laser"))]
+#: Activities and teacher feedback.
+ACTIVITIES = [Depends(feature("activities"))]

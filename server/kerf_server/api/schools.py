@@ -38,6 +38,41 @@ def update_school_platform(school_id: str, body: dict[str, Any] = Body(...), _: 
     return ss.school_doc(row, cfg.auto_approve_default)
 
 
+@router.get("/platform/terms")
+def default_terms(_: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
+    """Kerf's default terms: copied to each new free school when it registers (later changes leave existing schools alone)."""
+    from .. import services_terms as terms
+
+    return terms.get_default(s)
+
+
+@router.put("/platform/terms")
+def set_default_terms(body: dict[str, Any] = Body(...), _: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
+    from .. import services_terms as terms
+
+    return terms.set_default(s, body)
+
+
+@router.get("/schools/{school_id}/terms")
+def school_terms(school_id: str, _: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
+    """One school's own terms and what they give it today."""
+    from .. import services_terms as terms
+
+    row = s.get(School, school_id)
+    if row is None:
+        raise ApiError(404, "not_found", f"There is no school '{school_id}'.")
+    return terms.terms_doc(row)
+
+
+@router.put("/schools/{school_id}/terms")
+def set_school_terms(school_id: str, body: dict[str, Any] = Body(...), _: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
+    from .. import services_terms as terms
+
+    row = terms.set_school_terms(s, school_id, body)
+    s.flush()
+    return terms.terms_doc(row)
+
+
 @router.post("/schools", status_code=201)
 def create_school(request: Request, body: dict[str, Any] = Body(...), _: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
     """Create a school and its first admin. The admin's token is in the answer once and is never shown again."""
@@ -51,6 +86,14 @@ def create_school(request: Request, body: dict[str, Any] = Body(...), _: Princip
         s.commit()  # the token is made through its own session, which must see the school
         out["admin"] = {"id": admin_id, "token": ss.add_staff(request.app.state.db, school.id, "admin", str(admin_id), "first admin")}
     return out
+
+
+@router.get("/school/terms")
+def my_terms(who: Principal = Depends(require("admin", "teacher")), s: Session = Depends(get_session)):
+    """What the school's plan gives it today (and until when), for its own staff."""
+    from .. import services_terms as terms
+
+    return terms.effective(s.get(School, who.school))
 
 
 @router.get("/school")

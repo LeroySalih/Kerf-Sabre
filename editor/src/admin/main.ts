@@ -71,7 +71,7 @@ async function shell(): Promise<void> {
   let site: "platform" | "school" = s.role === "platform" ? "platform" : "school";
   try { if (s.siteAdmin && sessionStorage.getItem("kerf.admin.site") === "platform") site = "platform"; } catch { /* fine */ }
   const platform = site === "platform";
-  const pages = platform ? platformPages() : pagesFor(s.role, s.plan);
+  const pages = platform ? platformPages() : pagesFor(s.role, s.features ?? s.plan);
   if (!pages.length) {
     root.replaceChildren(el("div", { class: "ad-card ad-signin" }, el("h1", {}, "Kerf Admin"),
       el("p", {}, "Your school is on Kerf's free plan, which has no Station pages. Ask your school's admin about the paid plan."), btn("Sign out", signOut)));

@@ -24,9 +24,13 @@ def me(p: Principal = Depends(current_principal), s: Session = Depends(get_sessi
     from ..services_schools import plan_of
     from ..models import School
 
+    from .. import services_terms as terms
+
     row = s.get(School, p.school) if p.school else None
+    now = terms.effective(row) if p.school else None
     return {"role": p.role, "id": p.id, "school": p.school, "siteAdmin": p.site_admin, "plan": plan_of(row) if p.school else None,
-            "schoolName": row.name if row else None, "schoolCode": row.code if row else None}
+            "schoolName": row.name if row else None, "schoolCode": row.code if row else None,
+            "features": now["features"] if now else None, "limits": now["limits"] if now else None}
 
 
 @router.get("/auth/config")

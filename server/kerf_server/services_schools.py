@@ -37,27 +37,23 @@ def plan_of(row: School | None) -> str:
 
 
 def is_paid(s: Session, school_id: str | None) -> bool:
-    return plan_of(s.get(School, school_id) if school_id else None) == "paid"
+    """May this school send files to the laser (paid, or free terms that include it)?"""
+    from . import services_terms as terms
+
+    return terms.has(s, school_id, "laser")
 
 
-def require_paid(s: Session, school_id: str | None) -> None:
-    if not is_paid(s, school_id):
-        raise ApiError(403, "paid_feature", "This is part of Kerf's paid service (lasers, the queue, approval, Station pages, the camera, activities). Your school is on the free plan.")
+def require_paid(s: Session, school_id: str | None, feature: str = "laser") -> None:
+    from . import services_terms as terms
 
-
-#: What a free school may have. The server enforces them and says which one was reached; a paid school has none.
-FREE_LIMITS = {"filesPerPupil": 20, "groupsPerSchool": 20, "pupilsPerGroup": 50}
-_LIMIT_TEXT = {"filesPerPupil": "files per pupil", "groupsPerSchool": "groups in a school", "pupilsPerGroup": "pupils in a group"}
+    terms.require(s, school_id, feature)
 
 
 def check_limit(s: Session, school_id: str | None, limit: str, current: int, adding: int = 1) -> None:
-    """409 `limit_reached` when a free school would go over one of its limits."""
-    if is_paid(s, school_id):
-        return
-    cap = FREE_LIMITS[limit]
-    if current + adding > cap:
-        raise ApiError(409, "limit_reached", f"A free school may have up to {cap} {_LIMIT_TEXT[limit]}"
-                       + (f" (this would make {current + adding})." if adding > 1 else "."), [{"limit": limit, "max": cap, "current": current}])
+    """409 `limit_reached` past one of the school's limits (`services_terms`)."""
+    from . import services_terms as terms
+
+    terms.check_limit(s, school_id, limit, current, adding)
 
 
 def new_school_code(s: Session) -> str:
@@ -88,6 +84,10 @@ def set_plan(s: Session, school_id: str, plan: str) -> School:
     if row is None:
         raise ApiError(404, "not_found", f"There is no school '{school_id}'.")
     row.plan = plan
+    if plan == "free" and row.terms is None:
+        from . import services_terms as terms
+
+        row.terms = terms.snapshot(terms.get_default(s))
     return row
 
 
@@ -107,7 +107,10 @@ def create_school(s: Session, school_id: str, name: str, plan: str = "free") -> 
         raise ApiError(422, "invalid", "plan is free or paid.")
     from .services_signin import NEW_SCHOOL
 
-    school = School(id=school_id, name=name.strip()[:128], plan=plan, code=new_school_code(s), sign_in=dict(NEW_SCHOOL))
+    from . import services_terms as terms
+
+    school = School(id=school_id, name=name.strip()[:128], plan=plan, code=new_school_code(s), sign_in=dict(NEW_SCHOOL),
+                    terms=terms.snapshot(terms.get_default(s)) if plan == "free" else None)  # a copy: later default changes leave it alone
     s.add(school)
     s.flush()
     seed_presets(s, school_id)

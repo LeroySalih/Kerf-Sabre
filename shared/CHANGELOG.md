@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.35 - terms: configurable free tier, copied to each school (additive)
+- A free school's plan is its **terms**: `features` (`laser`: the queue, approval, sending, Station pages, the camera; `activities`: activities and feedback), `limits` (`groupsPerSchool`, `pupilsPerGroup`, `filesPerPupil`, `laserGroups`; null = no limit) and **grants**, extras for a time (e.g. "3 months of everything", "the laser for 10 groups for 12 months"). A paid school has everything with no limits.
+- Site admin: `GET/PUT /platform/terms` (Kerf's default; grants in `months`), `GET/PUT /schools/{schoolId}/terms` (one school; grants with `from`/`until`). A new free school gets a **copy** of the default at registration; changing the default later never changes it. Staff: `GET /school/terms`. `GET /auth/me` carries `features` and `limits`.
+- The `403 paid_feature` gates now follow the school's features (activities routes follow `activities`, everything else `laser`). While `laserGroups` is limited, a school admin picks the laser groups (`ClassInfo.laser`, `PUT /classes/{code} {laser}`; 409 `limit_reached` past the limit, 403 for a teacher) and a pupil outside them gets `403 not_laser_group` on submit.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.35`.
+
 ## 0.2.34 - groups: several per pupil, join codes, archiving, free limits (additive)
 - A pupil can be in **several groups** of their school. `POST /classes/{code}/pupils` adds a pupil who is already in another group of the same school (`added`, no new PIN); `conflicts` now means an ID taken in another school. Removing a pupil takes them out of that group only; out of their last group they are removed as before. Pupils sign in through any of their groups and see the activities of all of them. `ClassPupil.groups` lists them.
 - Groups have a **join code** (`ClassInfo.joinCode`, unique in the school, defaults to the code, editable with `PUT /classes/{code} {joinCode}`), can be **archived** (`archived`; hidden from `GET /classes` unless `?archived=true`, cannot be signed in through) and renamed. `POST /classes` without `code` makes one. `ClassInfo.source` says where a group came from.

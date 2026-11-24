@@ -12,7 +12,7 @@ import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type F
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
-  STATUS_TEXT, ServerError, isPaid, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
+  STATUS_TEXT, ServerError, isPaid, hasActivities, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -118,7 +118,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       person.textContent = "Sign in";
     }
     ($("srv-files") as HTMLButtonElement).hidden = false; // everyone signed in has files of their own (staff look at pupils' files on the Admin site)
-    ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil" || !isPaid(session);
+    ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil" || !hasActivities(session);
     ($("srv-send") as HTMLButtonElement).hidden = !!session && !isPaid(session); // sending for cutting is the paid service; a free school saves and shares files
     const act = $("srv-activity") as HTMLElement;
     act.hidden = !(session?.role === "pupil" && activity);

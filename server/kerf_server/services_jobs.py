@@ -17,7 +17,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.34"
+SCHEMA_VERSION = "0.2.35"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -216,6 +216,14 @@ def replace(s: Session, who, j: Job, doc: dict[str, Any]) -> Job:
 def submit(s: Session, cfg: Settings, who, j: Job, accepted_open_paths: bool = False) -> Job:
     if j.status != "draft":
         raise ApiError(409, "conflict", f"This job is already {j.status}.")
+    from . import services_terms as terms
+
+    terms.require(s, j.school_id, "laser")
+    if who.role == "pupil" and terms.limit(s, j.school_id, "laserGroups") is not None:
+        from .services_classes import laser_groups_of
+
+        if not laser_groups_of(s, j.pupil_id):
+            raise ApiError(403, "not_laser_group", "Your group does not send files to the laser on your school's plan. Ask your teacher to cut it for you.")
     p = sp.latest_preset(s, j.school_id, j.preset_id)
     if p is None:
         raise ApiError(422, "unknown_preset", "This file's material has been removed from the catalogue. Pick another material, then send it again.")

@@ -26,3 +26,20 @@ describe("free and paid schools", () => {
     expect(pagesFor("admin").map((p) => p.key)).toContain("stations");
   });
 });
+
+describe("terms: features decide the pages", () => {
+  it("free terms with the laser but no activities", () => {
+    const keys = pagesFor("admin", { laser: true, activities: false }).map((p) => p.key);
+    expect(keys).toContain("queue");
+    expect(keys).toContain("stationpages");
+    expect(keys).not.toContain("activities");
+    expect(pagesFor("technician", { laser: true, activities: false }).map((p) => p.key)).toEqual(["stationpages"]);
+  });
+  it("activities without the laser", () => {
+    const keys = pagesFor("teacher", { laser: false, activities: true }).map((p) => p.key);
+    expect(keys).toEqual(["classes", "pupils", "activities", "materials"]);
+  });
+  it("the Platform has schools and the default terms", () => {
+    expect(pagesFor("platform").map((p) => p.key)).toEqual(["schools", "terms"]);
+  });
+});

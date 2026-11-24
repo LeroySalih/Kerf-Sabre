@@ -95,6 +95,22 @@ def member_counts(s: Session) -> dict[str, int]:
     return dict(s.execute(select(GroupMember.class_code, func.count()).group_by(GroupMember.class_code)).all())
 
 
+def laser_groups_of(s: Session, pupil_id: str) -> list[str]:
+    """The pupil's groups that are laser groups (only asked while the school's terms limit laser groups)."""
+    return [c for c in groups_of(s, pupil_id) if s.get(SchoolClass, c).laser]  # type: ignore[union-attr]
+
+
+def set_laser(s: Session, c: SchoolClass, on: bool) -> None:
+    """A school admin picks the groups that may send to the laser, up to the terms' `laserGroups`."""
+    from . import services_terms as terms
+
+    if on and not c.laser:
+        terms.require(s, c.school_id, "laser")
+        n = s.scalar(select(func.count()).select_from(SchoolClass).where(SchoolClass.school_id == c.school_id, SchoolClass.laser.is_(True), SchoolClass.archived.is_not(True))) or 0
+        terms.check_limit(s, c.school_id, "laserGroups", n)
+    c.laser = on
+
+
 def pupil_school(s: Session, row: Pupil) -> str | None:
     c = s.get(SchoolClass, row.class_code)
     return c.school_id if c else None
@@ -117,7 +133,7 @@ def join_code_of(c: SchoolClass) -> str:
 
 def class_info(s: Session, c: SchoolClass, pupil_count: int) -> dict:
     return {"code": c.code, "joinCode": join_code_of(c), "label": c.label, "teacherId": c.teacher_id, "pupilCount": pupil_count,
-            "requireApproval": c.require_approval is not False, "archived": bool(c.archived), "source": c.source or "manual"}
+            "requireApproval": c.require_approval is not False, "archived": bool(c.archived), "source": c.source or "manual", "laser": bool(c.laser)}
 
 
 def _check_join_code(s: Session, school: str | None, join_code: str, except_code: str | None = None) -> str:

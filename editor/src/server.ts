@@ -1,9 +1,10 @@
 // Client for the Kerf Server (shared/openapi.yaml). The token and address live in this browser only.
+import type { Terms } from "./termsform";
 import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.35); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
   /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
   name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
@@ -77,8 +78,17 @@ export const getSignIn = (s: Session, f?: Fetch) => request<SignInSettings>(s, "
 export const setSignIn = (s: Session, change: { methods?: Partial<SignInSettings["methods"]>; googleDomain?: string | null; microsoftTenant?: string | null }, f?: Fetch) => request<SignInSettings>(s, "PATCH", "/school/sign-in", change, f);
 /** Platform: set a school's plan (free or paid) or rename it. */
 export const updateSchool = (s: Session, id: string, change: { plan?: "free" | "paid"; name?: string }, f?: Fetch) => request<School>(s, "PATCH", `/schools/${encodeURIComponent(id)}`, change, f);
-/** The paid service (queue, approval, lasers, Station pages, camera, activities) is open to this session's school. A session from an older server (no plan) counts as paid. */
-export const isPaid = (s: Session | null | undefined): boolean => !!s && s.plan !== "free";
+/** Sending files to the laser (queue, approval, Station pages, camera) is open to this session's school. A session from an older server (no features) goes by its plan; no plan counts as paid. */
+export const isPaid = (s: Session | null | undefined): boolean => !!s && (s.features ? s.features.laser : s.plan !== "free");
+/** Activities and teacher feedback are open to this session's school. */
+export const hasActivities = (s: Session | null | undefined): boolean => !!s && (s.features ? s.features.activities : s.plan !== "free");
+/** What the plan gives a school today: `{features, limits, grants: [{label, until}], paid}`. */
+export interface TermsNow { features: { laser: boolean; activities: boolean }; limits: Record<string, number | null>; grants: { label: string; until: string | null }[]; paid: boolean }
+export const getDefaultTerms = (s: Session, f?: Fetch) => request<Terms>(s, "GET", "/platform/terms", undefined, f);
+export const setDefaultTerms = (s: Session, t: Terms, f?: Fetch) => request<Terms>(s, "PUT", "/platform/terms", t, f);
+export const getSchoolTerms = (s: Session, id: string, f?: Fetch) => request<{ plan: string; terms: Terms | null; now: TermsNow }>(s, "GET", `/schools/${encodeURIComponent(id)}/terms`, undefined, f);
+export const setSchoolTerms = (s: Session, id: string, t: Terms, f?: Fetch) => request<{ plan: string; terms: Terms | null; now: TermsNow }>(s, "PUT", `/schools/${encodeURIComponent(id)}/terms`, t, f);
+export const myTerms = (s: Session, f?: Fetch) => request<TermsNow>(s, "GET", "/school/terms", undefined, f);
 export const createSchool = (s: Session, id: string, name: string, adminId?: string, f?: Fetch) => request<School & { admin?: { id: string; token: string } }>(s, "POST", "/schools", { id, name, ...(adminId ? { adminId } : {}) }, f);
 export const mySchool = (s: Session, f?: Fetch) => request<School>(s, "GET", "/school", undefined, f);
 export const setAutoApprove = (s: Session, on: boolean, f?: Fetch) => request<School>(s, "PATCH", "/school", { autoApprove: on }, f);
@@ -91,15 +101,16 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
   try { await f(`${s.baseUrl}/api/v1/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${s.token}` } }); } catch { /* offline: it will expire */ }
 }
 
-export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean }
+export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean; joinCode?: string; archived?: boolean; source?: string; /** A laser group (picked by a school admin while the plan limits them). */ laser?: boolean }
 export interface ClassPupil { pupilId: string; displayName?: string; lastLogin: string | null; locked: boolean }
 export interface AddedPupils { created: { pupilId: string; pin: string }[]; /** Already in another group of the school: added to this one too, PIN unchanged. */ added?: string[]; existing: string[]; conflicts: string[] }
 export interface GroupInfo { id: string; name: string; subject: string | null; yearGroup: string | null; pupils: string[] }
 /** The teacher's classes with their pupil IDs (from DINO when signed in with DINO). */
 export const listGroups = (s: Session, f?: Fetch) => request<GroupInfo[]>(s, "GET", "/groups", undefined, f);
-export const listClasses = (s: Session, f?: Fetch) => request<ClassInfo[]>(s, "GET", "/classes", undefined, f);
-export const createClass = (s: Session, code: string, label: string, requireApproval = true, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { code, label, requireApproval }, f);
-export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
+export const listClasses = (s: Session, f?: Fetch, archived = false) => request<ClassInfo[]>(s, "GET", archived ? "/classes?archived=true" : "/classes", undefined, f);
+/** A blank code: Kerf makes one. */
+export const createClass = (s: Session, code: string, label: string, requireApproval = true, f?: Fetch) => request<ClassInfo>(s, "POST", "/classes", { ...(code ? { code } : {}), label, requireApproval }, f);
+export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean; joinCode?: string; archived?: boolean; laser?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
 export const classPupils = (s: Session, code: string, f?: Fetch) => request<ClassPupil[]>(s, "GET", `/classes/${encodeURIComponent(code)}/pupils`, undefined, f);
 export const addPupils = (s: Session, code: string, pupilIds: string[], f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, { pupilIds }, f);
 export const removePupil = (s: Session, code: string, pupilId: string, f?: Fetch) => request<null>(s, "DELETE", `/classes/${encodeURIComponent(code)}/pupils/${encodeURIComponent(pupilId)}`, undefined, f);

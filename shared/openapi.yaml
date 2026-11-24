@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.34
+  version: 0.2.35
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -127,6 +127,33 @@ paths:
       responses:
         "201": {description: Created}
         "409": {description: That school exists}
+  /platform/terms:
+    get:
+      summary: Site admin. Kerf's default terms, copied to each new free school when it registers (later changes leave existing schools alone)
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/Terms"}}}}
+    put:
+      summary: Site admin. Replace the default terms (grants last `months` from registration). 422 with the reason if anything is wrong
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Terms"}}}}
+      responses:
+        "200": {description: Saved, content: {application/json: {schema: {$ref: "#/components/schemas/Terms"}}}}
+  /schools/{schoolId}/terms:
+    parameters:
+      - {name: schoolId, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Site admin. One school's own terms (null for a paid school) and what they give it now
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/SchoolTerms"}}}}
+    put:
+      summary: Site admin. Replace one school's terms (grants have from and until dates)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/Terms"}}}}
+      responses:
+        "200": {description: Saved, content: {application/json: {schema: {$ref: "#/components/schemas/SchoolTerms"}}}}
+  /school/terms:
+    get:
+      summary: Teacher, admin. What the school's plan gives it now (features, limits, the extras running and when they end)
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {$ref: "#/components/schemas/TermsNow"}}}}
   /school:
     get:
       summary: Admin or teacher. My school (id, name, autoApprove)
@@ -1370,6 +1397,7 @@ components:
         joinCode: {type: string, description: "What pupils type to join or sign in through the group (unique in the school; the code unless a teacher set another)"}
         archived: {type: boolean}
         source: {enum: [manual, csv, dino, google, microsoft], description: "Where the group came from"}
+        laser: {type: boolean, description: "A laser group: may send files to the laser while the school's terms limit laser groups. Set by a school admin with PUT /classes/{code} {laser}"}
     CameraCalibration:
       type: object
       required: [imageWidth, imageHeight, points, homography]
@@ -1424,6 +1452,45 @@ components:
         plan: {type: [string, "null"], enum: [free, paid, null], description: "The school's plan; null for a session with no school."}
         schoolName: {type: [string, "null"]}
         schoolCode: {type: [string, "null"]}
+        features: {type: [object, "null"], description: "What the school's plan gives it now: {laser, activities}"}
+        limits: {type: [object, "null"], description: "The school's limits now (null values: no limit)"}
+    Terms:
+      type: object
+      properties:
+        features: {type: object, properties: {laser: {type: boolean}, activities: {type: boolean}}}
+        limits:
+          type: object
+          description: "null: no limit"
+          properties:
+            groupsPerSchool: {type: [integer, "null"]}
+            pupilsPerGroup: {type: [integer, "null"]}
+            filesPerPupil: {type: [integer, "null"]}
+            laserGroups: {type: [integer, "null"], description: "How many groups may send to the laser (a school admin picks them); null: every group"}
+        grants:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            properties:
+              label: {type: string}
+              months: {type: integer, minimum: 1, maximum: 120, description: "Default terms only: how long it lasts from registration"}
+              from: {type: [string, "null"], format: date-time, description: "A school's terms only; null: from the start"}
+              until: {type: [string, "null"], format: date-time, description: "A school's terms only; null: for good"}
+              features: {type: object, description: "Turned on while the grant runs"}
+              limits: {type: object, description: "Raised while the grant runs (the more generous wins; null: no limit)"}
+    TermsNow:
+      type: object
+      properties:
+        features: {type: object, properties: {laser: {type: boolean}, activities: {type: boolean}}}
+        limits: {type: object}
+        grants: {type: array, items: {type: object, properties: {label: {type: string}, until: {type: [string, "null"]}}}}
+        paid: {type: boolean}
+    SchoolTerms:
+      type: object
+      properties:
+        plan: {enum: [free, paid]}
+        terms: {oneOf: [{$ref: "#/components/schemas/Terms"}, {type: "null"}]}
+        now: {$ref: "#/components/schemas/TermsNow"}
     LogLevel:
       type: string
       enum: [DEBUG, INFO, WARNING, ERROR]

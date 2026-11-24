@@ -57,7 +57,13 @@ def update_class(code: str, body: dict[str, Any] = Body(...), who: Principal = D
     req, archived = body.get("requireApproval"), body.get("archived")
     if (req is not None and not isinstance(req, bool)) or (archived is not None and not isinstance(archived, bool)):
         raise ApiError(422, "invalid", "requireApproval and archived are true or false.")
+    laser = body.get("laser")
+    if laser is not None and (not isinstance(laser, bool) or not who.is_admin):
+        raise ApiError(422 if not isinstance(laser, bool) else 403, "invalid" if not isinstance(laser, bool) else "forbidden",
+                       "laser is true or false." if not isinstance(laser, bool) else "Only a school admin picks the laser groups.")
     c = sc.update_class(s, code, who_teacher(who), _opt_text(body, "label"), req, who.school, join_code=_opt_text(body, "joinCode"), archived=archived)
+    if laser is not None:
+        sc.set_laser(s, c, laser)
     return sc.class_info(s, c, len(sc.member_ids(s, c.code)))
 
 

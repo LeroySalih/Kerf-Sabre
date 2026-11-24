@@ -5,12 +5,13 @@ import { infoDialog, openDialog, type DialogValue } from "../dialog";
 import { profileFromForm, stationFields } from "../machineform";
 import { materialFields, opText, overrideFields, presetFromForm, presetWithOverride } from "../materialform";
 import { presetLabel, type Preset } from "../presets";
+import { termsFields, termsFromForm, termsText, type Terms } from "../termsform";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -85,29 +86,50 @@ const overview: Page = {
 const APPROVAL = [{ v: "yes", text: "A teacher approves each file" }, { v: "no", text: "Straight to the queue" }];
 
 const classes: Page = {
-  key: "classes", title: "Classes", lead: "Each class has its own sign-in code, pupils and activities. Choose how its files reach the laser.",
+  key: "classes", title: "Classes", lead: "Each class (group) has its own join code, pupils and activities. A pupil can be in several groups. Rename a group when it moves up a year, or archive it.",
   mount(host, ctx) {
     const s = ctx.session;
+    let showArchived = false;
     const draw = async () => {
-      const list = await listClasses(s);
+      const list = await listClasses(s, undefined, showArchived);
       const redraw = () => void draw().catch((e) => fail(host, e));
+      const laserLimit = s.limits?.laserGroups ?? null;
+      const pickLaser = isPaid(s) && laserLimit != null && s.role === "admin";
       const bar = el("div", { class: "ad-bar" }, btn("New class…", () => void (async () => {
         const v = await openDialog("New class", [
-          { key: "code", label: "Class code", type: "text", value: "", hint: "Letters, digits, - and _. Pupils type this to sign in" },
+          { key: "code", label: "Class code (optional)", type: "text", value: "", hint: "Letters, digits, - and _. Leave blank and Kerf makes one. Pupils type it to sign in" },
           { key: "label", label: "Note (optional)", type: "text", value: "", hint: "For you, e.g. Year 9 set 2. Not a pupil name" },
-          { key: "approval", label: "Files from this class", type: "select", value: "yes", options: APPROVAL.map((a) => ({ value: a.v, label: a.text })) },
+          ...(isPaid(s) ? [{ key: "approval", label: "Files from this class", type: "select" as const, value: "yes", options: APPROVAL.map((a) => ({ value: a.v, label: a.text })) }] : []),
         ], { ok: "Create" });
-        if (v && String(v.code).trim()) await attempt(() => createClass(s, String(v.code).trim(), String(v.label).trim(), v.approval !== "no"), redraw);
-      })(), "on"));
-      if (!list.length) return host.replaceChildren(bar, empty("No classes yet. Create one, then add the pupils' DINO IDs."));
-      host.replaceChildren(bar, table(["Class", "Note", "Teacher", "Pupils", "Files from this class", ""], list.map((c) => {
+        if (v) await attempt(() => createClass(s, String(v.code ?? "").trim(), String(v.label ?? "").trim(), v.approval !== "no"), redraw);
+      })(), "on"), btn(showArchived ? "Show current classes" : "Show archived classes", () => { showArchived = !showArchived; redraw(); }));
+      if (!list.length) return host.replaceChildren(bar, empty(showArchived ? "No archived classes." : "No classes yet. Create one, then add the pupils' IDs."));
+      const head = ["Class", "Join code", "Note", "Teacher", "Pupils", ...(isPaid(s) ? ["Files from this class"] : []), ...(pickLaser ? ["Laser group"] : []), ""];
+      host.replaceChildren(bar, table(head, list.map((c) => {
         const sel = el("select", { "aria-label": `Approval for ${c.code}` }, ...APPROVAL.map((a) => new Option(a.text, a.v)));
         sel.value = c.requireApproval === false ? "no" : "yes";
         sel.addEventListener("change", () => void attempt(() => updateClass(s, c.code, { requireApproval: sel.value !== "no" }), redraw));
-        return el("tr", {}, cell(el("b", {}, c.code)), cell(c.label ?? ""), cell(c.teacherId ?? "shared"), cell(String(c.pupilCount)), cell(sel),
-          actions(btn("Pupils…", () => openClasses(s, { openFile: lookAtFile }, c.code)), btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")),
-            btn("Progress…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "progress"))));
-      })), el("p", { class: "hint" }, "Changing the approval setting only affects files sent from now on. Files already waiting stay as they are."));
+        const laser = el("input", { type: "checkbox", "aria-label": `Laser group ${c.code}` }) as HTMLInputElement;
+        laser.checked = !!c.laser;
+        laser.addEventListener("change", () => void attempt(() => updateClass(s, c.code, { laser: laser.checked }), redraw));
+        const edit = btn("Edit…", () => void (async () => {
+          const v = await openDialog(`Class ${c.code}`, [
+            { key: "label", label: "Note", type: "text", value: c.label ?? "", hint: "e.g. Year 10 set 2 after moving up a year" },
+            { key: "joinCode", label: "Join code", type: "text", value: c.joinCode ?? c.code, hint: "What pupils type to sign in. Unique in your school" },
+          ], { ok: "Save" });
+          if (v) await attempt(() => updateClass(s, c.code, { label: String(v.label ?? "").trim(), joinCode: String(v.joinCode ?? "").trim() || c.code }), redraw);
+        })());
+        const archive = btn(c.archived ? "Bring back" : "Archive", () => {
+          if (!c.archived && !confirm(`Archive ${c.code}? Its pupils can no longer sign in through it; their files and work are kept.`)) return;
+          void attempt(() => updateClass(s, c.code, { archived: !c.archived }), redraw);
+        });
+        return el("tr", {}, cell(el("b", {}, c.code)), cell(el("code", {}, c.joinCode ?? c.code)), cell(c.label ?? ""), cell(c.teacherId ?? "shared"), cell(String(c.pupilCount)),
+          ...(isPaid(s) ? [cell(sel)] : []), ...(pickLaser ? [cell(laser)] : []),
+          actions(btn("Pupils…", () => openClasses(s, { openFile: lookAtFile }, c.code)),
+            ...(hasActivities(s) ? [btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")), btn("Progress…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "progress"))] : []),
+            edit, archive));
+      })), ...(isPaid(s) ? [el("p", { class: "hint" }, "Changing the approval setting only affects files sent from now on. Files already waiting stay as they are.")] : []),
+      ...(pickLaser ? [el("p", { class: "hint" }, `Your plan lets up to ${laserLimit} class${laserLimit === 1 ? "" : "es"} send files to the laser. Tick them under "Laser group".`)] : []));
     };
     void draw().catch((e) => fail(host, e));
   },
@@ -432,7 +454,7 @@ const schools: Page = {
           await createSchool(s, String(v.id).trim(), String(v.name).trim());
         }, redraw);
       })(), "on"));
-      host.replaceChildren(bar, list.length ? table(["ID", "Name", "School code", "Plan", "Created"], list.map((x) => {
+      host.replaceChildren(bar, list.length ? table(["ID", "Name", "School code", "Plan", "Created", ""], list.map((x) => {
         const plan = el("select", { "aria-label": `Plan for ${x.name}` }, new Option("Free", "free"), new Option("Paid", "paid")) as HTMLSelectElement;
         plan.value = x.plan ?? "paid";
         plan.addEventListener("change", () => {
@@ -440,22 +462,60 @@ const schools: Page = {
           if (!confirm(`Put ${x.name} on the ${want} plan?${want === "free" ? " Its queue, lasers, Station pages, camera, activities and approval stop working." : ""}`)) { plan.value = x.plan ?? "paid"; return; }
           void attempt(() => updateSchool(s, x.id, { plan: want }), redraw);
         });
-        return el("tr", {}, cell(el("b", {}, x.id)), cell(x.name), cell(el("code", {}, x.code ?? "")), cell(plan), cell(x.createdAt ? new Date(x.createdAt).toLocaleDateString() : ""));
+        const terms = btn("Terms…", () => void editSchoolTerms(s, x.id, x.name).then(redraw));
+        return el("tr", {}, cell(el("b", {}, x.id)), cell(x.name), cell(el("code", {}, x.code ?? "")), cell(plan), cell(x.createdAt ? new Date(x.createdAt).toLocaleDateString() : ""),
+          actions(...(x.plan === "free" ? [terms] : [])));
       })) : empty("No schools yet."));
     };
     void draw().catch((e) => fail(host, e));
   },
 };
 
-/** The School Admin site's pages for this role and plan. A free school gets the free tools only (no queue, lasers, activities). */
-export function pagesFor(role: string, plan: string | null | undefined = "paid"): Page[] {
-  if (role === "platform") return [schools];
-  const paid = plan !== "free";
-  if (role === "technician") return paid ? [stationPages] : []; // technicians run the stations and see nothing else here
-  if (!paid) return role === "admin" ? [classes, pupils, materials, schoolPage, staff] : [classes, pupils, materials];
-  const base = [overview, classes, pupils, activities, queue, materials, stations];
-  return role === "admin" ? [...base, stationPages, schoolPage, staff] : base;
+type Features = { laser: boolean; activities: boolean };
+const featuresOf = (f: Features | string | null | undefined): Features =>
+  f && typeof f === "object" ? f : f === "free" ? { laser: false, activities: false } : { laser: true, activities: true };
+
+/** The School Admin site's pages for this role and what the school's plan gives it (`features` from /auth/me, or an older
+ * server's plan name). Without the laser there is no queue, overview, lasers or Station pages; without activities, no Activities page. */
+export function pagesFor(role: string, features: Features | string | null | undefined = "paid"): Page[] {
+  if (role === "platform") return platformPages();
+  const f = featuresOf(features);
+  if (role === "technician") return f.laser ? [stationPages] : []; // technicians run the stations and see nothing else here
+  const base = [...(f.laser ? [overview] : []), classes, pupils, ...(f.activities ? [activities] : []), ...(f.laser ? [queue] : []), materials, ...(f.laser ? [stations] : [])];
+  return role === "admin" ? [...base, ...(f.laser ? [stationPages] : []), schoolPage, staff] : base;
 }
+
+/** The Platform: one school's own terms (a free school's copy of the default, made when it registered). */
+async function editSchoolTerms(s: Session, id: string, name: string): Promise<void> {
+  try {
+    const cur = await getSchoolTerms(s, id);
+    const base: Terms = cur.terms ?? await getDefaultTerms(s);
+    const v = await openDialog(`Terms for ${name}`, termsFields(base, false), { ok: "Save" });
+    if (!v) return;
+    const saved = await setSchoolTerms(s, id, termsFromForm(v, false));
+    await infoDialog(`${name} now has`, [termsText(saved.now), ...saved.now.grants.map((g) => `${g.label}${g.until ? ` until ${new Date(g.until).toLocaleDateString()}` : ""}`)]);
+  } catch (e) { await infoDialog("That didn't work", [msg(e)]); }
+}
+
+/** The Platform: Kerf's default terms, copied to each new free school when it registers. */
+const defaultTerms: Page = {
+  key: "terms", title: "Default terms", lead: "What a free school gets when it registers. The school keeps a copy: changing these later does not change schools that already exist (use Terms… on the Schools page for one school).",
+  mount(host, ctx) {
+    const s = ctx.session;
+    const draw = async () => {
+      const t = await getDefaultTerms(s);
+      const redraw = () => void draw().catch((e) => fail(host, e));
+      host.replaceChildren(el("div", { class: "ad-card" }, el("p", {}, el("b", {}, "Always: "), termsText(t)),
+        ...t.grants.map((g) => el("p", {}, el("b", {}, `${g.label}: `), `for ${g.months} month${g.months === 1 ? "" : "s"} from registration, `, termsText({ features: { laser: !!g.features.laser, activities: !!g.features.activities }, limits: g.limits as Record<string, number | null> }).replace(" · no limits", ""))),
+        el("div", { class: "ad-bar" }, btn("Change…", () => void (async () => {
+          const v = await openDialog("Default terms for new schools", termsFields(t, true), { ok: "Save" });
+          if (!v) return;
+          await attempt(async () => { await setDefaultTerms(s, termsFromForm(v, true)); }, redraw);
+        })(), "on"))));
+    };
+    void draw().catch((e) => fail(host, e));
+  },
+};
 
 const SIGN_IN_LABELS: [keyof SignInSettings["methods"], string, string][] = [
   ["groupCode", "Group code", "Pupils type the school code, their group code, their pupil ID and the password on their card."],
@@ -471,7 +531,7 @@ const schoolPage: Page = {
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
-      const [sc, si] = await Promise.all([mySchool(s), getSignIn(s)]);
+      const [sc, si, now] = await Promise.all([mySchool(s), getSignIn(s), myTerms(s).catch(() => null)]);
       const redraw = () => void draw().catch((e) => fail(host, e));
       const rows = SIGN_IN_LABELS.map(([k, label, hint]) => {
         const box = el("input", { type: "checkbox", "aria-label": label }) as HTMLInputElement;
@@ -484,7 +544,8 @@ const schoolPage: Page = {
       host.replaceChildren(
         el("div", { class: "ad-card" }, el("h3", {}, sc.name), el("p", {}, "School code: ", el("code", { class: "ad-code" }, sc.code ?? "")),
           el("p", { class: "hint" }, "Pupils type this school code when they sign in with a group code."),
-          el("p", {}, `Plan: ${sc.plan === "free" ? "Free (the Editor, accounts, groups and saved files)" : "Paid (also the queue, lasers, Station pages, camera, activities and approval)"}`)),
+          el("p", {}, `Plan: ${sc.plan === "free" ? "Free" : "Paid (everything, no limits)"}`),
+          ...(now && !now.paid ? [el("p", {}, termsText(now)), ...now.grants.map((g) => el("p", { class: "hint" }, `${g.label}${g.until ? `, until ${new Date(g.until).toLocaleDateString()}` : ""}`))] : [])),
         el("h2", {}, "How people sign in"), table(["Method", "", ""], rows));
     };
     void draw().catch((e) => fail(host, e));
@@ -492,4 +553,4 @@ const schoolPage: Page = {
 };
 
 /** The Platform site (Kerf's site admins only): all schools. */
-export const platformPages = (): Page[] => [schools];
+export const platformPages = (): Page[] => [schools, defaultTerms];

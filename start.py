@@ -6,7 +6,7 @@
     python3 start.py --help
 
 What runs
-  Server     the API and (by default) the built Editor, on ONE port: http://localhost:8000 (the first free port from 8000).
+  Server     the API, the website and (by default) the built Editor at /editor/, on ONE port: http://localhost:8000 (the first free port from 8000).
   Editor     served by the Server. With --dev, Vite's hot-reload server runs too, on its own port (first free from 5173),
              and forwards /api to the Server, so there is nothing to configure.
   Connector  the laser connector for this PC. The real Cutter is not written yet (it waits for the spike results), so this
@@ -291,7 +291,8 @@ def main() -> int:
         open_url = f"http://localhost:{editor_port or server_port}"
         bar = "=" * 66
         print(f"\n{bar}\n Kerf Sabre is running\n")
-        print(f"   Open:        {open_url}   <- the Editor" + ("  (live reload)" if args.dev else ""))
+        print(f"   Website:     {open_url}/   <- landing page, /pricing and /sign-in (one sign-in page for everyone)")
+        print(f"   Editor:      {open_url}/editor/" + ("  (live reload)" if args.dev else ""))
         print(f"   Admin site:  http://localhost:{editor_port or server_port}/admin/   <- teachers: classes, pupils, activities, queue, lasers")
         print(f"   Server API:  http://localhost:{server_port}   (docs: /api/v1/docs)")
         if ip:

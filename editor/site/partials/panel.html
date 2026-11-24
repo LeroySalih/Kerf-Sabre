@@ -1,0 +1,110 @@
+<!-- The sign-in panel (from the design's SignInPanel), included by the landing page and /sign-in. src/site/panel.ts runs it. -->
+<section class="kp" data-signin-panel aria-labelledby="kerf-signin-title">
+
+<!-- ========== FORM ========== -->
+<div class="kp-view" data-view="form">
+<h2 id="kerf-signin-title" class="kp-title">Sign in to Kerf</h2>
+<p class="kp-alert" data-alert role="alert" hidden></p>
+
+<div role="group" aria-label="Who are you?" class="kp-tabs">
+<button type="button" class="kp-tab" data-role="pupil" aria-pressed="true">I'm a pupil</button>
+<button type="button" class="kp-tab" data-role="staff" aria-pressed="false">I'm staff</button>
+</div>
+
+<!-- ---- Pupil ---- -->
+<div class="kp-part" data-only="pupil">
+<form class="kp-form is-soon" aria-label="Sign in with your Pupil Card" data-pupil-card>
+<fieldset disabled class="kp-fieldset">
+<p class="kp-strong kp-row">Use your Pupil Card <span class="soon">Coming soon</span></p>
+<div class="kp-pair">
+<div class="kp-field">
+<label for="k-school">School code</label>
+<input id="k-school" name="school" type="text" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="K7QHM" class="kp-input kp-code">
+</div>
+<div class="kp-field">
+<label for="k-group">Group code</label>
+<input id="k-group" name="group" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="9B-DT" class="kp-input">
+</div>
+</div>
+<div class="kp-field">
+<label for="k-pupil">Pupil ID</label>
+<input id="k-pupil" name="pupil" type="text" inputmode="numeric" autocomplete="username" placeholder="20417" class="kp-input">
+</div>
+<div class="kp-field">
+<label for="k-pass">Password</label>
+<input id="k-pass" name="password" type="password" autocomplete="current-password" placeholder="tiger-river" aria-describedby="k-pass-help" class="kp-input">
+<span id="k-pass-help" class="kp-hint">Two words with a dash, like tiger-river.</span>
+</div>
+<div class="kp-note">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 2px"><rect x="2" y="5" width="20" height="14" rx="2"></rect><circle cx="8" cy="12" r="2.5"></circle><path d="M13 10h5M13 14h3"></path></svg>
+<span>Your teacher gives you a card with these. Ask them if you've lost it.</span>
+</div>
+<button type="button" class="kp-primary">Sign in</button>
+</fieldset>
+</form>
+<div class="kp-divider"><span></span><span>or use your school's sign-in</span><span></span></div>
+</div>
+
+<!-- SSO (both) -->
+<div class="kp-sso-list">
+<button type="button" class="kp-sso" data-dino><span aria-hidden="true" class="kp-sso-mark">D</span>Sign in with DINO</button>
+<button type="button" class="kp-sso is-soon" disabled><span aria-hidden="true" class="kp-sso-mark">G</span>Sign in with Google <span class="soon">Coming soon</span></button>
+<button type="button" class="kp-sso is-soon" disabled><span aria-hidden="true" class="kp-sso-mark">M</span>Sign in with Microsoft <span class="soon">Coming soon</span></button>
+<p class="kp-hint">Use the one your school uses.</p>
+</div>
+
+<!-- ---- Staff: email link ---- -->
+<div class="kp-part" data-only="staff" hidden>
+<div class="kp-divider"><span></span><span>or get a link by email</span><span></span></div>
+<form class="kp-form kp-form-tight" aria-label="Get a sign-in link by email" data-email-form novalidate>
+<div class="kp-field">
+<label for="k-email">School email address</label>
+<input id="k-email" name="email" type="email" autocomplete="email" placeholder="name@westfieldhigh.example" aria-describedby="k-email-help" class="kp-input kp-email" required>
+</div>
+<button type="submit" class="kp-primary">Send me a sign-in link</button>
+<p id="k-email-help" class="kp-hint">We email you a link. It works once, for 15 minutes.</p>
+</form>
+</div>
+</div>
+
+<!-- ========== BUSY (an emailed link is being traded for a session) ========== -->
+<div class="kp-view kp-gap16" data-view="busy" role="status" hidden>
+<h2 class="kp-title" data-title>Signing you in</h2>
+<p class="kp-p">One moment.</p>
+</div>
+
+<!-- ========== SENT ========== -->
+<div class="kp-view kp-gap16" data-view="sent" role="status" hidden>
+<span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M2 7l10 7 10-7"></path></svg></span>
+<h2 class="kp-title" data-title>Check your email</h2>
+<p class="kp-p">If that address belongs to a Kerf account, a sign-in link is on its way. Check your junk folder.</p>
+<p class="kp-p kp-box">The link works once, for 15 minutes. After that, ask for a new one.</p>
+<button type="button" class="kp-secondary" data-back-staff>Use a different email address</button>
+</div>
+
+<!-- ========== EXPIRED ========== -->
+<div class="kp-view kp-gap16" data-view="expired" hidden>
+<span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+<h2 class="kp-title" data-title>Link expired</h2>
+<p class="kp-p" role="alert">That sign-in link has expired or has already been used. Ask for a new one.</p>
+<form class="kp-form kp-form-tight" aria-label="Ask for a new sign-in link" data-email-form novalidate>
+<div class="kp-field">
+<label for="k-email-exp">School email address</label>
+<input id="k-email-exp" name="email" type="email" autocomplete="email" placeholder="name@westfieldhigh.example" class="kp-input kp-email" required>
+</div>
+<p class="kp-alert" data-alert role="alert" hidden></p>
+<button type="submit" class="kp-primary">Send me a new link</button>
+<p class="kp-hint">The new link works once, for 15 minutes.</p>
+</form>
+<button type="button" class="kp-textbtn" data-back-pupil>Back to all sign-in options</button>
+</div>
+
+<!-- ========== FOOTER LINKS ========== -->
+<div class="kp-foot" data-foot>
+<div class="kp-col">
+<a href="/editor/?offline=1" class="kp-foot-link">Work without signing in</a>
+<span class="kp-hint">Opens the Editor. Your work stays in this browser.</span>
+</div>
+<span class="kp-foot-link is-soon" aria-disabled="true">New school? Register free <span class="soon">Coming soon</span></span>
+</div>
+</section>

@@ -135,7 +135,7 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
       ...(st?.cameraAvailable ? [button(st.calibrated ? "Recalibrate camera" : "Calibrate camera", () => void calibrate(), st.calibrated ? "" : "on")] : []),
       ...(st?.online && session.role !== "station" && !st.currentJobId ? [button("Disconnect Cutter", () => { if (confirm(`Disconnect the Cutter from ${stationId}? It stays disconnected until someone starts it again on its PC.`)) void guard(() => disconnectStation(session, stationId)); })] : []),
       ...(opts.onOtherStation ? [button("Other stations", () => opts.onOtherStation!())] : []),
-      ...(session.role === "admin" || session.role === "teacher" ? [h("a", { class: "btnlink", href: "/" }, "Editor")] : []),
+      ...(session.role === "admin" || session.role === "teacher" ? [h("a", { class: "btnlink", href: "/editor/" }, "Editor")] : []),
       ...(session.role === "admin" || session.role === "technician" ? [h("a", { class: "btnlink", href: "/admin/" }, "Admin site")] : []),
       button("Sign out", onSignOut));
     const was = qbar.capture();

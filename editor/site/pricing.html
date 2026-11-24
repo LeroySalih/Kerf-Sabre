@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kerf pricing</title>
+<meta name="description" content="One price per school, not per pupil. The Kerf Editor is free; the paid plan connects your lasers.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<!-- Kerf's public website: proprietary to mr-salih.org (see editor/LICENSING.md). The theme is read before the page draws, so it never flashes. -->
+<script>try{if(localStorage.getItem("kerf.site.theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<script type="module" src="/src/site/main.ts"></script>
+</head>
+<body data-page="pricing">
+<div style="font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif; font-size: 18px; line-height: 1.6; background: var(--bg); color: var(--text); min-height: 100%">
+
+<!-- HEADER -->
+<header style="border-bottom: 1px solid var(--border); background: var(--bg)">
+<nav aria-label="Main" style="max-width: 1200px; margin: 0 auto; padding: 14px clamp(20px, 5vw, 40px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<a href="/" style="display: flex; align-items: center; gap: 10px; min-height: 44px; text-decoration: none; color: var(--text)">
+<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="8" fill="#f97316"></rect><path d="M11 9v16M11 17l9-8M14.5 14l6.5 11" stroke="#18181b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+<span style="font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.01em">Kerf</span>
+</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px">
+<a href="/#how" style="color: var(--text); text-decoration: none; padding: 10px 0">How it works</a>
+<a href="/pricing" aria-current="page" style="color: var(--acc); font-weight: 700; text-decoration: underline; text-underline-offset: 6px; padding: 10px 0">Pricing</a>
+<a href="/sign-in" style="color: var(--text); text-decoration: none; padding: 10px 0">Sign in</a>
+<button type="button" data-theme-toggle aria-pressed="false" style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--field); background: transparent; color: var(--text); font: inherit; font-size: 16px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+<span>Dark theme</span>
+</button>
+</div>
+</nav>
+</header>
+
+<main>
+<!-- INTRO -->
+<section style="background-color: var(--bg); background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px); background-size: 22px 22px">
+<div style="max-width: 1200px; margin: 0 auto; padding: clamp(44px, 7vw, 80px) clamp(20px, 5vw, 40px) clamp(28px, 4vw, 40px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px">
+<p style="margin: 0; color: var(--acc); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase">Pricing</p>
+<h1 style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: clamp(2.1rem, 5.5vw, 3.5rem); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; max-width: 18ch">One price per school. Not per pupil.</h1>
+<p style="margin: 0; font-size: clamp(1.1rem, 2.2vw, 1.35rem); color: var(--muted); max-width: 46ch">A flat subscription, with no per-pupil or per-laser fees. Start free, and connect your lasers when you are ready.</p>
+</div>
+</section>
+
+<!-- OFFER BANNER -->
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 40px)">
+<aside aria-label="Offer for new schools" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; padding: 20px 24px; border-radius: 16px; background: var(--soft); border: 1.5px dashed var(--softB)">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" style="flex: none"><rect x="4" y="12" width="32" height="24" rx="3" stroke-width="2" style="fill: var(--wood); stroke: var(--cut)"></rect><rect x="2" y="8" width="36" height="8" rx="2" stroke-width="2" style="fill: var(--wood); stroke: var(--cut)"></rect><path d="M20 8v28" stroke-width="2" style="stroke: var(--cut)"></path><path d="M20 8c-3-6-10-6-9-1 1 3 6 2 9 1zM20 8c3-6 10-6 9-1-1 3-6 2-9 1z" fill="none" stroke-width="2" style="stroke: var(--cut)"></path></svg>
+<div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 2px">
+<p style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px">Offers for new schools</p>
+<p style="margin: 0; color: var(--muted)">New schools may get time-limited extras, e.g. 3 months of everything, or the laser for 10 groups for 12 months.</p>
+</div>
+<button type="button" disabled class="is-soon" style="font: inherit; font-weight: 700; border: 0; background: transparent; flex-wrap: wrap; column-gap: 10px; row-gap: 4px; padding: 0; display: inline-flex; align-items: center; min-height: 44px; color: var(--acc); font-weight: 700">Ask about offers <span class="soon">Coming soon</span></button>
+</aside>
+</div>
+
+<!-- PLANS -->
+<section aria-label="Plans">
+<div style="max-width: 1200px; margin: 0 auto; padding: 32px clamp(20px, 5vw, 40px) clamp(56px, 8vw, 96px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 24px; align-items: stretch">
+
+<div style="display: flex; flex-direction: column; gap: 22px; padding: clamp(24px, 5vw, 40px); border-radius: 20px; border: 1px solid var(--border); background: var(--card)">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 28px">Free</h2>
+<p style="margin: 0; color: var(--muted)">A free alternative to paid laser software, made for schools.</p>
+</div>
+<p style="margin: 0; display: flex; align-items: baseline; gap: 8px"><span style="font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 56px; line-height: 1">£0</span></p>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px">
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Kerf Editor (open source)</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Pupil and staff accounts</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Groups, with join codes (a pupil can be in several groups)</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Pupil Cards</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Files saved to Kerf</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Sign in with group codes, email links, DINO, Google or Microsoft</span></li>
+</ul>
+<div style="padding: 14px 16px; border-radius: 12px; background: var(--alt); border: 1px solid var(--border); font-size: 16px">
+<p style="margin: 0 0 4px; font-weight: 700">Limits</p>
+<p style="margin: 0; color: var(--muted)">Up to 20 groups, 50 pupils per group, and 20 saved files per pupil.</p>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px">
+<button type="button" disabled class="is-soon" style="font: inherit; font-weight: 700; border: 0; background: transparent; flex-wrap: wrap; column-gap: 10px; row-gap: 4px; display: inline-flex; align-items: center; justify-content: center; min-height: 56px; padding: 0 24px; border-radius: 12px; border: 2px solid var(--text); color: var(--text); font-weight: 700; text-decoration: none">Register free <span class="soon">Coming soon</span></button>
+<p style="margin: 0; text-align: center; font-size: 15px; color: var(--muted)">Registration is instant.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 22px; padding: clamp(24px, 5vw, 40px); border-radius: 20px; border: 2px solid #f97316; background: var(--card); box-shadow: 0 24px 48px -28px rgba(249,115,22,0.55)">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px">
+<h2 style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 28px">Paid</h2>
+<span style="padding: 2px 12px; border-radius: 999px; background: #f97316; color: #18181b; font-weight: 700; font-size: 14px">Per school</span>
+</div>
+<p style="margin: 0; color: var(--muted)">Less work for the teacher between a pupil's design and the laser.</p>
+</div>
+<p style="margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap"><span style="font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 56px; line-height: 1">£—</span><span style="color: var(--muted); font-size: 20px">/ year</span> <span class="soon">Coming soon</span></p>
+<p style="margin: 0; font-weight: 700">Everything in Free, plus:</p>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px">
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Laser connection (Kerf Cutter)</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>The queue, with approval and auto-approve</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Merging pupils' files</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Bulk cancel and change material</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Search by pupil and group</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Station pages for technicians</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Camera alignment</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>Activities and teacher feedback</span></li>
+<li style="display: flex; gap: 12px; align-items: flex-start"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none; margin-top: 4px"><path d="M5 12l5 5 9-10"></path></svg><span>No limits</span></li>
+</ul>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px">
+<button type="button" disabled class="is-soon" style="font: inherit; font-weight: 700; border: 0; background: transparent; flex-wrap: wrap; column-gap: 10px; row-gap: 4px; display: inline-flex; align-items: center; justify-content: center; min-height: 56px; padding: 0 24px; border-radius: 12px; background: #f97316; color: #18181b; font-weight: 700; text-decoration: none">Talk to us <span class="soon">Coming soon</span></button>
+<p style="margin: 0; text-align: center; font-size: 15px; color: var(--muted)">Kerf approves each paid school. We accept invoices and purchase orders.</p>
+</div>
+</div>
+</div>
+</section>
+
+<!-- COMPARISON -->
+<section aria-labelledby="cmp-h" style="background: var(--alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border)">
+<div style="max-width: 1000px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) clamp(20px, 5vw, 40px); display: flex; flex-direction: column; gap: 28px">
+<h2 id="cmp-h" style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.15">Compare Free and Paid</h2>
+<div tabindex="0" role="region" aria-label="Feature comparison table. Scroll sideways on small screens." style="position: relative; overflow-x: auto; border-radius: 16px; border: 1px solid var(--border); background: var(--card)">
+<table style="width: 100%; min-width: 520px; border-collapse: collapse; font-size: 17px">
+<thead>
+<tr style="background: var(--card)">
+<th scope="col" style="text-align: left; padding: 18px 20px; font-family: Lexend, Arial, sans-serif; font-weight: 600; border-bottom: 2px solid var(--border)">Feature</th>
+<th scope="col" style="width: 22%; text-align: center; padding: 18px 12px; font-family: Lexend, Arial, sans-serif; font-weight: 600; border-bottom: 2px solid var(--border)">Free</th>
+<th scope="col" style="width: 22%; text-align: center; padding: 18px 12px; font-family: Lexend, Arial, sans-serif; font-weight: 600; border-bottom: 2px solid var(--border); color: var(--acc)">Paid</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th scope="colgroup" colspan="3" style="text-align: left; padding: 22px 20px 10px; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acc); background: var(--soft); border-bottom: 1px solid var(--border)">Design</th>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Kerf Editor: shapes, text, booleans and offsets</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Finger-joint boxes and box nets</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Image tracing</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">DXF import, and DXF and SVG export</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Files saved to Kerf</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<th scope="colgroup" colspan="3" style="text-align: left; padding: 22px 20px 10px; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acc); background: var(--soft); border-bottom: 1px solid var(--border)">Accounts &amp; groups</th>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Pupil and staff accounts</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Groups with join codes</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Pupil Cards</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Sign in with group codes and email links</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Sign in with DINO, Google or Microsoft</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--text)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<th scope="colgroup" colspan="3" style="text-align: left; padding: 22px 20px 10px; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acc); background: var(--soft); border-bottom: 1px solid var(--border)">Laser &amp; queue</th>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Laser connection (Kerf Cutter)</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Queue, with approval and auto-approve</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Merge pupils' files</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Bulk cancel and change material</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Search by pupil and group</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Station pages for technicians</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Camera alignment</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<th scope="colgroup" colspan="3" style="text-align: left; padding: 22px 20px 10px; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acc); background: var(--soft); border-bottom: 1px solid var(--border)">Teaching</th>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Activities</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Teacher feedback</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span aria-hidden="true" style="color: var(--muted); font-size: 22px">–</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Not included</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc)"><path d="M5 12l5 5 9-10"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Included</span></td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<th scope="colgroup" colspan="3" style="text-align: left; padding: 22px 20px 10px; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acc); background: var(--soft); border-bottom: 1px solid var(--border)">Limits</th>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Groups</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span>Up to 20</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span style="font-weight: 700">No limit</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Pupils per group</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span>Up to 50</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span style="font-weight: 700">No limit</span></td>
+</tr>
+<tr>
+<th scope="row" style="text-align: left; font-weight: 400; padding: 14px 20px; border-bottom: 1px solid var(--border)">Saved files per pupil</th>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span>Up to 20</span></td>
+<td style="text-align: center; padding: 14px 12px; border-bottom: 1px solid var(--border)"><span style="font-weight: 700">No limit</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+
+<!-- FAQ -->
+<section aria-labelledby="faq-h" style="background: var(--bg)">
+<div style="max-width: 860px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) clamp(20px, 5vw, 40px); display: flex; flex-direction: column; gap: 28px">
+<h2 id="faq-h" style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.15">Questions</h2>
+<div style="display: flex; flex-direction: column; border-top: 1px solid var(--border)">
+<details open style="border-bottom: 1px solid var(--border)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 0; cursor: pointer; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px; line-height: 1.35">Is the Editor really free?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<p style="margin: 0; padding: 0 0 22px; color: var(--muted); max-width: 62ch">Yes. The Kerf Editor is free and open source (AGPL-3.0). Anyone can use it, even without signing in. A free school account adds saved files, groups and Pupil Cards.</p>
+</details>
+<details style="border-bottom: 1px solid var(--border)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 0; cursor: pointer; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px; line-height: 1.35">What lasers work?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<p style="margin: 0; padding: 0 0 22px; color: var(--muted); max-width: 62ch">Kerf Cutter currently supports the Creality Falcon. Kerf Cutter is a small program that runs on the PC next to each laser and connects it to Kerf.</p>
+</details>
+<details style="border-bottom: 1px solid var(--border)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 0; cursor: pointer; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px; line-height: 1.35">Do pupils need email addresses?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<p style="margin: 0; padding: 0 0 22px; color: var(--muted); max-width: 62ch">No. Pupils can sign in with group codes: a school code, a group code, their pupil ID and a two-word password. These are printed on the Pupil Card from their teacher.</p>
+</details>
+<details style="border-bottom: 1px solid var(--border)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 0; cursor: pointer; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px; line-height: 1.35">How is pupils' data handled?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<p style="margin: 0; padding: 0 0 22px; color: var(--muted); max-width: 62ch">Kerf's logs carry pupil IDs, never names. Your school controls its own accounts. The Kerf team can see your school's data only with your school's permission. Kerf is hosted by mr-salih.org.</p>
+</details>
+<details style="border-bottom: 1px solid var(--border)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 0; cursor: pointer; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px; line-height: 1.35">Can we use our Google or Microsoft accounts?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<p style="margin: 0; padding: 0 0 22px; color: var(--muted); max-width: 62ch">Yes. Each school switches on the sign-in methods it wants: DINO, Google, Microsoft, email links for staff, and group codes for pupils.</p>
+</details>
+<details style="border-bottom: 1px solid var(--border)">
+<summary style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 12px 0; cursor: pointer; font-family: Lexend, Arial, sans-serif; font-weight: 600; font-size: 20px; line-height: 1.35">What happens when an offer ends?<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="stroke: var(--acc); flex: none"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<p style="margin: 0; padding: 0 0 22px; color: var(--muted); max-width: 62ch">Nothing is deleted. The extras just stop.</p>
+</details>
+</div>
+<p style="margin: 0; color: var(--muted)">Another question? <span class="is-soon" aria-disabled="true" style="color: var(--acc); font-weight: 700">Contact us</span> <span class="soon">Coming soon</span>.</p>
+</div>
+</section>
+</main>
+
+<!-- FOOTER -->
+<footer style="background: var(--alt); border-top: 1px solid var(--border)">
+<div style="max-width: 1200px; margin: 0 auto; padding: 48px clamp(20px, 5vw, 40px); display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 10px; max-width: 360px">
+<span style="display: flex; align-items: center; gap: 10px"><svg width="30" height="30" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="8" fill="#f97316"></rect><path d="M11 9v16M11 17l9-8M14.5 14l6.5 11" stroke="#18181b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><span style="font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 22px">Kerf</span></span>
+<p style="margin: 0; color: var(--muted); font-size: 16px">Laser design and cutting software for schools.</p>
+</div>
+<nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 4px 28px; font-size: 16px">
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Open-source Editor (AGPL-3.0) <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Privacy <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Terms <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Contact <span class="soon">Coming soon</span></span>
+</nav>
+</div>
+<div style="max-width: 1200px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 40px) 40px; color: var(--muted); font-size: 15px">Kerf by mr-salih.org</div>
+</footer>
+</div>
+</body>
+</html>

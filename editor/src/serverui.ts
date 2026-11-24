@@ -11,6 +11,7 @@ import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type 
 import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
 import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "./emailsignin";
+import { goToSignInPage, readSignInMeta, signInPageFor } from "./signinpage";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
   STATUS_TEXT, ServerError, isPaid, hasActivities, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
@@ -93,6 +94,11 @@ export interface ServerUiHandle {
 export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   let session: Session | null = null; saveSession(null); // an older version kept a pasted token here; only DINO sign-in is left
   let offline = false;
+  /** The Kerf Server's sign-in page, when it served this Editor (null: Vite, a file, or the Editor on its own keep the sign-in screen below). */
+  // (Offline, this page may be the service worker's copy: then the sign-in screen below stays, with its "work without signing in".)
+  const siteSignIn = typeof navigator !== "undefined" && navigator.onLine === false ? null : signInPageFor("editor", readSignInMeta());
+  /** Still finding out whether this tab is signed in (DINO return, emailed link, reload): nobody is sent to the sign-in page yet. */
+  let starting = true;
   /** The file in the tab that is showing (swapped by `setFile` when another tab is shown; saves hold on to the object they started on). */
   let cur: FileMeta = blankMeta();
   /** The class activity new saves are for (null: none). */
@@ -107,7 +113,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   const render = () => {
     const signedIn = !!session;
-    $("gate").hidden = signedIn || offline;
+    const wantsGate = !signedIn && !offline;
+    if (siteSignIn) { $("gate").hidden = true; if (wantsGate && !starting) leaveForSignIn(); }
+    else $("gate").hidden = !wantsGate;
     const person = $("srv-status") as HTMLButtonElement; // the signed-in person's menu (My files, Activities, Admin site, Sign out)
     if (signedIn) {
       delete person.dataset.direct;
@@ -131,6 +139,20 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     ctx.tabs.changed();
     showSaveState();
   };
+
+  /** Off to the Kerf Server's sign-in page (only when it served this Editor). The open tabs stay on this computer for when the person comes back. */
+  let leaving = false;
+  function leaveForSignIn(problemText = "", expired = false): void {
+    if (!siteSignIn || leaving) return;
+    leaving = true;
+    try { ctx.tabs.persist(); } catch { /* nothing to keep */ }
+    goToSignInPage(siteSignIn, problemText, { expired });
+  }
+  /** A sign-in did not work: say why on this page's sign-in screen, or on the Kerf Server's sign-in page. */
+  function signInFailed(problemText: string, expired = false): void {
+    if (siteSignIn) { starting = false; leaveForSignIn(problemText, expired); return; }
+    $("gate").hidden = false; $("gate-error").textContent = problemText;
+  }
 
   /** Keeps a DINO sign-in renewed while it is the current session. */
   let renewer: Renewer | null = null;
@@ -157,17 +179,18 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
 
   /** Is the Station page showing instead of the design Editor? */
   let stationMode = false;
-  /** The laser a technician or admin chose (the Admin site links to `/?station=<id>`; it survives the trip to DINO and back in this tab). */
+  /** The laser a technician or admin chose (the Admin site links to `/editor/?station=<id>`; it survives the trip to DINO and back in this tab). */
   const wantedStation = (): string | null => { try { return sessionStorage.getItem("kerf.station"); } catch { return null; } };
   const wantStation = (id: string | null): void => { try { if (id) sessionStorage.setItem("kerf.station", id); else sessionStorage.removeItem("kerf.station"); } catch { /* fine */ } };
-  // The laser lives in the address (`/?station=station-1`) while the Station page is open, so a reload keeps it and the plain Editor address
-  // ("/") never inherits it. It is kept in sessionStorage only for the trip to DINO and back (that return address has `code=`).
+  // The laser lives in the address (`/editor/?station=station-1`) while the Station page is open, so a reload keeps it and the plain Editor
+  // address (`/editor/`) never inherits it. It is kept in sessionStorage only for the trip to DINO and back (that return address has `code=`),
+  // and for the trip through the sign-in page.
   try {
     const q = new URLSearchParams(location.search);
     if (q.get("station")) wantStation(q.get("station"));
     else if (!q.get("code") && !q.get("error")) wantStation(null);
   } catch { /* fine */ }
-  const showStationInAddress = (id: string | null): void => { try { history.replaceState(null, "", id ? `/?station=${encodeURIComponent(id)}` : location.pathname); } catch { /* fine */ } };
+  const showStationInAddress = (id: string | null): void => { try { history.replaceState(null, "", id ? `${location.pathname}?station=${encodeURIComponent(id)}` : location.pathname); } catch { /* fine */ } };
 
   /** A technician always gets the Station page (and picks the laser); an admin or teacher gets it when they follow a station link; everyone else gets the design Editor. */
   function enterRole(): void {
@@ -557,6 +580,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   $("gate-url").addEventListener("change", () => { authConfig = { mode: "planner", sso: null }; });
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); void ctx.tabs.restore("offline"); });
+  // "Work without signing in" on the Kerf sign-in page opens /editor/?offline=1 (it stays in the address, so a reload stays offline)
+  if (new URLSearchParams(location.search).get("offline")) { offline = true; void ctx.tabs.restore("offline"); }
   $("srv-signin").addEventListener("click", () => { if (session) signOut(); else { offline = false; render(); } });
   window.addEventListener("kerf-profile", () => render()); // the person's name arrived from DINO
   $("srv-status").addEventListener("click", () => { if (!session) { offline = false; render(); } });
@@ -603,7 +628,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     if (link) { // opened from a staff sign-in email
       cleanLinkFromAddress();
       try { await signedIn(await finishEmailSignIn("editor", ($("gate-url") as HTMLInputElement).value, link)); }
-      catch (e) { $("gate").hidden = false; $("gate-error").textContent = problem(e); }
+      catch (e) { signInFailed(problem(e), e instanceof ServerError && e.status >= 400 && e.status < 500); }
       return;
     }
     if (!session) {
@@ -611,18 +636,18 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       if (s) { await signedIn(s); return; }
     }
     if (readCallback(location.search)) {
-      $("gate").hidden = false;
+      if (!siteSignIn) $("gate").hidden = false;
       try {
         const r = await finishSignIn("editor", location.search, location);
         cleanAddress();
         if (r) { await signedIn(r.session); keepAlive(r.session, r.tokens); }
-      } catch (e) { cleanAddress(); $("gate").hidden = false; $("gate-error").textContent = problem(e); }
+      } catch (e) { cleanAddress(); signInFailed(problem(e)); }
     } else if (!session) {
       const r = await restoreSignIn("editor");
       if (r) { await signedIn(r.session); keepAlive(r.session, r.tokens); }
     }
   };
-  void dinoStart();
+  void dinoStart().catch(() => undefined).finally(() => { starting = false; render(); });
   if (session) {
     // a stored token may have been revoked: check it, and show the sign-in page if so
     void request<{ id: string }>(session, "GET", "/auth/me").then(async () => { await loadPresets(); enterRole(); const restored = !!session && !stationMode && (await ctx.tabs.restore(session.id)); if (session?.role === "pupil" && !restored) void files(true); }).catch((e) => {

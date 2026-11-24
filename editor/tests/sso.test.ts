@@ -78,8 +78,12 @@ describe("PKCE and URLs", () => {
     expect(Object.fromEntries(u.searchParams)).toEqual({ response_type: "code", client_id: "kerf-editor", redirect_uri: "https://kerf.school/", code_challenge: "CH", code_challenge_method: "S256", state: "ST", scope: "profile" });
   });
   it("redirects back to the page itself (Editor and Admin differ)", () => {
-    expect(redirectUriFor({ origin: "https://k", pathname: "/" })).toBe("https://k/");
-    expect(redirectUriFor({ origin: "https://k", pathname: "/admin/" })).toBe("https://k/admin/");
+    expect(redirectUriFor("editor", { origin: "https://k" })).toBe("https://k/");
+    expect(redirectUriFor("admin", { origin: "https://k" })).toBe("https://k/admin/");
+    // fixed, wherever the sign-in starts: the Editor at /editor/, the sign-in page at /sign-in (DINO's registered URIs stay `/` and `/admin/`)
+    expect(redirectUriFor("editor", { origin: "https://k", pathname: "/editor/" } as { origin: string })).toBe("https://k/");
+    expect(redirectUriFor("editor", { origin: "https://k", pathname: "/sign-in" } as { origin: string })).toBe("https://k/");
+    expect(redirectUriFor("admin", { origin: "https://k", pathname: "/sign-in" } as { origin: string })).toBe("https://k/admin/");
   });
   it("reads what DINO sends back", () => {
     expect(readCallback("")).toBeNull();

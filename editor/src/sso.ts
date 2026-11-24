@@ -30,8 +30,9 @@ const b64url = (bytes: Uint8Array): string => btoa(String.fromCharCode(...bytes)
 export const randomString = (bytes = 32): string => b64url(crypto.getRandomValues(new Uint8Array(bytes)));
 export const pkceChallenge = async (verifier: string): Promise<string> => b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
 
-/** This page's own address without any query: the registered redirect URI (`<origin>/` for the Editor, `<origin>/admin/` for Admin). */
-export const redirectUriFor = (loc: { origin: string; pathname: string }): string => loc.origin + loc.pathname;
+/** The registered redirect URI: `<origin>/` for the Editor and `<origin>/admin/` for Admin, wherever the sign-in starts (the Editor now
+ *  lives at /editor/ and the sign-in page at /sign-in; the server forwards `/?code=` to /editor/, so DINO's registration did not change). */
+export const redirectUriFor = (app: App, loc: { origin: string }): string => loc.origin + (app === "admin" ? "/admin/" : "/");
 
 export function buildAuthorizeUrl(a: { cfg: SsoConfig; clientId: string; redirectUri: string; challenge: string; state: string; scope?: string }): string {
   const u = new URL(a.cfg.authorizeUrl);
@@ -64,7 +65,7 @@ const write = (st: Storage, k: string, v: unknown | null): void => { try { if (v
 export async function beginSignIn(app: App, baseUrl: string, cfg: SsoConfig, loc: { origin: string; pathname: string }, go: (url: string) => void, st: Storage = sessionStorage): Promise<void> {
   const verifier = randomString(48), state = randomString(24);
   write(st, pendingKey(app), { verifier, state, baseUrl: normaliseBase(baseUrl), cfg } satisfies Pending);
-  go(buildAuthorizeUrl({ cfg, clientId: cfg.clientIds[app], redirectUri: redirectUriFor(loc), challenge: await pkceChallenge(verifier), state }));
+  go(buildAuthorizeUrl({ cfg, clientId: cfg.clientIds[app], redirectUri: redirectUriFor(app, loc), challenge: await pkceChallenge(verifier), state }));
 }
 
 const tokensFrom = (j: Record<string, unknown>, now: number, keepRefresh: string | null): Tokens => {
@@ -91,7 +92,7 @@ export async function finishSignIn(app: App, search: string, loc: { origin: stri
   write(st, pendingKey(app), null); // a sign-in attempt is used once
   if ("error" in cb) throw new SsoError(cb.error === "access_denied" ? "Sign-in was cancelled." : `DINO would not sign you in${cb.description ? `: ${cb.description}` : "."}`);
   if (!pending || pending.state !== cb.state) throw new SsoError("That sign-in did not start here, or it took too long. Start again.");
-  const tokens = tokensFrom(await tokenRequest(pending.cfg, { grant_type: "authorization_code", code: cb.code, client_id: pending.cfg.clientIds[app], redirect_uri: redirectUriFor(loc), code_verifier: pending.verifier }, f), now, null);
+  const tokens = tokensFrom(await tokenRequest(pending.cfg, { grant_type: "authorization_code", code: cb.code, client_id: pending.cfg.clientIds[app], redirect_uri: redirectUriFor(app, loc), code_verifier: pending.verifier }, f), now, null);
   const session = await sessionFor(app, pending.baseUrl, tokens, f);
   if (tokens.refreshToken) write(st, savedKey(app), { refreshToken: tokens.refreshToken, baseUrl: pending.baseUrl, cfg: pending.cfg } satisfies Saved);
   return { session, tokens };

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in to Kerf</title>
+<meta name="description" content="Sign in to Kerf: pupils and staff.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<!-- Kerf's public website: proprietary to mr-salih.org (see editor/LICENSING.md). The theme is read before the page draws, so it never flashes. -->
+<script>try{if(localStorage.getItem("kerf.site.theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<script type="module" src="/src/site/main.ts"></script>
+</head>
+<body data-page="sign-in">
+<div style="font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif; font-size: 18px; line-height: 1.6; background-color: var(--alt); background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px); background-size: 22px 22px; color: var(--text); min-height: 100vh; display: flex; flex-direction: column">
+
+<header style="border-bottom: 1px solid var(--border); background: var(--bg)">
+<nav aria-label="Main" style="max-width: 1200px; margin: 0 auto; padding: 14px clamp(20px, 5vw, 40px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<a href="/" style="display: flex; align-items: center; gap: 10px; min-height: 44px; text-decoration: none; color: var(--text)">
+<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="8" fill="#f97316"></rect><path d="M11 9v16M11 17l9-8M14.5 14l6.5 11" stroke="#18181b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+<span style="font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.01em">Kerf</span>
+</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px">
+<a href="/pricing" style="color: var(--text); text-decoration: none; padding: 10px 0">Pricing</a>
+<button type="button" data-theme-toggle aria-pressed="false" style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--field); background: transparent; color: var(--text); font: inherit; font-size: 16px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+<span>Dark theme</span>
+</button>
+</div>
+</nav>
+</header>
+
+<main style="flex: 1">
+<div style="max-width: 1100px; margin: 0 auto; padding: clamp(28px, 6vw, 64px) clamp(16px, 5vw, 40px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 40px 64px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 20px">
+<h1 style="margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: clamp(1.9rem, 4.5vw, 3rem); line-height: 1.12; letter-spacing: -0.02em; text-wrap: balance">Welcome back to the workshop.</h1>
+<p style="margin: 0; color: var(--muted); max-width: 38ch">Sign in to open your saved files, send them to the laser, and read feedback from your teacher.</p>
+<svg viewBox="0 0 420 170" role="img" aria-label="Laser-cut objects: a key ring, a pencil pot and a name plate" style="width: 100%; max-width: 420px; height: auto">
+<g>
+<circle cx="44" cy="44" r="16" fill="none" stroke-width="4" style="stroke: var(--field)"></circle>
+<rect x="40" y="56" width="70" height="92" rx="22" stroke-width="2" transform="rotate(-14 75 102)" style="fill: var(--wood); stroke: var(--cut)"></rect>
+<circle cx="62" cy="70" r="6" stroke-width="2" style="fill: var(--alt); stroke: var(--cut)"></circle>
+<text x="80" y="118" text-anchor="middle" font-family="Lexend, Arial, sans-serif" font-weight="700" font-size="26" transform="rotate(-14 80 110)" style="fill: var(--cut)">9B</text>
+</g>
+<g>
+<path d="M150 60h80v100h-80z" stroke-width="2" style="fill: var(--wood); stroke: var(--cut)"></path>
+<path d="M230 60l24-14v100l-24 14z" stroke-width="2" style="fill: var(--wood); stroke: var(--cut)"></path>
+<path d="M230 60l24-14v100l-24 14z" opacity="0.15" style="fill: var(--cut)"></path>
+<path d="M150 60l24-14h80l-24 14z" stroke-width="2" style="fill: var(--wood); stroke: var(--cut)"></path>
+<path d="M150 74h6v14h-6M150 102h6v14h-6M150 130h6v14h-6" fill="none" stroke-width="1.5" style="stroke: var(--cut)"></path>
+<rect x="168" y="16" width="8" height="60" rx="2" fill="#1d4ed8" transform="rotate(-8 172 46)"></rect>
+<rect x="190" y="8" width="8" height="66" rx="2" fill="#f97316" transform="rotate(4 194 41)"></rect>
+<rect x="210" y="20" width="8" height="54" rx="2" transform="rotate(12 214 47)" style="fill: var(--muted)"></rect>
+<circle cx="190" cy="112" r="16" fill="none" stroke-width="2" style="stroke: var(--cut)"></circle>
+</g>
+<g>
+<rect x="276" y="96" width="136" height="56" rx="12" stroke-width="2" style="fill: var(--wood); stroke: var(--cut)"></rect>
+<circle cx="290" cy="124" r="4" stroke-width="1.5" style="fill: var(--alt); stroke: var(--cut)"></circle>
+<circle cx="398" cy="124" r="4" stroke-width="1.5" style="fill: var(--alt); stroke: var(--cut)"></circle>
+<text x="344" y="131" text-anchor="middle" font-family="Lexend, Arial, sans-serif" font-weight="700" font-size="18" style="fill: var(--cut)">DT ROOM 4</text>
+</g>
+</svg>
+</div>
+<div style="display: flex; justify-content: center">
+<!-- include panel.html -->
+</div>
+</div>
+</main>
+
+<footer style="border-top: 1px solid var(--border); background: var(--bg)">
+<div style="max-width: 1200px; margin: 0 auto; padding: 16px clamp(20px, 5vw, 40px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; font-size: 15px">
+<span style="color: var(--muted)">Kerf by mr-salih.org</span>
+<nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 0 20px">
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Privacy <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Terms <span class="soon">Coming soon</span></span>
+<span class="is-soon" aria-disabled="true" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text); padding: 10px 0">Contact <span class="soon">Coming soon</span></span>
+</nav>
+</div>
+</footer>
+</div>
+</body>
+</html>

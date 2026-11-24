@@ -22,6 +22,10 @@ open Editor is published in its own repository:
 - `src/stationui.ts`, `src/stationlogic.ts` (Station mode at the laser)
 - `src/calibrateui.ts`, `src/alignui.ts`, `src/alignlogic.ts`, `src/homography.ts`, `src/camerafeed.ts`
   (camera calibration and alignment)
+- `site/` and `src/site/` (Kerf's public website: the landing page, `/pricing` and the `/sign-in` page), and the
+  `kerf-site-*` plugins in `vite.config.ts`. The website's fonts, Lexend and Atkinson Hyperlegible, are bundled from the
+  `@fontsource/lexend` and `@fontsource/atkinson-hyperlegible` packages under the SIL Open Font License 1.1 (only the
+  website uses them; the Editor does not)
 
 Until that split, nothing from this folder is published.
 
@@ -35,6 +39,7 @@ Until that split, nothing from this folder is published.
 | esm-potrace-wasm (Potrace) | GPL-2.0 | image tracing (`src/imagetrace.ts`) |
 | DejaVu fonts | DejaVu fonts licence (`public/fonts/DEJAVU-LICENSE.txt`) | text |
 | Hershey fonts via hersheytext | MIT (`src/fonts/HERSHEYTEXT-LICENSE.txt`) | single-line text |
+| Lexend, Atkinson Hyperlegible (Fontsource) | SIL Open Font License 1.1 (`node_modules/@fontsource/*/LICENSE`) | the website only (not the Editor) |
 
 **Open item before publishing:** GPL-2.0 code can only be combined with AGPL-3.0 code if it is licensed
 "GPL-2.0 *or later*". Upstream Potrace is understood to be "version 2 or later", but `esm-potrace-wasm`

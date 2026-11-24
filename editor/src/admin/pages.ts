@@ -479,7 +479,7 @@ export const stationPages: Page = {
       const list = await listStations(s);
       host.replaceChildren(...(list.length ? [table(["Laser", "Cutter", ""], list.map((st) => el("tr", {}, cell(el("b", {}, st.id)),
         cell(st.online ? `Connected · ${st.state ?? ""}` : "Not connected"),
-        actions(el("a", { class: "btnlink on", href: `/?station=${encodeURIComponent(st.id)}` }, "Open station page")))))] : [empty("There are no stations yet.")]));
+        actions(el("a", { class: "btnlink on", href: `/editor/?station=${encodeURIComponent(st.id)}` }, "Open station page")))))] : [empty("There are no stations yet.")]));
     };
     void draw().catch((e) => fail(host, e));
     const t = setInterval(() => void draw().catch(() => {}), 5000);

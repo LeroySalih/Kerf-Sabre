@@ -1,0 +1,93 @@
+/* Kerf's public website (landing, pricing, sign-in). Proprietary to mr-salih.org (see editor/LICENSING.md).
+   Colours are the design's palette as variables: light by default, dark when <html data-theme="dark"> (src/site/main.ts).
+   Most layout is inline in site/*.html, copied from the design; the sign-in panel (site/partials/panel.html) uses the kp-* classes. */
+:root {
+  --bg: #ffffff; --alt: #f4f4f5; --card: #ffffff; --input: #ffffff; --text: #18181b; --muted: #52525b; --border: #e4e4e7;
+  --field: #71717a; --acc: #c2410c; --soft: #fff7ed; --softB: #fdba74; --wood: #f5deb3; --cut: #c2410c; --screen: #fafafa;
+  --grid: #ececee; --dot: #e4e4e7;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #18181b; --alt: #1f1f23; --card: #27272a; --input: #18181b; --text: #fafafa; --muted: #b4b4bc; --border: #3f3f46;
+  --field: #a1a1aa; --acc: #fb923c; --soft: #2b1d12; --softB: #9a3412; --wood: #6b4f2e; --cut: #fb923c; --screen: #111113;
+  --grid: #26262b; --dot: #2e2e33;
+  color-scheme: dark;
+}
+body[data-page="sign-in"] { --dot: #dcdce0; }
+:root[data-theme="dark"] body[data-page="sign-in"] { --dot: #2e2e33; }
+
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif; }
+*, *::before, *::after { box-sizing: border-box; }
+img, svg { max-width: 100%; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid #f97316; outline-offset: 2px; border-radius: 6px;
+}
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details[open] > summary svg { transform: rotate(180deg); }
+[hidden] { display: none !important; }
+
+/* Features that are not built yet: greyed, not working, labelled. */
+.is-soon { opacity: 0.55; cursor: not-allowed; }
+.soon {
+  display: inline-flex; align-items: center; padding: 1px 9px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--alt); color: var(--muted); font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif;
+  font-weight: 700; font-size: 13px; line-height: 1.6; letter-spacing: 0.01em; white-space: nowrap; text-transform: none;
+}
+
+/* ---------------- the sign-in panel ---------------- */
+.kp {
+  font-family: 'Atkinson Hyperlegible', 'Segoe UI', Arial, sans-serif; font-size: 18px; line-height: 1.5; color: var(--text);
+  background: var(--card); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 44px -24px rgba(0, 0, 0, 0.35);
+  width: 100%; max-width: 480px; padding: clamp(20px, 6vw, 32px); display: flex; flex-direction: column; gap: 20px;
+}
+.kp-view, .kp-part { display: flex; flex-direction: column; gap: 20px; }
+.kp-part { gap: 20px; }
+.kp-gap16 { gap: 16px; }
+.kp-title { margin: 0; font-family: Lexend, Arial, sans-serif; font-weight: 700; font-size: 28px; line-height: 1.2; }
+.kp-p { margin: 0; }
+.kp-strong { margin: 0; font-weight: 700; }
+.kp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.kp-alert { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--soft); border: 1px solid var(--softB); font-size: 16px; }
+.kp-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: var(--alt); border: 1px solid var(--border); }
+.kp-tab { min-height: 48px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: inherit; font-weight: 700; font-size: 17px; cursor: pointer; }
+.kp-tab[aria-pressed="true"] { background: var(--text); color: var(--card); }
+.kp-form { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.kp-form-tight { gap: 12px; }
+.kp-fieldset { display: flex; flex-direction: column; gap: 16px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.kp-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 16px; }
+.kp-field { display: flex; flex-direction: column; gap: 6px; }
+.kp-field label { font-weight: 700; font-size: 16px; }
+.kp-input {
+  min-height: 52px; width: 100%; padding: 0 14px; border-radius: 10px; border: 1.5px solid var(--field); background: var(--input);
+  color: var(--text); font: inherit; font-size: 20px;
+}
+.kp-input::placeholder { color: var(--muted); opacity: 0.8; }
+.kp-code { letter-spacing: 0.12em; text-transform: uppercase; }
+.kp-email { font-size: 18px; }
+.kp-hint { margin: 0; font-size: 15px; color: var(--muted); }
+.kp-note { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--soft); border: 1px solid var(--softB); font-size: 16px; }
+.kp-primary { min-height: 54px; border: 0; border-radius: 12px; background: #f97316; color: #18181b; font: inherit; font-weight: 700; font-size: 18px; cursor: pointer; }
+.kp-primary:disabled { cursor: not-allowed; }
+.kp-primary[aria-busy="true"] { opacity: 0.7; cursor: progress; }
+.kp-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 15px; }
+.kp-divider > span:first-child, .kp-divider > span:last-child { flex: 1; height: 1px; background: var(--border); }
+.kp-sso-list { display: flex; flex-direction: column; gap: 10px; }
+.kp-sso {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 52px; padding: 6px 16px; border-radius: 12px;
+  border: 1.5px solid var(--field); background: var(--card); color: var(--text); font: inherit; font-weight: 700; font-size: 17px;
+  cursor: pointer; text-align: left;
+}
+.kp-sso:disabled { cursor: not-allowed; }
+.kp-sso-mark {
+  display: flex; width: 28px; height: 28px; border-radius: 8px; align-items: center; justify-content: center; background: var(--alt);
+  border: 1px solid var(--border); font-family: Lexend, Arial, sans-serif; font-size: 14px;
+}
+.kp-badge { display: flex; width: 56px; height: 56px; border-radius: 16px; align-items: center; justify-content: center; background: var(--soft); color: var(--acc); }
+.kp-box { padding: 12px 14px; border-radius: 12px; background: var(--alt); border: 1px solid var(--border); font-size: 16px; }
+.kp-secondary { min-height: 52px; border-radius: 12px; border: 2px solid var(--text); background: transparent; color: var(--text); font: inherit; font-weight: 700; font-size: 17px; cursor: pointer; }
+.kp-textbtn { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--acc); font: inherit; font-weight: 700; font-size: 16px; text-decoration: underline; cursor: pointer; }
+.kp-foot { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 16px; }
+.kp-col { display: flex; flex-direction: column; }
+.kp-foot-link { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; color: var(--acc); font-weight: 700; }

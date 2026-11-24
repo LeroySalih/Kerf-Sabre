@@ -6,6 +6,7 @@ import { btn, el, msg } from "../dom";
 import { ServerError, request, type Session } from "../server";
 import { pagesFor, platformPages, type Ctx, type Page } from "./pages";
 import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "../emailsignin";
+import { goToSignInPage, readSignInMeta, signInPageFor } from "../signinpage";
 import { Renewer, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type Tokens } from "../sso";
 
 const KEY = "kerf.admin.session"; // an older version kept a pasted token here; nothing is stored any more
@@ -25,9 +26,12 @@ function staffOnly(me: { role: string }): void {
 }
 let schoolName = "";
 let stopPage: () => void = () => {};
+/** The Kerf Server's one sign-in page, when it served this site (null under Vite's dev server: the card below is used instead). */
+const siteSignIn = signInPageFor("admin", readSignInMeta());
 
-function signInView(error = ""): void {
+function signInView(error = "", expired = false): void {
   stopPage();
+  if (siteSignIn) { root.replaceChildren(); return goToSignInPage(siteSignIn, error, { expired }); }
   const err = el("p", { class: "ad-err", role: "alert" }, error);
   const url = el("input", { type: "text", placeholder: "Leave blank unless told otherwise" });
   (url as HTMLInputElement).value = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
@@ -44,7 +48,7 @@ function signInView(error = ""): void {
     el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with DINO, or with a link sent to your school email."),
     el("details", {}, el("summary", {}, "Server address"), url), err, dino,
     el("div", { class: "ad-email" }, el("p", { class: "hint" }, "No DINO account? Your school admin invites you by email; after that, ask for a link here."), email, ask, sent),
-    el("a", { href: "/" }, "Looking for the Editor?"));
+    el("a", { href: "/editor/" }, "Looking for the Editor?"));
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     void (async () => {
@@ -110,7 +114,7 @@ async function shell(): Promise<void> {
   const head = el("header", { class: `ad-head${platform ? " ad-platform" : ""}` }, el("span", { class: "brand" }, platform ? "Kerf Platform" : "Kerf Admin"),
     el("span", { class: "who" }, platform ? `Site admin: ${s.id}` : `${schoolName ? schoolName + " · " : ""}${s.schoolCode ? `school code ${s.schoolCode} · ` : ""}${s.plan === "free" ? "Free plan · " : ""}${s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
     ...(s.siteAdmin && s.role !== "platform" ? [btn(platform ? "My school" : "Kerf Platform", () => switchSite(platform ? "school" : "platform"))] : []),
-    ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/" }, "Editor")] : []), btn("Sign out", signOut));
+    ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/editor/" }, "Editor")] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);
   let saved = "";
   try { saved = localStorage.getItem("kerf.admin.page") ?? ""; } catch { /* fine */ }
@@ -124,7 +128,7 @@ async function start(): Promise<void> {
   if (link) { // opened from a sign-in or invite email
     cleanLinkFromAddress();
     try { const s = await finishEmailSignIn("admin", "", link); staffOnly(s); session = s; return void (await shell()); }
-    catch (e) { return signInView(msg(e)); }
+    catch (e) { return signInView(msg(e), e instanceof ServerError && e.status === 401); }
   }
   if (!session) {
     const s = await restoreEmailSignIn("admin");

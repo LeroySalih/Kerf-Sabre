@@ -28,6 +28,8 @@ class Principal:
     role: str
     id: str
     school: str | None = None  # None only for the platform role
+    #: A site admin of Kerf (the Platform site). A DINO sign-in listed in KERF_SITE_ADMINS, or a stored platform token. Separate from the school role.
+    site_admin: bool = False
 
     @property
     def is_teacher(self) -> bool:
@@ -84,7 +86,7 @@ def lookup(session: Session, token: str, people_tokens: bool = True) -> Principa
         return None
     if row is None or (row.expires_at is not None and as_utc(row.expires_at) <= utcnow()):
         return None  # unknown, revoked or expired
-    return Principal(row.role, row.subject_id, None if row.role == "platform" else (row.school_id or DEFAULT_SCHOOL))
+    return Principal(row.role, row.subject_id, None if row.role == "platform" else (row.school_id or DEFAULT_SCHOOL), site_admin=row.role == "platform")
 
 
 def bearer(request: Request) -> str | None:
@@ -125,3 +127,10 @@ def require(*roles: str):
         return p
 
     return dep
+
+
+def require_site_admin(p: Principal = Depends(current_principal)) -> Principal:
+    """Dependency: the Platform site. Only Kerf's site admins (never a school's own admins)."""
+    if not p.site_admin:
+        raise ApiError(403, "forbidden", "This is for Kerf's site admins only.")
+    return p

@@ -11,7 +11,7 @@ from .. import services_presets as sp
 from .. import services_run as run
 from ..config import Settings
 from ..db import utcnow
-from ..deps import get_session, get_settings
+from ..deps import PAID, get_session, get_settings
 from ..errors import ApiError
 from ..security import Principal, require
 from .dxf import read_upload
@@ -35,20 +35,20 @@ def own_station(request: Request, who: Principal, station_id: str) -> None:
         known(s, who, station_id)
 
 
-@router.get("/stations")
+@router.get("/stations", dependencies=PAID)
 def list_stations(request: Request, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     hub = request.app.state.hub
     done = sp.calibrated_ids(s, who.school)
     return [{**hub.get(i).doc(), "calibrated": i in done} for i in station_ids(s, who.school)]
 
 
-@router.get("/stations/{station_id}")
+@router.get("/stations/{station_id}", dependencies=PAID)
 def get_station(station_id: str, request: Request, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     known(s, who, station_id)
     return {**request.app.state.hub.get(station_id).doc(), "calibrated": station_id in sp.calibrated_ids(s, who.school)}
 
 
-@router.get("/stations/{station_id}/camera-calibration")
+@router.get("/stations/{station_id}/camera-calibration", dependencies=PAID)
 def get_camera_calibration(station_id: str, who: Principal = Depends(require("station", "teacher")), s: Session = Depends(get_session)):
     """Where the camera picture sits on the bed, or 404 not_calibrated. Any laser PC, technician or teacher of the school may read it."""
     cal = sp.get_calibration(s, who.school, station_id)
@@ -57,18 +57,18 @@ def get_camera_calibration(station_id: str, who: Principal = Depends(require("st
     return cal
 
 
-@router.put("/stations/{station_id}/camera-calibration")
+@router.put("/stations/{station_id}/camera-calibration", dependencies=PAID)
 def put_camera_calibration(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     return sp.put_calibration(s, who.school, station_id, body, who.id)
 
 
-@router.delete("/stations/{station_id}/camera-calibration", status_code=204)
+@router.delete("/stations/{station_id}/camera-calibration", status_code=204, dependencies=PAID)
 def delete_camera_calibration(station_id: str, who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     sp.clear_calibration(s, who.school, station_id)
     return Response(status_code=204)
 
 
-@router.post("/stations/{station_id}/calibration-marks", status_code=201)
+@router.post("/stations/{station_id}/calibration-marks", status_code=201, dependencies=PAID)
 def calibration_marks(station_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     """Make (and approve, pinned to this laser) a job of known squares. The teacher cuts it, then clicks the squares' corners in the
     camera picture to calibrate. `corners` lists each square's corners in bed mm, in the order to click them."""
@@ -77,7 +77,7 @@ def calibration_marks(station_id: str, body: dict[str, Any] = Body(...), who: Pr
     return {"jobId": j.id, "squares": corners}
 
 
-@router.post("/jobs/{job_id}/frame", status_code=202)
+@router.post("/jobs/{job_id}/frame", status_code=202, dependencies=PAID)
 async def frame_job(job_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher")), cfg: Settings = Depends(get_settings)):
     station = body.get("station")
     if not isinstance(station, str):
@@ -92,7 +92,7 @@ async def frame_job(job_id: str, request: Request, body: dict[str, Any] = Body(.
     return {"bounds": b}
 
 
-@router.post("/jobs/{job_id}/placement")
+@router.post("/jobs/{job_id}/placement", dependencies=PAID)
 def place_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     """Fix the design's position on the bed after the pupil lined it up on the camera picture (`matrix`: move and turn only)."""
     station = body.get("station")
@@ -102,7 +102,7 @@ def place_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = De
     return {"bounds": run.place(s, cfg, who, sj.get_visible(s, job_id, who), station, body.get("matrix"), body.get("skipQueue") is True)}
 
 
-@router.post("/jobs/{job_id}/take")
+@router.post("/jobs/{job_id}/take", dependencies=PAID)
 def take_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     """Take over a waiting file that was meant for another laser: it becomes this laser's (same place in the queue)."""
     station = body.get("station")
@@ -114,7 +114,7 @@ def take_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Dep
     return {"id": j.id, "station": j.station}
 
 
-@router.post("/jobs/{job_id}/assign")
+@router.post("/jobs/{job_id}/assign", dependencies=PAID)
 async def assign_job(job_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher")), cfg: Settings = Depends(get_settings)):
     station = body.get("station")
     if not isinstance(station, str):
@@ -129,7 +129,7 @@ async def assign_job(job_id: str, request: Request, body: dict[str, Any] = Body(
         raise
 
 
-@router.post("/stations/{station_id}/control", status_code=202)
+@router.post("/stations/{station_id}/control", status_code=202, dependencies=PAID)
 async def control(station_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("station", "teacher"))):
     own_station(request, who, station_id)
     cmd = body.get("command")
@@ -141,7 +141,7 @@ async def control(station_id: str, request: Request, body: dict[str, Any] = Body
     return {"sent": cmd}
 
 
-@router.post("/stations/{station_id}/disconnect", status_code=204)
+@router.post("/stations/{station_id}/disconnect", status_code=204, dependencies=PAID)
 async def disconnect(station_id: str, request: Request, who: Principal = Depends(require("teacher", "technician"))):
     """Disconnect the Cutter from the Server (close code 4001). The Cutter stays disconnected until someone starts it again. Not while it is cutting."""
     own_station(request, who, station_id)
@@ -160,7 +160,7 @@ async def disconnect(station_id: str, request: Request, who: Principal = Depends
     return Response(status_code=204)
 
 
-@router.get("/stations/{station_id}/camera")
+@router.get("/stations/{station_id}/camera", dependencies=PAID)
 def camera(station_id: str, request: Request, who: Principal = Depends(require("station", "teacher"))):
     own_station(request, who, station_id)
     jpeg = request.app.state.hub.get(station_id).camera
@@ -169,7 +169,7 @@ def camera(station_id: str, request: Request, who: Principal = Depends(require("
     return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
-@router.get("/stations/{station_id}/logs")
+@router.get("/stations/{station_id}/logs", dependencies=PAID)
 def logs(station_id: str, request: Request, limit: int = 200, level: str | None = None, who: Principal = Depends(require("teacher"))):
     own_station(request, who, station_id)
     if level is not None and level not in LEVELS:
@@ -177,7 +177,7 @@ def logs(station_id: str, request: Request, limit: int = 200, level: str | None 
     return request.app.state.hub.recent_logs(station_id, max(1, min(limit, 5000)), level)
 
 
-@router.put("/stations/{station_id}/log-level", status_code=204)
+@router.put("/stations/{station_id}/log-level", status_code=204, dependencies=PAID)
 async def set_log_level(station_id: str, request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher"))):
     own_station(request, who, station_id)
     level = body.get("level")
@@ -189,7 +189,7 @@ async def set_log_level(station_id: str, request: Request, body: dict[str, Any] 
     return Response(status_code=204)
 
 
-@router.post("/stations/{station_id}/diagnostics", status_code=202)
+@router.post("/stations/{station_id}/diagnostics", status_code=202, dependencies=PAID)
 async def request_diagnostics(station_id: str, request: Request, who: Principal = Depends(require("teacher"))):
     own_station(request, who, station_id)
     hub = request.app.state.hub
@@ -198,7 +198,7 @@ async def request_diagnostics(station_id: str, request: Request, who: Principal 
     return {"requested": True}
 
 
-@router.post("/stations/{station_id}/diagnostics/upload", status_code=201)
+@router.post("/stations/{station_id}/diagnostics/upload", status_code=201, dependencies=PAID)
 async def upload_diagnostics(station_id: str, request: Request, file: UploadFile = File(...), who: Principal = Depends(require("station")), cfg: Settings = Depends(get_settings)):
     if who.id != station_id:
         raise ApiError(403, "forbidden", "A station can only upload its own diagnostics.")

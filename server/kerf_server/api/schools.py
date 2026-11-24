@@ -11,23 +11,40 @@ from ..config import Settings
 from ..deps import get_session, get_settings
 from ..errors import ApiError
 from ..models import School
-from ..security import Principal, require
+from ..security import Principal, require, require_site_admin
 
 router = APIRouter(tags=["schools"])
 
 
 @router.get("/schools")
-def list_schools(_: Principal = Depends(require("platform")), s: Session = Depends(get_session)):
+def list_schools(_: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
+    """The Platform site: every school, its code and plan. Kerf's site admins only."""
     return ss.list_schools(s)
 
 
+@router.patch("/schools/{school_id}")
+def update_school_platform(school_id: str, body: dict[str, Any] = Body(...), _: Principal = Depends(require_site_admin), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """The Platform site: set a school's plan (free or paid) or rename it. Kerf's site admins only."""
+    row = s.get(School, school_id)
+    if row is None:
+        raise ApiError(404, "not_found", f"There is no school '{school_id}'.")
+    if "plan" in body:
+        ss.set_plan(s, school_id, str(body["plan"]))
+    if "name" in body:
+        name = str(body["name"] or "").strip()
+        if not name:
+            raise ApiError(422, "invalid", "Give the school a name.")
+        row.name = name[:128]
+    return ss.school_doc(row, cfg.auto_approve_default)
+
+
 @router.post("/schools", status_code=201)
-def create_school(request: Request, body: dict[str, Any] = Body(...), _: Principal = Depends(require("platform")), s: Session = Depends(get_session)):
+def create_school(request: Request, body: dict[str, Any] = Body(...), _: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
     """Create a school and its first admin. The admin's token is in the answer once and is never shown again."""
     admin_id = body.get("adminId")
     if admin_id and request.app.state.settings.auth_mode == "planner":
         raise ApiError(422, "invalid", "School admins sign in with DINO, so no admin token is made. Create the school without adminId.")
-    school = ss.create_school(s, str(body.get("id", "")), str(body.get("name", "")))
+    school = ss.create_school(s, str(body.get("id", "")), str(body.get("name", "")), str(body.get("plan") or "free"))
     out: dict[str, Any] = ss.school_doc(school)
     if admin_id:
         s.flush()

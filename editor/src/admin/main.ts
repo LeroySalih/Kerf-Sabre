@@ -4,7 +4,7 @@ import "../style.css";
 import "./admin.css";
 import { btn, el, msg } from "../dom";
 import { ServerError, request, type Session } from "../server";
-import { pagesFor, type Ctx, type Page } from "./pages";
+import { pagesFor, platformPages, type Ctx, type Page } from "./pages";
 import { Renewer, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type Tokens } from "../sso";
 
 const KEY = "kerf.admin.session"; // an older version kept a pasted token here; nothing is stored any more
@@ -60,14 +60,24 @@ async function shell(): Promise<void> {
   if (!session) return signInView();
   const s = session;
   schoolName = "";
-  if (s.role === "teacher" || s.role === "admin") {
+  if ((s.role === "teacher" || s.role === "admin") && !(s.siteAdmin && (() => { try { return sessionStorage.getItem("kerf.admin.site") === "platform"; } catch { return false; } })())) {
     try { schoolName = (await request<{ name: string }>(s, "GET", "/school")).name; }
     catch (e) {
       if (e instanceof ServerError && e.status === 401) { session = null; saveSession(null); return signInView("Your sign-in is no longer valid. Sign in again."); }
       throw e;
     }
   }
-  const pages = pagesFor(s.role);
+  // A site admin can switch between the Platform site (all schools) and their own school's admin pages.
+  let site: "platform" | "school" = s.role === "platform" ? "platform" : "school";
+  try { if (s.siteAdmin && sessionStorage.getItem("kerf.admin.site") === "platform") site = "platform"; } catch { /* fine */ }
+  const platform = site === "platform";
+  const pages = platform ? platformPages() : pagesFor(s.role, s.plan);
+  if (!pages.length) {
+    root.replaceChildren(el("div", { class: "ad-card ad-signin" }, el("h1", {}, "Kerf Admin"),
+      el("p", {}, "Your school is on Kerf's free plan, which has no Station pages. Ask your school's admin about the paid plan."), btn("Sign out", signOut)));
+    return;
+  }
+  const switchSite = (to: "platform" | "school") => { try { sessionStorage.setItem("kerf.admin.site", to); } catch { /* fine */ } void shell(); };
   const main = el("main", { class: "ad-main" });
   const nav = el("nav", { class: "ad-nav", "aria-label": "Admin pages" });
   let current: Page = pages[0]!;
@@ -85,12 +95,14 @@ async function shell(): Promise<void> {
     stopPage = typeof stop === "function" ? stop : () => {};
   }
 
-  const head = el("header", { class: "ad-head" }, el("span", { class: "brand" }, "Kerf Admin"),
-    el("span", { class: "who" }, `${schoolName ? schoolName + " · " : ""}${s.role === "platform" ? "Platform owner" : s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
+  const head = el("header", { class: `ad-head${platform ? " ad-platform" : ""}` }, el("span", { class: "brand" }, platform ? "Kerf Platform" : "Kerf Admin"),
+    el("span", { class: "who" }, platform ? `Site admin: ${s.id}` : `${schoolName ? schoolName + " · " : ""}${s.schoolCode ? `school code ${s.schoolCode} · ` : ""}${s.plan === "free" ? "Free plan · " : ""}${s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: ${s.id}`), el("span", { class: "spacer" }),
+    ...(s.siteAdmin && s.role !== "platform" ? [btn(platform ? "My school" : "Kerf Platform", () => switchSite(platform ? "school" : "platform"))] : []),
     ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/" }, "Editor")] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);
   let saved = "";
   try { saved = localStorage.getItem("kerf.admin.page") ?? ""; } catch { /* fine */ }
+  if (!pages.some((p) => p.key === saved)) saved = "";
   show(pages.find((p) => p.key === saved) ?? pages[0]!);
 }
 

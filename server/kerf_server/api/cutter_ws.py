@@ -9,6 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .. import services_run as run
 from .. import services_presets as sp
+from .. import services_schools as schools
 from ..db import utcnow
 from ..security import bearer, lookup
 
@@ -44,6 +45,10 @@ async def cutter_socket(ws: WebSocket):
             # from taking over another school's laser (laser IDs are shared across the server).
             if who is not None and who.role == "station" and sp.get_machine(s, who.school, who.id) is None:
                 who = None
+            free = who is not None and not schools.is_paid(s, who.school)
+    if who is not None and free:  # laser connection is part of the paid service
+        await ws.close(code=4402)
+        return
     if who is None or who.role != "station":
         await ws.close(code=4401)
         return

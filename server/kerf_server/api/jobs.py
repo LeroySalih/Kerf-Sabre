@@ -13,7 +13,7 @@ from .. import services_people as people
 from .. import services_queue as queue
 from .. import services_presets as sp
 from ..config import Settings
-from ..deps import get_session, get_settings
+from ..deps import PAID, get_session, get_settings
 from ..errors import ApiError
 from ..models import GcodeRow, Job, JobEvent
 from ..schemas import validate
@@ -59,6 +59,10 @@ def create_job(
     validate(cfg.shared_dir, "job", doc)
     if doc["status"] not in ("draft", "submitted"):
         raise ApiError(422, "invalid", "A new job can only be saved as 'draft' or 'submitted'.")
+    if doc["status"] == "submitted":
+        from ..services_schools import require_paid
+
+        require_paid(s, who.school)  # sending for cutting is the paid service; saving a draft is free
     j = sj.create(s, cfg, who, doc, status=doc["status"])
     return _receipt(s, j)
 
@@ -110,7 +114,7 @@ def replace_job(
     return sj.receipt(sj.replace(s, who, j, doc))
 
 
-@router.post("/jobs/{job_id}/submit")
+@router.post("/jobs/{job_id}/submit", dependencies=PAID)
 def submit_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     accepted = isinstance(body, dict) and body.get("acceptOpenPaths") is True  # the pupil was warned about open Cut paths and chose to send anyway
     j = sj.submit(s, cfg, who, sj.get_owned(s, job_id, who), accepted)
@@ -118,7 +122,7 @@ def submit_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Princ
     return _receipt(s, j)
 
 
-@router.post("/jobs/{job_id}/approve")
+@router.post("/jobs/{job_id}/approve", dependencies=PAID)
 def approve_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     j = sj.get_visible(s, job_id, who)
     sj.approve(s, who, j, (body or {}).get("station"))
@@ -126,7 +130,7 @@ def approve_job(job_id: str, body: dict[str, Any] | None = Body(None), who: Prin
     return _receipt(s, j)
 
 
-@router.put("/jobs/{job_id}/preset")
+@router.put("/jobs/{job_id}/preset", dependencies=PAID)
 def change_preset(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     """Change a waiting file's material (Queue page). It keeps its place in the queue."""
     pid = body.get("presetId")
@@ -137,7 +141,7 @@ def change_preset(job_id: str, body: dict[str, Any] = Body(...), who: Principal 
     return _receipt(s, j)
 
 
-@router.post("/jobs/{job_id}/requeue")
+@router.post("/jobs/{job_id}/requeue", dependencies=PAID)
 def requeue_job(job_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     """Put a processed file (cut, failed, cancelled or rejected) back at the end of the queue."""
     j = sj.requeue(s, who, sj.get_visible(s, job_id, who))
@@ -145,7 +149,7 @@ def requeue_job(job_id: str, who: Principal = Depends(require("teacher")), s: Se
     return _receipt(s, j)
 
 
-@router.post("/jobs/{job_id}/reject")
+@router.post("/jobs/{job_id}/reject", dependencies=PAID)
 def reject_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher", "technician")), s: Session = Depends(get_session)):
     reason = body.get("reason")
     if not isinstance(reason, str) or not reason.strip():
@@ -153,19 +157,19 @@ def reject_job(job_id: str, body: dict[str, Any] = Body(...), who: Principal = D
     return sj.receipt(sj.reject(s, who, sj.get_visible(s, job_id, who), reason))
 
 
-@router.post("/jobs/{job_id}/defer")
+@router.post("/jobs/{job_id}/defer", dependencies=PAID)
 def defer_job(job_id: str, who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     j = sj.get_visible(s, job_id, who)  # a pupil can only defer their own
     queue.defer(s, who, j)
     return _receipt(s, j)
 
 
-@router.get("/queue")
+@router.get("/queue", dependencies=PAID)
 def get_queue(station: str | None = Query(None), who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     return queue.entries(s, who, cfg, station)
 
 
-@router.post("/queue/{job_id}/move")
+@router.post("/queue/{job_id}/move", dependencies=PAID)
 def move_in_queue(job_id: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     j = sj.get_visible(s, job_id, who)
     pos = body.get("position")
@@ -189,12 +193,12 @@ def delete_job(job_id: str, who: Principal = Depends(require("pupil")), s: Sessi
     sj.delete(s, who, sj.get_owned(s, job_id, who))
 
 
-@router.post("/jobs/{job_id}/cancel")
+@router.post("/jobs/{job_id}/cancel", dependencies=PAID)
 def cancel_job(job_id: str, who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):
     return sj.receipt(sj.cancel(s, who, sj.get_owned(s, job_id, who)))
 
 
-@router.get("/jobs/{job_id}/gcode", response_class=PlainTextResponse)
+@router.get("/jobs/{job_id}/gcode", response_class=PlainTextResponse, dependencies=PAID)
 def job_gcode(job_id: str, station: str | None = Query(None), who: Principal = Depends(require("pupil", "station")), s: Session = Depends(get_session)):
     j = sj.get_visible(s, job_id, who)
     row = s.scalar(select(GcodeRow).where(GcodeRow.job_id == j.id, GcodeRow.station == (station or "")))

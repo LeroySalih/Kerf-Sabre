@@ -12,7 +12,7 @@ import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type F
 import { setPresets } from "./presets";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
-  STATUS_TEXT, ServerError, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
+  STATUS_TEXT, ServerError, isPaid, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
   type JobSummary, type Session,
 } from "./server";
 
@@ -118,7 +118,8 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
       person.textContent = "Sign in";
     }
     ($("srv-files") as HTMLButtonElement).hidden = false; // everyone signed in has files of their own (staff look at pupils' files on the Admin site)
-    ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil";
+    ($("srv-activities") as HTMLButtonElement).hidden = session?.role !== "pupil" || !isPaid(session);
+    ($("srv-send") as HTMLButtonElement).hidden = !!session && !isPaid(session); // sending for cutting is the paid service; a free school saves and shares files
     const act = $("srv-activity") as HTMLElement;
     act.hidden = !(session?.role === "pupil" && activity);
     act.replaceChildren(...(activity ? [document.createTextNode(`Activity: ${activity.title} `), Object.assign(document.createElement("button"), { textContent: "×", title: "Stop saving files for this activity", onclick: () => { activity = null; render(); } })] : []));
@@ -445,7 +446,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
           ctx.tabs.setName(j.id, r.name || designName(j.createdAt));
           draw();
         });
-        if (j.status === "draft") add("Send for cutting", async () => { const r = await submitConfirmed(j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
+        if (j.status === "draft" && isPaid(session)) add("Send for cutting", async () => { const r = await submitConfirmed(j.id); j.status = r.status; j.warnings = r.warnings; if (cur.jobId === j.id) cur.jobId = null; render(); draw(); });
         if (["draft", "cancelled", "failed"].includes(j.status)) add("Delete", async () => {
           if (!confirm(`Delete "${j.name || designName(j.createdAt)}"? It cannot be brought back.`)) return;
           await deleteJob(session!, j.id);

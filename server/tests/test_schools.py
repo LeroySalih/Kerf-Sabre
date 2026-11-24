@@ -21,7 +21,7 @@ def world(client, app):
     root = auth(issue_token(db, "platform", "root"))
     out = {"root": root}
     for sid in ("alpha", "beta"):
-        r = client.post(f"{API}/schools", json={"id": sid, "name": sid.title(), "adminId": f"admin-{sid}"}, headers=root)
+        r = client.post(f"{API}/schools", json={"id": sid, "name": sid.title(), "adminId": f"admin-{sid}", "plan": "paid"}, headers=root)
         assert r.status_code == 201, r.text
         admin = auth(r.json()["admin"]["token"])
         teacher = auth(client.post(f"{API}/staff", json={"role": "teacher", "id": f"t-{sid}"}, headers=admin).json()["token"])

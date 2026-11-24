@@ -20,8 +20,13 @@ router = APIRouter(tags=["auth"])
 
 
 @router.get("/auth/me")
-def me(p: Principal = Depends(current_principal)) -> dict[str, str | None]:
-    return {"role": p.role, "id": p.id, "school": p.school}
+def me(p: Principal = Depends(current_principal), s: Session = Depends(get_session)) -> dict[str, Any]:
+    from ..services_schools import plan_of
+    from ..models import School
+
+    row = s.get(School, p.school) if p.school else None
+    return {"role": p.role, "id": p.id, "school": p.school, "siteAdmin": p.site_admin, "plan": plan_of(row) if p.school else None,
+            "schoolName": row.name if row else None, "schoolCode": row.code if row else None}
 
 
 @router.get("/auth/config")

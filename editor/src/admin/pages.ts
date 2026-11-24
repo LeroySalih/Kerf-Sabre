@@ -10,7 +10,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, requeueJob, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, updateSchool, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -415,7 +415,7 @@ export const stationPages: Page = {
 // ---------------------------------------------------------------- schools (platform owner)
 
 const schools: Page = {
-  key: "schools", title: "Schools", lead: "Each school's classes, pupils, files, lasers and materials are private to it. You create schools; people in them sign in with DINO, and you see nothing inside them.",
+  key: "schools", title: "Schools", lead: "Every school on Kerf, its school code and its plan. Free schools have the free tools; a paid school also has the queue, lasers, Station pages, camera, activities and approval. You see nothing inside a school.",
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
@@ -432,15 +432,30 @@ const schools: Page = {
           await createSchool(s, String(v.id).trim(), String(v.name).trim());
         }, redraw);
       })(), "on"));
-      host.replaceChildren(bar, list.length ? table(["ID", "Name", "Created"], list.map((x) => el("tr", {}, cell(el("b", {}, x.id)), cell(x.name), cell(x.createdAt ? new Date(x.createdAt).toLocaleDateString() : "")))) : empty("No schools yet."));
+      host.replaceChildren(bar, list.length ? table(["ID", "Name", "School code", "Plan", "Created"], list.map((x) => {
+        const plan = el("select", { "aria-label": `Plan for ${x.name}` }, new Option("Free", "free"), new Option("Paid", "paid")) as HTMLSelectElement;
+        plan.value = x.plan ?? "paid";
+        plan.addEventListener("change", () => {
+          const want = plan.value as "free" | "paid";
+          if (!confirm(`Put ${x.name} on the ${want} plan?${want === "free" ? " Its queue, lasers, Station pages, camera, activities and approval stop working." : ""}`)) { plan.value = x.plan ?? "paid"; return; }
+          void attempt(() => updateSchool(s, x.id, { plan: want }), redraw);
+        });
+        return el("tr", {}, cell(el("b", {}, x.id)), cell(x.name), cell(el("code", {}, x.code ?? "")), cell(plan), cell(x.createdAt ? new Date(x.createdAt).toLocaleDateString() : ""));
+      })) : empty("No schools yet."));
     };
     void draw().catch((e) => fail(host, e));
   },
 };
 
-export function pagesFor(role: string): Page[] {
+/** The School Admin site's pages for this role and plan. A free school gets the free tools only (no queue, lasers, activities). */
+export function pagesFor(role: string, plan: string | null | undefined = "paid"): Page[] {
   if (role === "platform") return [schools];
-  if (role === "technician") return [stationPages]; // technicians run the stations and see nothing else here
+  const paid = plan !== "free";
+  if (role === "technician") return paid ? [stationPages] : []; // technicians run the stations and see nothing else here
+  if (!paid) return role === "admin" ? [classes, pupils, materials, staff] : [classes, pupils, materials];
   const base = [overview, classes, pupils, activities, queue, materials, stations];
   return role === "admin" ? [...base, stationPages, staff] : base;
 }
+
+/** The Platform site (Kerf's site admins only): all schools. */
+export const platformPages = (): Page[] => [schools];

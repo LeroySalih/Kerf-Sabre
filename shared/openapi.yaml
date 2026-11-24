@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.31
+  version: 0.2.32
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -90,9 +90,25 @@ paths:
       summary: End this session (revokes the token that was used)
       responses:
         "204": {description: Signed out}
+  /schools/{schoolId}:
+    patch:
+      summary: Site admin (Platform). Set a school's plan (free or paid) or rename it.
+      parameters:
+        - {name: schoolId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan: {enum: [free, paid]}
+                name: {type: string}
+      responses:
+        "200": {description: The school (id, name, code, plan, createdAt, autoApprove)}
   /schools:
     get:
-      summary: Platform. All schools
+      summary: Site admin (Platform). All schools, with code and plan
       responses:
         "200": {description: OK}
     post:
@@ -1374,6 +1390,10 @@ components:
         role: {enum: [pupil, teacher, admin, technician, station, platform]}
         id: {type: string, description: "Pupil ID, teacher ID or station id. Never a name. For a planner-004 sign-in this is the DINO user ID (`sub`)."}
         school: {type: [string, "null"]}
+        siteAdmin: {type: boolean, description: "A Kerf site admin (the Platform site); separate from the school role."}
+        plan: {type: [string, "null"], enum: [free, paid, null], description: "The school's plan; null for a session with no school."}
+        schoolName: {type: [string, "null"]}
+        schoolCode: {type: [string, "null"]}
     LogLevel:
       type: string
       enum: [DEBUG, INFO, WARNING, ERROR]

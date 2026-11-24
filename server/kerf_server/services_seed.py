@@ -32,6 +32,9 @@ def seed(db: Database, settings: Settings) -> None:
             s.execute(update(model).where(model.school_id.is_(None)).values(school_id=DEFAULT_SCHOOL))
         s.execute(update(Token).where(Token.school_id.is_(None), Token.role != "platform").values(school_id=DEFAULT_SCHOOL))
         seed_presets(s, DEFAULT_SCHOOL)
+        from .services_schools import ensure_codes
+
+        ensure_codes(s)
         if machine_dir.exists():
             for f in sorted(machine_dir.glob("*.json")):
                 m = json.loads(f.read_text())

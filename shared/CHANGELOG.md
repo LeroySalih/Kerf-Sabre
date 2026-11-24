@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.32 - free and paid schools, school codes, site admins (additive)
+- Schools have a **plan** (`free` or `paid`; a school made before plans existed counts as paid) and a short **school code** (5 characters from an alphabet without look-alike characters, unique across Kerf). `GET /school` and the school list carry `code` and `plan`.
+- The **paid service** answers `403 paid_feature` for a free school: the queue and approval, sending for cutting (`POST /jobs` with `status: submitted`, `POST /jobs/{id}/submit`), Station pages and lasers (`/stations`, frame, placement, start, take), the Cutter download, the camera, and activities and feedback. The Cutter WebSocket closes with **4402** for a free school (the Cutter does not reconnect). The free tools are unchanged: the Editor, saving files, materials, classes and pupils.
+- **Site admins** (the Platform): `GET /schools`, `POST /schools` (new schools default to `free`; `plan` may be given), new `PATCH /schools/{schoolId} {plan?, name?}`. A site admin is a DINO account listed in the server setting `KERF_SITE_ADMINS`, or a stored platform token. `GET /auth/me` carries `siteAdmin`, and the school's `plan`, `schoolName` and `schoolCode`.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.32`.
+
 ## 0.2.31 - naming only
 - `openapi.yaml`: the API title is "Kerf API" (it was named after a school). The product and its parts are Kerf Editor, Kerf Server and Kerf Cutter; the owner is mr-salih.org. No endpoint, field or behaviour changes.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.31`.

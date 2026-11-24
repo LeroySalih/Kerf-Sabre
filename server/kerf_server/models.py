@@ -21,6 +21,11 @@ class School(Base):
     name: Mapped[str] = mapped_column(String(128))
     #: Files that arrive while this is on are approved at once (whatever a class says). NULL (a school made before this existed) takes `Settings.auto_approve_default`.
     auto_approve: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    #: "free" (the free tools) or "paid" (also the queue, lasers, Station pages, camera, activities, approval). Set by the site admin.
+    #: NULL: a school made before plans existed, which counts as paid.
+    plan: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    #: The short code pupils type with their group code, pupil ID and password (unique across Kerf).
+    code: Mapped[str | None] = mapped_column(String(16), nullable=True, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

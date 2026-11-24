@@ -12,9 +12,9 @@ def test_health_needs_no_token(client):
 
 
 def test_me_reports_role_and_id(client, tokens):
-    assert client.get("/api/v1/auth/me", headers=auth(tokens["pupil"])).json() == {"role": "pupil", "id": "P001", "school": "main"}
-    assert client.get("/api/v1/auth/me", headers=auth(tokens["teacher"])).json() == {"role": "teacher", "id": "T001", "school": "main"}
-    assert client.get("/api/v1/auth/me", headers=auth(tokens["station"])).json() == {"role": "station", "id": "station-1", "school": "main"}
+    assert client.get("/api/v1/auth/me", headers=auth(tokens["pupil"])).json().items() >= {"role": "pupil", "id": "P001", "school": "main", "siteAdmin": False}.items()
+    assert client.get("/api/v1/auth/me", headers=auth(tokens["teacher"])).json().items() >= {"role": "teacher", "id": "T001", "school": "main", "siteAdmin": False}.items()
+    assert client.get("/api/v1/auth/me", headers=auth(tokens["station"])).json().items() >= {"role": "station", "id": "station-1", "school": "main", "siteAdmin": False}.items()
 
 
 def test_missing_or_bad_token_is_401_in_the_contract_error_shape(client, tokens):

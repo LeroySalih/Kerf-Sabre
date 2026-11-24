@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from .. import services_schools as ss
 from ..db import iso, utcnow
-from ..deps import get_session
+from ..deps import PAID, get_session
 from ..devtools import package
 from ..config import Settings
 from ..deps import get_settings
@@ -24,7 +24,7 @@ router = APIRouter(tags=["cutter"])
 LINK_SECONDS = 3600
 
 
-@router.post("/cutter/package", status_code=201)
+@router.post("/cutter/package", status_code=201, dependencies=PAID)
 def make_package(request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("admin")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
     """For one of the school's lasers: a new station token (shown once, not stored in the clear) and a link to download the Cutter
     for an hour. The download itself holds no secret; the token goes in the run command."""
@@ -49,7 +49,7 @@ def make_package(request: Request, body: dict[str, Any] = Body(...), who: Princi
             "fileName": name, "expiresAt": iso(utcnow().replace(microsecond=0) + timedelta(seconds=LINK_SECONDS))}
 
 
-@router.get("/cutter/kinds")
+@router.get("/cutter/kinds", dependencies=PAID)
 def kinds(who: Principal = Depends(require("admin")), cfg: Settings = Depends(get_settings)):
     """Which Cutter downloads this server can offer: the practice Cutter always, the real one once it has been built."""
     return {k: {"available": name is not None, "fileName": name or package.file_name(k)} for k, name in package.available(cfg).items()}

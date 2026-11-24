@@ -3,7 +3,7 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
   /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
   name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
@@ -62,9 +62,13 @@ export async function request<T>(s: { baseUrl: string; token: string }, method: 
   return json as T;
 }
 
-export interface School { id: string; name: string; createdAt?: string; /** New files go straight to the queue while this is on. */ autoApprove?: boolean }
+export interface School { id: string; name: string; createdAt?: string; code?: string | null; plan?: "free" | "paid"; /** New files go straight to the queue while this is on. */ autoApprove?: boolean }
 export interface StaffMember { role: "admin" | "teacher" | "technician" | "station"; id: string; label?: string | null; createdAt?: string }
 export const listSchools = (s: Session, f?: Fetch) => request<School[]>(s, "GET", "/schools", undefined, f);
+/** Platform: set a school's plan (free or paid) or rename it. */
+export const updateSchool = (s: Session, id: string, change: { plan?: "free" | "paid"; name?: string }, f?: Fetch) => request<School>(s, "PATCH", `/schools/${encodeURIComponent(id)}`, change, f);
+/** The paid service (queue, approval, lasers, Station pages, camera, activities) is open to this session's school. A session from an older server (no plan) counts as paid. */
+export const isPaid = (s: Session | null | undefined): boolean => !!s && s.plan !== "free";
 export const createSchool = (s: Session, id: string, name: string, adminId?: string, f?: Fetch) => request<School & { admin?: { id: string; token: string } }>(s, "POST", "/schools", { id, name, ...(adminId ? { adminId } : {}) }, f);
 export const mySchool = (s: Session, f?: Fetch) => request<School>(s, "GET", "/school", undefined, f);
 export const setAutoApprove = (s: Session, on: boolean, f?: Fetch) => request<School>(s, "PATCH", "/school", { autoApprove: on }, f);

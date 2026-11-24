@@ -23,7 +23,7 @@ def default_connect(url: str, token: str):
 
 
 #: Close codes after which the Cutter must not reconnect by itself.
-STAY_AWAY_CODES = {4000: "another Cutter connected as this laser and replaced this one", 4001: "disconnected from the Server page", 4401: "the token was refused", 4403: "this token is for a different laser"}
+STAY_AWAY_CODES = {4000: "another Cutter connected as this laser and replaced this one", 4001: "disconnected from the Server page", 4402: "this school's plan does not include connecting lasers", 4401: "the token was refused", 4403: "this token is for a different laser"}
 
 
 class ServerLink:

@@ -13,3 +13,16 @@ describe("which Admin pages a role sees", () => {
     expect(pagesFor("technician").map((p) => p.key)).not.toContain("materials");
   });
 });
+
+describe("free and paid schools", () => {
+  it("a free school's admin site has the free tools only", () => {
+    const keys = pagesFor("admin", "free").map((p) => p.key);
+    expect(keys).toEqual(["classes", "pupils", "materials", "staff"]);
+    for (const paid of ["queue", "stations", "stationpages", "activities", "overview"]) expect(keys).not.toContain(paid);
+    expect(pagesFor("technician", "free")).toEqual([]);
+  });
+  it("a paid school (or one from before plans) keeps every page", () => {
+    expect(pagesFor("admin", "paid").map((p) => p.key)).toContain("queue");
+    expect(pagesFor("admin").map((p) => p.key)).toContain("stations");
+  });
+});

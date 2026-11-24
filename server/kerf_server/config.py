@@ -35,6 +35,8 @@ class Settings:
     cutter_zip: Path | None = None
     #: A pupil's new send replaces their earlier files that are still waiting (they go to the back of the queue). Turn off to let a pupil have several waiting at once.
     replace_old_sends: bool = True
+    #: DINO user IDs (`sub`) of the site admins: they may use the Platform site (all schools, plans). Never a school role.
+    site_admins: tuple[str, ...] = ()
     #: The school's auto-approve switch when it has never been set (and for new schools). On: every new file goes straight to the queue.
     auto_approve_default: bool = True
     #: Submitted jobs wait for a teacher. Turn off to send them straight to the station queue.
@@ -104,6 +106,7 @@ class Settings:
             cutter_zip=Path(e["KERF_CUTTER_ZIP"]) if e.get("KERF_CUTTER_ZIP") else None,
             replace_old_sends=_bool(e.get("KERF_REPLACE_OLD_SENDS"), True),
             auto_approve_default=_bool(e.get("KERF_AUTO_APPROVE"), True),
+            site_admins=tuple(x.strip() for x in e.get("KERF_SITE_ADMINS", "").split(",") if x.strip()),
             require_approval=_bool(e.get("KERF_REQUIRE_APPROVAL"), True),
             require_frame=_bool(e.get("KERF_REQUIRE_FRAME"), True),
             frame_valid_minutes=int(e.get("KERF_FRAME_VALID_MINUTES", "30")),

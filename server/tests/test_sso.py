@@ -406,3 +406,16 @@ class TestDinoGroups:
         with TestClient(sso_app) as c:
             r = c.get("/api/v1/groups", headers=auth(mint(roles=["teacher"])))
             assert r.status_code == 502 and r.json()["code"] == "groups_unavailable"
+
+
+def test_a_dino_account_listed_as_site_admin_reaches_the_platform(tmp_path, jwks):
+    cfg = Settings.from_env(data_dir=tmp_path / "data", auth_mode="planner", sso_issuer=ISS, site_admins=("u-owner",), auto_approve_default=False)
+    app = create_app(cfg)
+    app.state.sso = Verifier(cfg, fetch=jwks)
+    with TestClient(app) as c:
+        owner = auth(mint(sub="u-owner", roles=["admin"]))
+        assert c.get("/api/v1/auth/me", headers=owner).json()["siteAdmin"] is True
+        assert c.get("/api/v1/schools", headers=owner).status_code == 200
+        other = auth(mint(sub="u-123", roles=["admin"]))
+        assert c.get("/api/v1/auth/me", headers=other).json()["siteAdmin"] is False
+        assert c.get("/api/v1/schools", headers=other).status_code == 403

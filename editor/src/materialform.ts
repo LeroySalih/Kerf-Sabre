@@ -91,6 +91,11 @@ export function overrideFields(p: Preset, station: string): DialogField[] {
     const base = part ? p[part][field as keyof Operation] : p.kerfMm;
     return { key, label, type: "text", value: own === undefined ? "" : String(own), hint: `Blank: same as usual (${String(base)})` };
   });
+  for (const part of ["cut", "score"] as const) {
+    const own = (o[part] as Partial<Operation> | undefined)?.airAssist;
+    fields.push({ key: `${part}Air`, label: `${part === "cut" ? "Cut" : "Score"}: air assist`, type: "select", value: own === undefined ? "" : own ? "yes" : "no",
+      options: [{ value: "", label: `Same as usual (${p[part].airAssist ? "on" : "off"})` }, { value: "yes", label: "On" }, { value: "no", label: "Off" }] });
+  }
   fields.push({ key: "tested", label: `Test-gridded on ${station}`, type: "select", value: (p.testedOn ?? []).includes(station) ? "yes" : "no", options: [{ value: "yes", label: "Yes" }, { value: "no", label: "Not yet" }] });
   return fields;
 }
@@ -107,12 +112,36 @@ export function presetWithOverride(p: Preset, station: string, v: Record<string,
     if (part) ov[part] = { ...(ov[part] ?? {}), [field]: n };
     else ov.kerfMm = n;
   }
+  for (const part of ["cut", "score"] as const) {
+    const a = v[`${part}Air`];
+    if (a === "yes" || a === "no") ov[part] = { ...(ov[part] ?? {}), airAssist: a === "yes" };
+  }
   const laserOverrides = { ...(p.laserOverrides ?? {}) };
   if (Object.keys(ov).length) laserOverrides[station] = ov;
   else delete laserOverrides[station];
   const tested = new Set(p.testedOn ?? []);
   if (v.tested === "yes") tested.add(station); else if (v.tested === "no") tested.delete(station);
   return { ...p, laserOverrides, testedOn: [...tested].sort() };
+}
+
+/** Everything typed in the material dialog: the Generic tab (materialFields keys) and each laser's tab (overrideFields keys). */
+export interface MaterialDraft { generic: Record<string, DialogValue>; lasers: Record<string, Record<string, DialogValue>> }
+
+/** The starting values of every tab: the material's own settings, and each laser's (blank where it uses the generic ones). */
+export function materialDraft(cur: Preset | undefined, stations: string[]): MaterialDraft {
+  const vals = (fs: DialogField[]) => Object.fromEntries(fs.map((f) => [f.key, f.value]));
+  const base = cur ?? presetFromForm({ ...vals(materialFields()), material: "New material" }); // only for the "same as usual" hints
+  return { generic: vals(materialFields(cur)), lasers: Object.fromEntries(stations.map((st) => [st, vals(overrideFields(base, st))])) };
+}
+
+/** The whole dialog as one preset: the generic settings, then each laser's own (a laser with every box blank has none).
+ * Throws a plain message, naming the laser when the problem is on its tab. */
+export function presetFromDraft(d: MaterialDraft, cur?: Preset): Preset {
+  let p = presetFromForm(d.generic, cur);
+  for (const [station, v] of Object.entries(d.lasers)) {
+    try { p = presetWithOverride(p, station, v); } catch (e) { throw new Error(`${station}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  return p;
 }
 
 /** "100% · 3 mm/s · 2 passes · air" for a table cell. */

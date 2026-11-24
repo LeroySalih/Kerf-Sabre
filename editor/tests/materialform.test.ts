@@ -65,3 +65,34 @@ describe("settings on one laser", () => {
     expect(() => presetWithOverride(ply, "station-2", { ...f, cutPower: "101" })).toThrow(/0 to 100/);
   });
 });
+
+describe("the material dialog with laser tabs", () => {
+  it("builds one preset from the Generic tab and each laser's tab, keeping laser air assist", async () => {
+    const { materialDraft, presetFromDraft } = await import("../src/materialform");
+    const d = materialDraft(undefined, ["station-1", "station-2"]);
+    d.generic = { ...d.generic, material: "MDF", thicknessMm: 3, cutSpeed: 10 };
+    d.lasers["station-1"] = { ...d.lasers["station-1"]!, cutPower: "85", cutAir: "no", tested: "yes" };
+    const p = presetFromDraft(d);
+    expect(p.id).toBe("mdf-3mm");
+    expect(p.cut.speedMmPerS).toBe(10);
+    expect(p.laserOverrides).toEqual({ "station-1": { cut: { powerPct: 85, airAssist: false } } });
+    expect(p.testedOn).toEqual(["station-1"]);
+  });
+
+  it("names the laser when its tab has a mistake", async () => {
+    const { materialDraft, presetFromDraft } = await import("../src/materialform");
+    const d = materialDraft(undefined, ["station-2"]);
+    d.generic = { ...d.generic, material: "MDF" };
+    d.lasers["station-2"] = { ...d.lasers["station-2"]!, scorePower: "120" };
+    expect(() => presetFromDraft(d)).toThrow(/^station-2: Score: power/);
+  });
+
+  it("an existing laser setting shows on its tab and blanks clear it", async () => {
+    const { materialDraft, presetFromDraft } = await import("../src/materialform");
+    const cur = { ...presetFromDraft({ generic: { ...materialDraft(undefined, []).generic, material: "Ply" }, lasers: {} }), laserOverrides: { "station-3": { kerfMm: 0.3, score: { airAssist: true } } } };
+    const d = materialDraft(cur, ["station-3"]);
+    expect(d.lasers["station-3"]).toMatchObject({ kerf: "0.3", scoreAir: "yes", cutPower: "" });
+    d.lasers["station-3"] = { ...d.lasers["station-3"]!, kerf: "", scoreAir: "" };
+    expect(presetFromDraft(d, cur).laserOverrides).toEqual({});
+  });
+});

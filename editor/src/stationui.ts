@@ -396,8 +396,18 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     if (v) await bulk(`changed to ${matName(String(v.preset))}`, (id) => changeJobPreset(session, id, String(v.preset)))();
   })();
 
+  /** The pupil's groups as chips (the label on hover); after three, "+N" lists the rest on hover. */
+  const groupChips = (groups: { code: string; label?: string | null }[]): HTMLElement => {
+    const tip = (g: { code: string; label?: string | null }) => (g.label ? `${g.code}: ${g.label}` : g.code);
+    if (!groups.length) return h("span", { class: "qc-groups" }, h("span", { class: "qc-group none", title: "Not in any group" }, "No group"));
+    const shown = groups.length > 4 ? groups.slice(0, 3) : groups;
+    const rest = groups.slice(shown.length);
+    return h("span", { class: "qc-groups", title: `Groups: ${groups.map(tip).join(", ")}` }, ...shown.map((g) => h("span", { class: "qc-group", title: tip(g) }, g.code)),
+      ...(rest.length ? [h("span", { class: "qc-group more", title: rest.map(tip).join(", ") }, `+${rest.length}`)] : []));
+  };
+
   /** One file on one row: tick box, the pupil's name large, then the details, then what can be done. */
-  function card(o: { id: string | null; selectable: boolean; name: string; details: string[]; status: string; statusClass: string; warn?: string; actions: Node[] }): HTMLElement {
+  function card(o: { id: string | null; selectable: boolean; name: string; groups?: { code: string; label?: string | null }[]; details: string[]; status: string; statusClass: string; warn?: string; actions: Node[] }): HTMLElement {
     const row = h("div", { class: `qc-row${o.id && selected.has(o.id) ? " picked" : ""}` });
     const box = h("input", { type: "checkbox", "aria-label": `Select ${o.name}` }) as HTMLInputElement;
     if (o.selectable && o.id) {
@@ -407,13 +417,13 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     } else { box.disabled = true; box.title = "This file is on a laser"; }
     row.append(h("label", { class: "qc-tick" }, box),
       h("span", { class: "qc-name", title: o.name }, o.name),
+      groupChips(o.groups ?? []),
       h("span", { class: "qc-details", title: o.details.filter(Boolean).join(" · ") }, o.details.filter(Boolean).join(" · ")),
       ...(o.warn ? [h("span", { class: "qc-warn", title: o.warn }, `⚠ ${o.warn}`)] : []),
       h("span", { class: `qc-status ${o.statusClass}` }, o.status),
       h("span", { class: "qc-actions" }, ...o.actions));
     return row;
   }
-  const groupsOf = (g?: { code: string }[]) => (g?.length ? g.map((x) => x.code).join(", ") : "");
 
   function draw(): void {
     const f = bar.get();
@@ -444,8 +454,8 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
     for (const j of showWaiting) {
       const sel = h("select", { title: "Pupils do not choose a laser: pick the one that should cut this file, or leave it on Any laser for the next free one" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
       approvals.append(card({
-        id: j.id, selectable: !working, name: pupilLabel(j.pupilId, j.pupilName), statusClass: "wait", status: "Waiting",
-        details: [groupsOf(j.pupilGroups), j.name || j.id, matName(j.preset.id), waitingSize(j).replace(/^ · /, ""), j.estimate?.durationS ? describeDuration(j.estimate.durationS) : ""],
+        id: j.id, selectable: !working, name: pupilLabel(j.pupilId, j.pupilName), groups: j.pupilGroups, statusClass: "wait", status: "Waiting",
+        details: [j.name || j.id, matName(j.preset.id), waitingSize(j).replace(/^ · /, ""), j.estimate?.durationS ? describeDuration(j.estimate.durationS) : ""],
         warn: j.warnings?.length ? j.warnings.join(" ") : undefined,
         actions: [button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
           button("Material…", () => changeMaterial(j.id, j.preset.id)),
@@ -462,10 +472,10 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
       const queued = e.status === "approved" && !!e.jobId;
       const id = e.jobId;
       q.append(card({
-        id, selectable: queued && !working, name: pupilLabel(e.pupilId, e.pupilName),
+        id, selectable: queued && !working, name: pupilLabel(e.pupilId, e.pupilName), groups: e.pupilGroups,
         status: e.status === "approved" ? (e.position === 1 ? "Next" : `Place ${e.position}`) : STATUS_TEXT[e.status] ?? e.status,
         statusClass: e.status === "approved" ? (e.position === 1 ? "next" : "queued") : "active",
-        details: [`#${e.ticket}`, groupsOf(e.pupilGroups), e.name ?? "", matName(e.presetId), e.extentMm ? sizeText(e.extentMm) : "", e.estimatedS ? describeDuration(e.estimatedS) : "", e.station ? `for ${e.station}` : ""],
+        details: [`#${e.ticket}`, e.name ?? "", matName(e.presetId), e.extentMm ? sizeText(e.extentMm) : "", e.estimatedS ? describeDuration(e.estimatedS) : "", e.station ? `for ${e.station}` : ""],
         actions: queued && id ? [
           button("⤒", () => void act(() => moveInQueue(session, id, { to: "front" })), "icon"), button("↑", () => void act(() => moveInQueue(session, id, { to: "up" })), "icon"),
           button("↓", () => void act(() => moveInQueue(session, id, { to: "down" })), "icon"), button("⤓", () => void act(() => moveInQueue(session, id, { to: "back" })), "icon"),

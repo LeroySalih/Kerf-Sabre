@@ -28,6 +28,7 @@ table.ad-table tr:last-child td { border-bottom: none; }
 table.ad-table td.actions > div { display: flex; gap: 6px; flex-wrap: wrap; }
 .ad-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
 .ad-bar .spacer { flex: 1; }
+.ad-bar h3 { margin: 0; }
 .ad-empty { padding: 18px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; }
 .ad-err { color: var(--warn); font-weight: 600; }
 .ad-stations { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }

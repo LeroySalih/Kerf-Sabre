@@ -7,18 +7,19 @@ import { profileFromForm, stationFields } from "../machineform";
 import { opText } from "../materialform";
 import { openMaterialDialog } from "./materialdialog";
 import { presetLabel, type Preset } from "../presets";
+import { checkSchoolName } from "./schoolname";
 import { termsFields, termsFromForm, termsText, type Terms } from "../termsform";
 import { applyFilter, filterBar } from "../queuefilter";
 import { btn, el, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
-  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
+  addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, renameSchool, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
   listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, listStaffPeople, inviteStaff, removeStaffPerson, listDinoClasses, importDinoClasses, syncDinoClass, archivedPupils, deletePupilForever, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
-export interface Ctx { session: Session; school: string; go: (key: string) => void }
+export interface Ctx { session: Session; school: string; go: (key: string) => void; /** The school has a new name: the Admin header shows it at once. */ renamed?: (name: string) => void }
 export interface Page { key: string; title: string; lead: string; mount: (host: HTMLElement, ctx: Ctx) => void | (() => void) }
 
 const fail = (host: HTMLElement, e: unknown) => host.replaceChildren(el("p", { class: "ad-err" }, msg(e)));
@@ -630,8 +631,23 @@ const schoolPage: Page = {
         const note = !si.available[k] ? "Coming soon: can be set now, starts working when it is released." : !si.methods[k] && !si.canEnable[k] ? (k === "dino" ? "Linked to another school on this server." : "Kerf has not been registered with this provider yet.") : "";
         return el("tr", {}, cell(el("label", {}, box, " ", el("b", {}, label))), cell(hint), cell(note ? el("span", { class: "hint" }, note) : ""));
       });
+      const rename = () => void (async () => {
+        let value = sc.name, problem = "";
+        for (;;) {
+          const v = await openDialog("Rename the school", [{ key: "name", label: "School name", type: "text", value }], { ok: "Save", intro: problem || "Up to 128 characters. The school code stays the same." });
+          if (!v) return;
+          value = String(v.name ?? "");
+          const c = checkSchoolName(value);
+          if ("error" in c) { problem = c.error; continue; }
+          if (c.name === sc.name) return;
+          await attempt(async () => { const saved = await renameSchool(s, c.name); ctx.renamed?.(saved.name); }, redraw);
+          return;
+        }
+      })();
+      const title = el("h3", {}, sc.name);
+      const nameRow = s.role === "admin" ? el("div", { class: "ad-bar" }, title, btn("Rename…", rename)) : title;
       host.replaceChildren(
-        el("div", { class: "ad-card" }, el("h3", {}, sc.name), el("p", {}, "School code: ", el("code", { class: "ad-code" }, sc.code ?? "")),
+        el("div", { class: "ad-card" }, nameRow, el("p", {}, "School code: ", el("code", { class: "ad-code" }, sc.code ?? "")),
           el("p", { class: "hint" }, "Pupils type this school code when they sign in with a group code."),
           el("p", {}, `Plan: ${sc.plan === "free" ? "Free" : "Paid (everything, no limits)"}`),
           ...(now && !now.paid ? [el("p", {}, termsText(now)), ...now.grants.map((g) => el("p", { class: "hint" }, `${g.label}${g.until ? `, until ${new Date(g.until).toLocaleDateString()}` : ""}`))] : [])),

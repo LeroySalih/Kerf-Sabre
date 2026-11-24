@@ -71,6 +71,55 @@ class TestStaff:
         assert client.delete(f"{API}/staff/admin-alpha", headers=world["alpha"]["admin"]).status_code == 409  # not yourself
 
 
+class TestRenamingTheSchool:
+    """PATCH /school {name}: a school admin renames their own school; the ID and school code stay; nobody else is touched."""
+
+    def test_an_admin_renames_their_school_and_only_the_name_changes(self, client, world):
+        a = world["alpha"]
+        before = client.get(f"{API}/school", headers=a["admin"]).json()
+        r = client.patch(f"{API}/school", json={"name": "  Westfield High  "}, headers=a["admin"])
+        assert r.status_code == 200, r.text
+        assert r.json()["name"] == "Westfield High"
+        assert (r.json()["id"], r.json()["code"]) == (before["id"], before["code"])
+        assert client.get(f"{API}/school", headers=a["teacher"]).json()["name"] == "Westfield High"
+        assert client.get(f"{API}/school", headers=world["beta"]["admin"]).json()["name"] == "Beta"
+        listed = {x["id"]: x for x in client.get(f"{API}/schools", headers=world["root"]).json()}
+        assert listed["alpha"]["name"] == "Westfield High" and listed["alpha"]["code"] == before["code"]
+        assert listed["beta"]["name"] == "Beta"
+
+    def test_a_teacher_cannot_rename_but_can_still_switch_auto_approve(self, client, world):
+        a = world["alpha"]
+        r = client.patch(f"{API}/school", json={"name": "Teacher's school"}, headers=a["teacher"])
+        assert r.status_code == 403 and r.json()["code"] == "forbidden"
+        r = client.patch(f"{API}/school", json={"name": "Teacher's school", "autoApprove": True}, headers=a["teacher"])
+        assert r.status_code == 403  # nothing changes when part of it is refused
+        doc = client.get(f"{API}/school", headers=a["admin"]).json()
+        assert doc["name"] == "Alpha" and doc["autoApprove"] is False
+        r = client.patch(f"{API}/school", json={"autoApprove": True}, headers=a["teacher"])
+        assert r.status_code == 200 and r.json()["autoApprove"] is True and r.json()["name"] == "Alpha"
+        assert client.patch(f"{API}/school", json={"name": "Pupil school"}, headers=a["pupil"]).status_code == 403
+
+    def test_a_bad_name_is_refused_and_nothing_changes(self, client, world):
+        a = world["alpha"]
+        for bad in ("", "   ", None, "a" * 129, "Line\nbreak", "Tab\there", 42):
+            r = client.patch(f"{API}/school", json={"name": bad, "autoApprove": True}, headers=a["admin"])
+            assert r.status_code == 422 and r.json()["code"] == "invalid", repr(bad)
+        doc = client.get(f"{API}/school", headers=a["admin"]).json()
+        assert doc["name"] == "Alpha" and doc["autoApprove"] is False
+        assert client.patch(f"{API}/school", json={"name": "b" * 128}, headers=a["admin"]).json()["name"] == "b" * 128
+        assert client.patch(f"{API}/school", json={}, headers=a["admin"]).status_code == 422
+
+    def test_both_at_once_and_the_admin_name_and_auto_approve_together(self, client, world):
+        r = client.patch(f"{API}/school", json={"name": "Beta Academy", "autoApprove": True}, headers=world["beta"]["admin"])
+        assert r.status_code == 200 and r.json()["name"] == "Beta Academy" and r.json()["autoApprove"] is True
+        assert client.get(f"{API}/school", headers=world["alpha"]["admin"]).json()["name"] == "Alpha"
+
+    def test_the_site_admin_rename_uses_the_same_rules(self, client, world):
+        assert client.patch(f"{API}/schools/alpha", json={"name": "a" * 129}, headers=world["root"]).status_code == 422
+        assert client.patch(f"{API}/schools/alpha", json={"name": "Bad\x07name"}, headers=world["root"]).status_code == 422
+        assert client.patch(f"{API}/schools/alpha", json={"name": " Alpha School "}, headers=world["root"]).json()["name"] == "Alpha School"
+
+
 class TestClassesAreSeparate:
     def test_each_school_sees_only_its_own_classes_and_an_admin_sees_all_of_theirs(self, client, world):
         a, b = world["alpha"], world["beta"]

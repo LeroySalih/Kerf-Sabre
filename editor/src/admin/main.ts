@@ -98,7 +98,8 @@ async function shell(): Promise<void> {
   const nav = el("nav", { class: "ad-nav", "aria-label": "Admin pages" });
   let current: Page = pages[0]!;
 
-  const ctx: Ctx = { session: s, school: schoolName, go: (key) => { const p = pages.find((x) => x.key === key); if (p) show(p); } };
+  const ctx: Ctx = { session: s, school: schoolName, go: (key) => { const p = pages.find((x) => x.key === key); if (p) show(p); },
+    renamed: (name) => { schoolName = name; ctx.school = name; whoText.textContent = whoLine(); } };
   function show(p: Page): void {
     stopPage();
     current = p;
@@ -113,9 +114,12 @@ async function shell(): Promise<void> {
 
   // the person's name (from DINO or their staff account), else their ID; the ID stays on hover. DINO's name can arrive a moment later.
   const whoName = el("span", { title: s.id }, s.name ?? s.id);
+  // the school's name leads the line; a rename on the School page updates it without a reload (ctx.renamed)
+  const whoLine = () => platform ? `Site admin: ${s.name ?? s.id}` : `${schoolName ? schoolName + " · " : ""}${s.schoolCode ? `school code ${s.schoolCode} · ` : ""}${s.plan === "free" ? "Free plan · " : ""}${s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: `;
+  const whoText = el("span", {}, whoLine());
   window.addEventListener("kerf-profile", () => { whoName.textContent = s.name ?? s.id; });
   const head = el("header", { class: `ad-head${platform ? " ad-platform" : ""}` }, el("span", { class: "brand" }, platform ? "Kerf Platform" : "Kerf Admin"),
-    el("span", { class: "who" }, platform ? `Site admin: ${s.name ?? s.id}` : `${schoolName ? schoolName + " · " : ""}${s.schoolCode ? `school code ${s.schoolCode} · ` : ""}${s.plan === "free" ? "Free plan · " : ""}${s.role === "admin" ? "School admin" : s.role === "technician" ? "Technician" : "Teacher"}: `, whoName), el("span", { class: "spacer" }),
+    el("span", { class: "who" }, whoText, whoName), el("span", { class: "spacer" }),
     ...(s.siteAdmin && s.role !== "platform" ? [btn(platform ? "My school" : "Kerf Platform", () => switchSite(platform ? "school" : "platform"))] : []),
     ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/editor/" }, "Editor")] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);

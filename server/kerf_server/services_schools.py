@@ -95,6 +95,23 @@ def list_schools(s: Session) -> list[dict]:
     return [school_doc(x) for x in s.scalars(select(School).order_by(School.id))]
 
 
+NAME_MAX = 128
+
+
+def clean_school_name(raw: object) -> str:
+    """A school's display name: trimmed, 1 to 128 characters, no control characters (else 422 invalid). The school ID and code never change with it."""
+    if raw is not None and not isinstance(raw, str):
+        raise ApiError(422, "invalid", "The school's name is text.")
+    name = (raw or "").strip()
+    if not name:
+        raise ApiError(422, "invalid", "Give the school a name.")
+    if not name.isprintable():
+        raise ApiError(422, "invalid", "The school's name cannot have line breaks or other control characters.")
+    if len(name) > NAME_MAX:
+        raise ApiError(422, "invalid", f"The school's name can be up to {NAME_MAX} characters.")
+    return name
+
+
 def create_school(s: Session, school_id: str, name: str, plan: str = "free") -> School:
     school_id = (school_id or "").strip().lower()
     if not SCHOOL_ID_RE.match(school_id):

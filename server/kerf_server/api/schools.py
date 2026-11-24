@@ -31,10 +31,7 @@ def update_school_platform(school_id: str, body: dict[str, Any] = Body(...), _: 
     if "plan" in body:
         ss.set_plan(s, school_id, str(body["plan"]))
     if "name" in body:
-        name = str(body["name"] or "").strip()
-        if not name:
-            raise ApiError(422, "invalid", "Give the school a name.")
-        row.name = name[:128]
+        row.name = ss.clean_school_name(body["name"])
     return ss.school_doc(row, cfg.auto_approve_default)
 
 
@@ -137,11 +134,22 @@ def my_school(who: Principal = Depends(require("admin", "teacher")), s: Session 
 
 @router.patch("/school")
 def update_school(body: dict[str, Any] = Body(...), who: Principal = Depends(require("admin", "teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
-    """Switch auto-approve on or off for my school. Only files that arrive afterwards are affected."""
+    """Change my school: `autoApprove` (teachers and admins; only files that arrive afterwards are affected) and/or `name`
+    (school admins only; the display name only, the school ID and code stay). Everything is checked before anything changes."""
     school = s.get(School, who.school)
-    if not isinstance(body.get("autoApprove"), bool):
+    if "name" not in body and "autoApprove" not in body:
+        raise ApiError(422, "invalid", "Send autoApprove: true or false, or name.")
+    name = None
+    if "name" in body:
+        if who.role != "admin":
+            raise ApiError(403, "forbidden", "Only a school admin can rename the school.")
+        name = ss.clean_school_name(body["name"])
+    if "autoApprove" in body and not isinstance(body["autoApprove"], bool):
         raise ApiError(422, "invalid", "Send autoApprove: true or false.")
-    school.auto_approve = body["autoApprove"]
+    if name is not None:
+        school.name = name
+    if "autoApprove" in body:
+        school.auto_approve = body["autoApprove"]
     return ss.school_doc(school, cfg.auto_approve_default)
 
 

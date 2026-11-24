@@ -348,8 +348,11 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
   let stations: StationInfo[] = [];
   let materials: Preset[] = [];
   const bar = filterBar(() => draw(), "kerf.admin.queueFilter");
-  const body = h("div");
+  const body = h("div", { class: "qc-scroll" });
   container.replaceChildren(bar.el, body); // the bar stays put (and keeps its focus) while the lists refresh
+  // the lists fill the window below the search bar and scroll inside it, so the page itself does not scroll
+  const fit = () => { if (body.isConnected) body.style.maxHeight = `${Math.max(240, Math.floor(window.innerHeight - body.getBoundingClientRect().top - 60))}px`; };
+  window.addEventListener("resize", fit);
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
   let busy = false;
 
@@ -484,7 +487,9 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
       }));
     }
     body.replaceChildren(bulkBar, approvals, q);
+    fit();
   }
 
-  return poller(load, 3000);
+  const stopPolling = poller(load, 3000);
+  return () => { stopPolling(); window.removeEventListener("resize", fit); };
 }

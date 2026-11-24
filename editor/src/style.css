@@ -341,3 +341,7 @@ td.cell.st-todo { background: #f9fafb; }
 .md-field input::placeholder { color: #9ca3af; }
 .md-err { color: #b91c1c; min-height: 1.2em; margin: 4px 0; }
 @media (max-width: 640px) { .md-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* The Queue page's lists scroll inside the window (mountQueue sets max-height to the space left below the search bar) */
+.qc-scroll { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.qc-scroll .qc-bulk { top: 0; }

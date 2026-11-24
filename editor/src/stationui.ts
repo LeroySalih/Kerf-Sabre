@@ -12,6 +12,7 @@ import {
   type JobSummary, type QueueEntry, type Session, type StationInfo,
 } from "./server";
 import { applyFilter, filterBar, type FilterBar } from "./queuefilter";
+import { bulkText, prune, runEach, toggleAll } from "./queueselect";
 import { formatClock, previewSvg, progressPct, remainingText, sizeOf, sizeText, stepState } from "./stationlogic";
 
 const POLL_MS = 2000;
@@ -362,50 +363,117 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
   }
 
   const matName = (id?: string | null) => { const p = materials.find((m) => m.id === id); return p ? presetLabel(p) : id ?? ""; };
+  const materialOptions = () => materials.map((m) => ({ value: m.id, label: presetLabel(m) }));
   /** Change a waiting file's material: the pupil does not have to send it again, and it keeps its place. */
   const changeMaterial = (id: string, current?: string | null) => void (async () => {
-    const v = await openDialog("Change the material", [{ key: "preset", label: "Material", type: "select", value: current ?? materials[0]?.id ?? "", options: materials.map((m) => ({ value: m.id, label: presetLabel(m) })) }],
+    const v = await openDialog("Change the material", [{ key: "preset", label: "Material", type: "select", value: current ?? materials[0]?.id ?? "", options: materialOptions() }],
       { ok: "Change", intro: "The file keeps its place. Its estimate is worked out again, and it must be framed again on the laser." });
     if (v && v.preset !== current) await act(() => changeJobPreset(session, id, String(v.preset)));
   })();
 
-  const groupsText = (g?: { code: string }[]) => (g?.length ? ` · ${g.map((x) => x.code).join(", ")}` : "");
+  /** Ticked files (job ids): waiting and queued files can be cancelled or given another material together. */
+  let selected = new Set<string>();
+  let working = "";
+  const labelOf = new Map<string, string>();
+  const bulk = (verb: string, fn: (id: string) => Promise<unknown>) => async () => {
+    const ids = [...selected];
+    working = `Working… 0 of ${ids.length}`; draw();
+    const r = await runEach(ids, fn, (d, n) => { working = `Working… ${d} of ${n}`; draw(); });
+    working = "";
+    selected = new Set(r.failed.map((f) => f.id)); // keep the ones that did not work ticked, to try again
+    await infoDialog(r.failed.length ? "Some files could not be changed" : "Done", bulkText(r, verb, (id) => labelOf.get(id) ?? id));
+    await load();
+  };
+  const cancelSelected = () => {
+    if (!selected.size || working) return;
+    if (!confirm(`Cancel ${selected.size} file${selected.size === 1 ? "" : "s"}? The pupils see that they were cancelled.`)) return;
+    void bulk("cancelled", (id) => cancelJob(session, id))();
+  };
+  const materialSelected = () => void (async () => {
+    if (!selected.size || working) return;
+    const v = await openDialog(`Change the material of ${selected.size} file${selected.size === 1 ? "" : "s"}`, [{ key: "preset", label: "Material", type: "select", value: materials[0]?.id ?? "", options: materialOptions() }],
+      { ok: "Change", intro: "Each file keeps its place. Their estimates are worked out again, and each must be framed again on the laser. A file that does not fit the new material is left as it was and listed." });
+    if (v) await bulk(`changed to ${matName(String(v.preset))}`, (id) => changeJobPreset(session, id, String(v.preset)))();
+  })();
+
+  /** One file on one row: tick box, the pupil's name large, then the details, then what can be done. */
+  function card(o: { id: string | null; selectable: boolean; name: string; details: string[]; status: string; statusClass: string; warn?: string; actions: Node[] }): HTMLElement {
+    const row = h("div", { class: `qc-row${o.id && selected.has(o.id) ? " picked" : ""}` });
+    const box = h("input", { type: "checkbox", "aria-label": `Select ${o.name}` }) as HTMLInputElement;
+    if (o.selectable && o.id) {
+      const id = o.id;
+      box.checked = selected.has(id);
+      box.addEventListener("change", () => { if (box.checked) selected.add(id); else selected.delete(id); draw(); });
+    } else { box.disabled = true; box.title = "This file is on a laser"; }
+    row.append(h("label", { class: "qc-tick" }, box),
+      h("span", { class: "qc-name", title: o.name }, o.name),
+      h("span", { class: "qc-details", title: o.details.filter(Boolean).join(" · ") }, o.details.filter(Boolean).join(" · ")),
+      ...(o.warn ? [h("span", { class: "qc-warn", title: o.warn }, `⚠ ${o.warn}`)] : []),
+      h("span", { class: `qc-status ${o.statusClass}` }, o.status),
+      h("span", { class: "qc-actions" }, ...o.actions));
+    return row;
+  }
+  const groupsOf = (g?: { code: string }[]) => (g?.length ? g.map((x) => x.code).join(", ") : "");
 
   function draw(): void {
     const f = bar.get();
     const showWaiting = applyFilter(waiting, f);
     const showQueue = applyFilter(queue, f);
     bar.update([...waiting, ...queue], showWaiting.length + showQueue.length, waiting.length + queue.length);
-    const approvals = h("div", {}, h("h3", {}, `Waiting for approval (${showWaiting.length === waiting.length ? waiting.length : `${showWaiting.length} of ${waiting.length}`})`));
+    const selectableIds = [...waiting.map((j) => j.id), ...queue.filter((e) => e.status === "approved" && e.jobId).map((e) => e.jobId!)];
+    selected = prune(selected, selectableIds);
+    labelOf.clear();
+    for (const j of waiting) labelOf.set(j.id, `${pupilLabel(j.pupilId, j.pupilName)} (${j.name || j.id})`);
+    for (const e of queue) if (e.jobId) labelOf.set(e.jobId, `${pupilLabel(e.pupilId, e.pupilName)} (ticket ${e.ticket})`);
+    const shownIds = [...showWaiting.map((j) => j.id), ...showQueue.filter((e) => e.status === "approved" && e.jobId).map((e) => e.jobId!)];
+    const allShown = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+
+    const all = h("input", { type: "checkbox", "aria-label": "Select every file shown" }) as HTMLInputElement;
+    all.checked = allShown;
+    all.indeterminate = !allShown && shownIds.some((id) => selected.has(id));
+    all.disabled = !shownIds.length || !!working;
+    all.addEventListener("change", () => { selected = toggleAll(selected, shownIds); draw(); });
+    const bulkBar = h("div", { class: `qc-bulk${selected.size ? " on" : ""}` },
+      h("label", { class: "qc-tick" }, all, " Select all shown"),
+      h("span", { class: "qc-count" }, working || (selected.size ? `${selected.size} selected` : "Tick files to cancel them or change their material together")),
+      ...(selected.size && !working ? [button("Change material…", materialSelected), button("Cancel selected", cancelSelected, "danger"), button("Clear", () => { selected.clear(); draw(); })] : []));
+
+    const approvals = h("div", { class: "qc-list" }, h("h3", {}, `Waiting for approval (${showWaiting.length === waiting.length ? waiting.length : `${showWaiting.length} of ${waiting.length}`})`));
     if (!waiting.length) approvals.append(h("p", { class: "hint" }, "Nothing to approve. (Classes set to skip approval send files straight to the queue.)"));
     else if (!showWaiting.length) approvals.append(h("p", { class: "hint" }, "No waiting files match the filter."));
     for (const j of showWaiting) {
       const sel = h("select", { title: "Pupils do not choose a laser: pick the one that should cut this file, or leave it on Any laser for the next free one" }, new Option("Any laser", ""), ...stations.map((s) => new Option(s.id, s.id)));
-      approvals.append(h("div", { class: "filerow" },
-        h("span", {}, `${j.id} · ${pupilLabel(j.pupilId, j.pupilName)}${groupsText(j.pupilGroups)} · ${matName(j.preset.id)}${waitingSize(j)}${j.estimate?.durationS ? ` · ${describeDuration(j.estimate.durationS)}` : ""}${j.warnings?.length ? ` · ⚠ ${j.warnings.join(" ")}` : ""}`),
-        button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
-        button("Material…", () => changeMaterial(j.id, j.preset.id)),
-        button("Reject…", () => void (async () => {
-          const v = await openDialog("Reject this file", [{ key: "reason", label: "Reason (the pupil sees this)", type: "text", value: "" }], { ok: "Reject" });
-          if (v && String(v.reason).trim()) await act(() => rejectJob(session, j.id, String(v.reason).trim()));
-        })())));
+      approvals.append(card({
+        id: j.id, selectable: !working, name: pupilLabel(j.pupilId, j.pupilName), statusClass: "wait", status: "Waiting",
+        details: [groupsOf(j.pupilGroups), j.name || j.id, matName(j.preset.id), waitingSize(j).replace(/^ · /, ""), j.estimate?.durationS ? describeDuration(j.estimate.durationS) : ""],
+        warn: j.warnings?.length ? j.warnings.join(" ") : undefined,
+        actions: [button("Approve", () => void act(() => approveJob(session, j.id, sel.value || undefined)), "go"), sel,
+          button("Material…", () => changeMaterial(j.id, j.preset.id)),
+          button("Reject…", () => void (async () => {
+            const v = await openDialog("Reject this file", [{ key: "reason", label: "Reason (the pupil sees this)", type: "text", value: "" }], { ok: "Reject" });
+            if (v && String(v.reason).trim()) await act(() => rejectJob(session, j.id, String(v.reason).trim()));
+          })())],
+      }));
     }
-    const q = h("div", {}, h("h3", {}, `Queue (${showQueue.length === queue.length ? queue.length : `${showQueue.length} of ${queue.length}`})`));
+    const q = h("div", { class: "qc-list" }, h("h3", {}, `Queue (${showQueue.length === queue.length ? queue.length : `${showQueue.length} of ${queue.length}`})`));
     if (!queue.length) q.append(h("p", { class: "hint" }, "The queue is empty."));
     else if (!showQueue.length) q.append(h("p", { class: "hint" }, "No queued files match the filter."));
     for (const e of showQueue) {
-      const row = h("div", { class: "filerow" }, h("span", {}, `#${e.ticket} · ${pupilLabel(e.pupilId, e.pupilName)}${groupsText(e.pupilGroups)}${e.name ? ` · ${e.name}` : ""} · ${matName(e.presetId)}${e.extentMm ? ` · ${sizeText(e.extentMm)}` : ""} · ${e.status === "approved" ? `place ${e.position}` : STATUS_TEXT[e.status] ?? e.status}${e.station ? ` · ${e.station}` : ""}`));
-      if (e.status === "approved" && e.jobId) {
-        const id = e.jobId;
-        row.append(
+      const queued = e.status === "approved" && !!e.jobId;
+      const id = e.jobId;
+      q.append(card({
+        id, selectable: queued && !working, name: pupilLabel(e.pupilId, e.pupilName),
+        status: e.status === "approved" ? (e.position === 1 ? "Next" : `Place ${e.position}`) : STATUS_TEXT[e.status] ?? e.status,
+        statusClass: e.status === "approved" ? (e.position === 1 ? "next" : "queued") : "active",
+        details: [`#${e.ticket}`, groupsOf(e.pupilGroups), e.name ?? "", matName(e.presetId), e.extentMm ? sizeText(e.extentMm) : "", e.estimatedS ? describeDuration(e.estimatedS) : "", e.station ? `for ${e.station}` : ""],
+        actions: queued && id ? [
           button("⤒", () => void act(() => moveInQueue(session, id, { to: "front" })), "icon"), button("↑", () => void act(() => moveInQueue(session, id, { to: "up" })), "icon"),
           button("↓", () => void act(() => moveInQueue(session, id, { to: "down" })), "icon"), button("⤓", () => void act(() => moveInQueue(session, id, { to: "back" })), "icon"),
           button("Material…", () => changeMaterial(id, e.presetId)),
-          button("Cancel", () => { if (confirm(`Cancel ticket ${e.ticket}?`)) void act(() => cancelJob(session, id)); }, "danger"));
-      }
-      q.append(row);
+          button("Cancel", () => { if (confirm(`Cancel ticket ${e.ticket}?`)) void act(() => cancelJob(session, id)); }, "danger")] : [],
+      }));
     }
-    body.replaceChildren(approvals, q);
+    body.replaceChildren(bulkBar, approvals, q);
   }
 
   return poller(load, 3000);

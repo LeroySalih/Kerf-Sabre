@@ -74,10 +74,10 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 
 | Free school | Paid school (approved by the site admin) |
 |---|---|
-| The Editor; pupil and staff accounts; groups; Pupil Cards; files saved to Kerf; **teacher merges pupils' files** into one file | Everything free, plus **activities and teacher feedback, approval, laser connection (Kerf Cutter), the queue, Station pages, the camera** |
+| The Editor; pupil and staff accounts; groups; Pupil Cards; files saved to Kerf | Everything free, plus **activities and teacher feedback, approval, laser connection (Kerf Cutter), the queue, Station pages, the camera**, and the **teacher merging pupils' files** into one file (from the queue) |
 
 - **Limits for a free school:** 20 files per pupil, 20 groups per school, 50 pupils per group. Generous but firm; the server enforces them and says which limit was reached.
-- The teacher's merge of pupils' files must work from pupils' **saved files** (a free school has no queue).
+- The teacher's merge of pupils' files is **paid** (owner, 2026-11-24): it works from the queue, which only a school with the laser has. It comes with the `laser` feature (so also with a terms grant that includes the laser).
 - **The camera features need a review** before they are sold (owner's note).
 - **School code:** every school has a short school code. Group-code sign-in is **school code + group code + pupil ID + password**. No QR codes.
 - **Pupil IDs** follow the group-code rule: Kerf makes one, the teacher may type their own (by hand or in the CSV), unique within the school.

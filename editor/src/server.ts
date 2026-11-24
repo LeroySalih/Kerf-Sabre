@@ -93,7 +93,7 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
 
 export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean }
 export interface ClassPupil { pupilId: string; displayName?: string; lastLogin: string | null; locked: boolean }
-export interface AddedPupils { created: { pupilId: string; pin: string }[]; existing: string[]; conflicts: string[] }
+export interface AddedPupils { created: { pupilId: string; pin: string }[]; /** Already in another group of the school: added to this one too, PIN unchanged. */ added?: string[]; existing: string[]; conflicts: string[] }
 export interface GroupInfo { id: string; name: string; subject: string | null; yearGroup: string | null; pupils: string[] }
 /** The teacher's classes with their pupil IDs (from DINO when signed in with DINO). */
 export const listGroups = (s: Session, f?: Fetch) => request<GroupInfo[]>(s, "GET", "/groups", undefined, f);

@@ -167,7 +167,26 @@ class SchoolClass(Base):
     teacher_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     #: Must a teacher approve this class's files before they can be cut? NULL (a class made before this existed) counts as yes.
     require_approval: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
+    #: The code pupils type to join or sign in through this group. Unique within the school; NULL means the same as `code`.
+    #: A teacher may change it later (`code` never changes: activities and files point at it).
+    join_code: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    #: An archived group keeps its pupils, activities and files but is hidden, cannot be signed in through and does not count
+    #: towards a free school's group limit.
+    archived: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    #: Where the group came from: manual, csv, dino, google, microsoft (NULL = manual), and the provider's own group id.
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GroupMember(Base):
+    """A pupil in a group. A pupil can be in several groups of their school; `Pupil.class_code` is the group they were
+    first added to (their home group, which fixes their school)."""
+
+    __tablename__ = "group_members"
+    class_code: Mapped[str] = mapped_column(String(32), ForeignKey("classes.code", ondelete="CASCADE"), primary_key=True)
+    pupil_id: Mapped[str] = mapped_column(String(64), ForeignKey("pupils.pupil_id", ondelete="CASCADE"), primary_key=True, index=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Pupil(Base):

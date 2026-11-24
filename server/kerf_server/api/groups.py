@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from ..deps import get_session
 from ..errors import ApiError
-from ..models import Pupil
 from ..security import SSO_ROLES, Principal, bearer, require
 from .classes import list_classes
 
@@ -25,10 +24,10 @@ def groups(request: Request, who: Principal = Depends(require("teacher")), s: Se
             return sso.groups(bearer(request) or "")
         except Exception as e:  # DINO down, `groups` scope missing (the token pre-dates it: sign in again), bad answer
             raise ApiError(502, "groups_unavailable", "Could not get your classes from DINO. Sign out and in again, then retry.") from e
-    from sqlalchemy import select
+    from ..services_classes import member_ids
 
     out = []
     for c in list_classes(who, s):
-        ids = list(s.scalars(select(Pupil.pupil_id).where(Pupil.class_code == c["code"]).order_by(Pupil.pupil_id)))
+        ids = member_ids(s, c["code"])
         out.append({"id": c["code"], "name": c.get("label") or c["code"], "subject": None, "yearGroup": None, "pupils": ids})
     return out

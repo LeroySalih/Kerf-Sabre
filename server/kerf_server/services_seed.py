@@ -35,6 +35,9 @@ def seed(db: Database, settings: Settings) -> None:
         from .services_schools import ensure_codes
 
         ensure_codes(s)
+        from .services_classes import ensure_members
+
+        ensure_members(s)
         if machine_dir.exists():
             for f in sorted(machine_dir.glob("*.json")):
                 m = json.loads(f.read_text())

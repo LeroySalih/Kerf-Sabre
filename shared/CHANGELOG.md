@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.34 - groups: several per pupil, join codes, archiving, free limits (additive)
+- A pupil can be in **several groups** of their school. `POST /classes/{code}/pupils` adds a pupil who is already in another group of the same school (`added`, no new PIN); `conflicts` now means an ID taken in another school. Removing a pupil takes them out of that group only; out of their last group they are removed as before. Pupils sign in through any of their groups and see the activities of all of them. `ClassPupil.groups` lists them.
+- Groups have a **join code** (`ClassInfo.joinCode`, unique in the school, defaults to the code, editable with `PUT /classes/{code} {joinCode}`), can be **archived** (`archived`; hidden from `GET /classes` unless `?archived=true`, cannot be signed in through) and renamed. `POST /classes` without `code` makes one. `ClassInfo.source` says where a group came from.
+- A free school's limits answer **409 `limit_reached`** (details `[{limit, max, current}]`): 20 groups (archived groups do not count), 50 pupils per group (nothing is added past it), 20 files per pupil.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.34`.
+
 ## 0.2.33 - per-school sign-in methods and linked identities (additive)
 - `GET /school/sign-in` (teacher, admin) and `PATCH /school/sign-in` (admin): `{methods: {dino, google, microsoft, groupCode, email}, googleDomain, microsoftTenant, canEnable, available}`. A new school starts with `groupCode` and `email` on and the rest off; a school from before this (the DINO school) has DINO on. `409 not_set_up` turning on Google or Microsoft before Kerf is registered with them, or DINO for a school it is not linked to (`KERF_SSO_SCHOOL`); `409 would_lock_out` turning off every staff method. `available` says which sign-in screens exist yet (DINO today; the others can be set ahead).
 - A DINO sign-in to a school that has switched DINO off answers `403 sign_in_off` (site admins are never locked out).

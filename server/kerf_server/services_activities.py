@@ -35,15 +35,23 @@ def class_activity(s: Session, code: str, activity_id: str) -> Activity:
     return a
 
 
-def pupil_class(s: Session, pupil_id: str) -> str | None:
-    p = s.get(Pupil, pupil_id)
-    return p.class_code if p else None
+def pupil_groups(s: Session, pupil_id: str) -> list[str]:
+    """The (not archived) groups this pupil is in: they see the activities of all of them."""
+    from .services_classes import groups_of
+
+    return groups_of(s, pupil_id)
+
+
+def _member(s: Session, code: str, pupil_id: str) -> bool:
+    from .services_classes import in_group
+
+    return s.get(Pupil, pupil_id) is not None and in_group(s, code, pupil_id)
 
 
 def pupil_activity(s: Session, who, activity_id: str) -> Activity:
     """An activity this pupil may see: published, not archived, in their class."""
     a = s.get(Activity, activity_id)
-    if a is None or a.archived or not a.published or a.class_code != pupil_class(s, who.id):
+    if a is None or a.archived or not a.published or a.class_code not in pupil_groups(s, who.id):
         raise ApiError(404, "not_found", "There is no such activity.")
     return a
 
@@ -180,7 +188,9 @@ def progress(s: Session, who, code: str) -> dict[str, Any]:
     """Every pupil against every activity, for the teacher's overview."""
     cls = owned_class(s, who, code)
     acts = list(s.scalars(select(Activity).where(Activity.class_code == cls.code, Activity.archived.is_(False)).order_by(Activity.position, Activity.created_at)))
-    pupils = list(s.scalars(select(Pupil.pupil_id).where(Pupil.class_code == cls.code).order_by(Pupil.pupil_id)))
+    from .services_classes import member_ids
+
+    pupils = member_ids(s, cls.code)
     named = people.names(s, cls.school_id, pupils)
     work = {(w.pupil_id, w.activity_id): w for w in s.scalars(select(ActivityWork).where(ActivityWork.activity_id.in_([a.id for a in acts]))) } if acts else {}
     fb: dict[tuple[str, str], int] = {}
@@ -197,7 +207,7 @@ def progress(s: Session, who, code: str) -> dict[str, Any]:
 def pupil_work(s: Session, who, code: str, activity_id: str, pupil_id: str) -> dict[str, Any]:
     cls = owned_class(s, who, code)
     a = class_activity(s, cls.code, activity_id)
-    if s.get(Pupil, pupil_id) is None or s.get(Pupil, pupil_id).class_code != cls.code:  # type: ignore[union-attr]
+    if not _member(s, cls.code, pupil_id):
         raise ApiError(404, "not_found", "That pupil is not in this class.")
     jobs = list(s.scalars(select(Job).where(Job.pupil_id == pupil_id, Job.activity_id == a.id).order_by(Job.created_at.desc())))
     return {**work_doc(s, pupil_id, a), "files": [{"id": j.id, "status": j.status, "createdAt": iso(j.created_at), "presetId": j.preset_id} for j in jobs]}
@@ -206,8 +216,7 @@ def pupil_work(s: Session, who, code: str, activity_id: str, pupil_id: str) -> d
 def add_feedback(s: Session, who, code: str, activity_id: str, pupil_id: str, body: dict[str, Any]) -> Feedback:
     cls = owned_class(s, who, code)
     a = class_activity(s, cls.code, activity_id)
-    p = s.get(Pupil, pupil_id)
-    if p is None or p.class_code != cls.code:
+    if not _member(s, cls.code, pupil_id):
         raise ApiError(404, "not_found", "That pupil is not in this class.")
     text = str(body.get("text") or "").strip()
     outcome = body.get("outcome", "comment")
@@ -230,8 +239,7 @@ def add_feedback(s: Session, who, code: str, activity_id: str, pupil_id: str, bo
 
 def pupil_jobs(s: Session, who, code: str, pupil_id: str) -> list[Job]:
     cls = owned_class(s, who, code)
-    p = s.get(Pupil, pupil_id)
-    if p is None or p.class_code != cls.code:
+    if not _member(s, cls.code, pupil_id):
         raise ApiError(404, "not_found", "That pupil is not in this class.")
     return list(s.scalars(select(Job).where(Job.pupil_id == pupil_id).order_by(Job.created_at.desc())))
 
@@ -239,10 +247,10 @@ def pupil_jobs(s: Session, who, code: str, pupil_id: str) -> list[Job]:
 # ---------------------------------------------------------------- pupil side
 
 def my_activities(s: Session, who) -> list[dict[str, Any]]:
-    code = pupil_class(s, who.id)
-    if code is None:
+    codes = pupil_groups(s, who.id)
+    if not codes:
         return []
-    acts = list(s.scalars(select(Activity).where(Activity.class_code == code, Activity.published.is_(True), Activity.archived.is_(False)).order_by(Activity.position, Activity.created_at)))
+    acts = list(s.scalars(select(Activity).where(Activity.class_code.in_(codes), Activity.published.is_(True), Activity.archived.is_(False)).order_by(Activity.position, Activity.created_at)))
     out = []
     for a in acts:
         w = work_doc(s, who.id, a)

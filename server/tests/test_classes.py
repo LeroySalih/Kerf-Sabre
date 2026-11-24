@@ -133,18 +133,18 @@ class TestTeacherSide:
     def test_classes_pupils_and_counts(self, client, tokens):
         setup_class_with(client, tokens, ids=("P001", "P002", "P003"))
         t = auth(tokens["teacher"])
-        assert client.get(f"{API}/classes", headers=t).json() == [{"code": "9B-DT", "label": "Y9 set 2", "teacherId": "T001", "pupilCount": 3, "requireApproval": True}]
+        assert client.get(f"{API}/classes", headers=t).json() == [{"code": "9B-DT", "label": "Y9 set 2", "teacherId": "T001", "pupilCount": 3, "requireApproval": True, "joinCode": "9B-DT", "archived": False, "source": "manual"}]
         listing = client.get(f"{API}/classes/9b-dt/pupils", headers=t).json()
         assert [p["pupilId"] for p in listing] == ["P001", "P002", "P003"] and "pin" not in str(listing)
         assert client.post(f"{API}/classes", json={"code": "9b-dt"}, headers=t).status_code == 409
         assert client.post(f"{API}/classes", json={"code": "bad code!"}, headers=t).status_code == 422
 
-    def test_adding_again_keeps_pins_and_reports_conflicts(self, client, tokens):
+    def test_adding_again_keeps_pins_and_joins_a_second_group(self, client, tokens):
         pins = setup_class_with(client, tokens)
         t = auth(tokens["teacher"])
         client.post(f"{API}/classes", json={"code": "10A"}, headers=t)
         r = client.post(f"{API}/classes/10A/pupils", json={"pupilIds": ["P002", "P010"]}, headers=t).json()
-        assert [c["pupilId"] for c in r["created"]] == ["P010"] and r["conflicts"] == ["P002"] and r["existing"] == []
+        assert [c["pupilId"] for c in r["created"]] == ["P010"] and r["added"] == ["P002"] and r["conflicts"] == [] and r["existing"] == []
         again = client.post(f"{API}/classes/9B-DT/pupils", json={"pupilIds": ["P001", "P003"]}, headers=t).json()
         assert again["existing"] == ["P001"] and [c["pupilId"] for c in again["created"]] == ["P003"]
         assert login(client, pin=pins["P001"]).status_code == 200  # the first PIN still works

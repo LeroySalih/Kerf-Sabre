@@ -64,7 +64,7 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
       if (!ids) return;
       await run(async () => {
         const r = await addPupils(session, code, ids);
-        const notes = [...(r.existing.length ? [`Already in the class: ${r.existing.join(", ")}`] : []), ...(r.conflicts.length ? [`In another class, not added: ${r.conflicts.join(", ")}`] : [])];
+        const notes = [...(r.added?.length ? [`Also added (already in another group, PIN unchanged): ${r.added.join(", ")}`] : []), ...(r.existing.length ? [`Already in the class: ${r.existing.join(", ")}`] : []), ...(r.conflicts.length ? [`Used in another school, not added: ${r.conflicts.join(", ")}`] : [])];
         await infoDialog(r.created.length ? `${r.created.length} pupil${r.created.length === 1 ? "" : "s"} added to ${code}` : "Nobody new to add", notes);
       });
     })(), "on")));

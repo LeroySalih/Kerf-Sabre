@@ -5,7 +5,7 @@ import hashlib
 import secrets
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import services_classes as classes
@@ -17,7 +17,7 @@ from .errors import ApiError
 from .gcode import GcodeError, Result, generate, probe_head
 from .models import ActivityWork, GcodeRow, Job, JobEvent
 
-SCHEMA_VERSION = "0.2.33"
+SCHEMA_VERSION = "0.2.34"
 OPEN_STATES = ("draft", "submitted", "approved", "queued")  # states a job can be cancelled from
 
 
@@ -174,6 +174,10 @@ def create(s: Session, cfg: Settings, who, doc: dict[str, Any], *, source: str =
     p = sp.latest_preset(s, who.school, doc["preset"]["id"])
     if p is None:
         raise ApiError(422, "unknown_preset", f"There is no preset '{doc['preset']['id']}'.")
+    if source != "calibration":
+        from .services_schools import check_limit
+
+        check_limit(s, who.school, "filesPerPupil", s.scalar(select(func.count()).select_from(Job).where(Job.pupil_id == pupil, Job.school_id == who.school)) or 0)
     j = Job(
         id=new_id(), pupil_id=pupil, school_id=who.school, status="draft", source=source, preset_id=p["id"], preset_version=p["version"],
         station=doc.get("station"), name=clean_name(doc.get("name")), origin=doc["origin"], objects=doc["objects"], dimensions=doc.get("dimensions", []), warnings=[], report=report, units=units,

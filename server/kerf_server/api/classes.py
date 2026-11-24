@@ -4,13 +4,13 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, Response
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import services_classes as sc
 from ..deps import get_session
 from ..errors import ApiError
-from ..models import Pupil, SchoolClass
+from ..models import SchoolClass
 from ..security import Principal, require
 
 router = APIRouter(tags=["classes"])
@@ -22,32 +22,43 @@ def who_teacher(who: Principal) -> str | None:
 
 
 @router.get("/classes")
-def list_classes(who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
-    """A teacher's own classes and any shared (unowned) ones in the school. An admin sees every class in the school."""
-    counts = dict(s.execute(select(Pupil.class_code, func.count()).group_by(Pupil.class_code)).all())
+def list_classes(who: Principal = Depends(require("teacher")), s: Session = Depends(get_session), archived: bool = False):
+    """A teacher's own classes and any shared (unowned) ones in the school. An admin sees every class in the school.
+    Archived groups are left out unless `?archived=true` (then only they are listed)."""
+    counts = sc.member_counts(s)
     q = select(SchoolClass).where(SchoolClass.school_id == who.school).order_by(SchoolClass.code)
+    q = q.where(SchoolClass.archived.is_(True)) if archived is True else q.where(SchoolClass.archived.is_not(True))
     if not who.is_admin:
         q = q.where((SchoolClass.teacher_id == who.id) | SchoolClass.teacher_id.is_(None))
     return [sc.class_info(s, c, counts.get(c.code, 0)) for c in s.scalars(q)]
 
 
+def _opt_text(body: dict[str, Any], key: str) -> str | None:
+    v = body.get(key)
+    if v is not None and not isinstance(v, str):
+        raise ApiError(422, "invalid", f"{key} is text.")
+    return v
+
+
 @router.post("/classes", status_code=201)
 def create_class(body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """`{code?, joinCode?, label?, requireApproval?}`. Leave `code` out and Kerf makes one; `joinCode` defaults to the code."""
     req = body.get("requireApproval", True)
     if not isinstance(req, bool):
         raise ApiError(422, "invalid", "requireApproval is true or false.")
-    c = sc.create_class(s, str(body.get("code", "")), body.get("label") if isinstance(body.get("label"), str) else None, who.id, req, school=who.school)
+    c = sc.create_class(s, _opt_text(body, "code"), _opt_text(body, "label"), who.id, req, school=who.school, join_code=_opt_text(body, "joinCode"))
     return sc.class_info(s, c, 0)
 
 
 @router.put("/classes/{code}")
 def update_class(code: str, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
-    """Change a class's label and/or whether its files need a teacher's approval. Files already waiting are not affected."""
-    req, label = body.get("requireApproval"), body.get("label")
-    if (req is not None and not isinstance(req, bool)) or (label is not None and not isinstance(label, str)):
-        raise ApiError(422, "invalid", "Send label (text) and/or requireApproval (true or false).")
-    c = sc.update_class(s, code, who_teacher(who), label, req, who.school)
-    return sc.class_info(s, c, s.scalar(select(func.count()).select_from(Pupil).where(Pupil.class_code == c.code)) or 0)
+    """Change a group's label (e.g. moving up a year), its join code, whether its files need a teacher's approval, or archive it
+    (`archived: true`) / bring it back. Files already waiting are not affected."""
+    req, archived = body.get("requireApproval"), body.get("archived")
+    if (req is not None and not isinstance(req, bool)) or (archived is not None and not isinstance(archived, bool)):
+        raise ApiError(422, "invalid", "requireApproval and archived are true or false.")
+    c = sc.update_class(s, code, who_teacher(who), _opt_text(body, "label"), req, who.school, join_code=_opt_text(body, "joinCode"), archived=archived)
+    return sc.class_info(s, c, len(sc.member_ids(s, c.code)))
 
 
 @router.get("/classes/{code}/pupils")

@@ -45,6 +45,21 @@ def require_paid(s: Session, school_id: str | None) -> None:
         raise ApiError(403, "paid_feature", "This is part of Kerf's paid service (lasers, the queue, approval, Station pages, the camera, activities). Your school is on the free plan.")
 
 
+#: What a free school may have. The server enforces them and says which one was reached; a paid school has none.
+FREE_LIMITS = {"filesPerPupil": 20, "groupsPerSchool": 20, "pupilsPerGroup": 50}
+_LIMIT_TEXT = {"filesPerPupil": "files per pupil", "groupsPerSchool": "groups in a school", "pupilsPerGroup": "pupils in a group"}
+
+
+def check_limit(s: Session, school_id: str | None, limit: str, current: int, adding: int = 1) -> None:
+    """409 `limit_reached` when a free school would go over one of its limits."""
+    if is_paid(s, school_id):
+        return
+    cap = FREE_LIMITS[limit]
+    if current + adding > cap:
+        raise ApiError(409, "limit_reached", f"A free school may have up to {cap} {_LIMIT_TEXT[limit]}"
+                       + (f" (this would make {current + adding})." if adding > 1 else "."), [{"limit": limit, "max": cap, "current": current}])
+
+
 def new_school_code(s: Session) -> str:
     """A short school code, unique across Kerf: what a pupil types with their group code, pupil ID and password."""
     for _ in range(100):

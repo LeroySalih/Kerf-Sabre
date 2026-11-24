@@ -112,6 +112,11 @@ def current_principal(request: Request) -> Principal:
         with request.app.state.db.session() as s:
             if not p.site_admin and not allowed(s, p.school, "dino"):
                 raise ApiError(403, "sign_in_off", "Sign-in with DINO is switched off for this school. Ask your school's Kerf admin.")
+            if p.role == "pupil":
+                from .services_classes import is_archived
+
+                if is_archived(s, p.id):
+                    raise ApiError(403, "archived", "Your Kerf account has been archived. Ask your teacher.")
         return p
     db: Database = request.app.state.db
     with db.session() as s:

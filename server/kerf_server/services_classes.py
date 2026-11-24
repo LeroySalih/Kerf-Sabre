@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from .config import Settings
 from .db import as_utc, utcnow
 from .errors import ApiError
-from .models import DEFAULT_SCHOOL, GroupMember, Pupil, SchoolClass, Token
+from .models import DEFAULT_SCHOOL, AuditEvent, GroupMember, Pupil, SchoolClass, Token
 from . import services_people as people
 from .security import hash_token, new_token
 
@@ -227,7 +227,7 @@ def add_pupils(s: Session, code: str, pupil_ids: list[str], teacher_id: str | No
             raise ApiError(422, "invalid", f"'{pid[:30]}' is not a valid pupil ID (letters, digits, - and _). IDs, never names.")
         if pid not in ids:
             ids.append(pid)
-    out: dict[str, list] = {"created": [], "added": [], "existing": [], "conflicts": []}
+    out: dict[str, list] = {"created": [], "added": [], "restored": [], "existing": [], "conflicts": []}
     plan: list[tuple[str, str]] = []
     for pid in ids:
         row = s.get(Pupil, pid)
@@ -236,7 +236,7 @@ def add_pupils(s: Session, code: str, pupil_ids: list[str], teacher_id: str | No
         elif in_group(s, cls.code, pid):
             out["existing"].append(pid)
         elif pupil_school(s, row) == cls.school_id:
-            plan.append(("added", pid))
+            plan.append(("restored" if row.archived_at else "added", pid))
         else:
             out["conflicts"].append(pid)
     check_limit(s, cls.school_id, "pupilsPerGroup", len(member_ids(s, cls.code)), len(plan))
@@ -247,7 +247,10 @@ def add_pupils(s: Session, code: str, pupil_ids: list[str], teacher_id: str | No
             s.flush()
             out["created"].append({"pupilId": pid, "pin": pin})
         else:
-            out["added"].append(pid)
+            out[kind].append(pid)
+            if kind == "restored":  # an archived pupil comes back with their files and PIN
+                row = s.get(Pupil, pid)
+                row.archived_at, row.class_code = None, cls.code  # type: ignore[union-attr]
         s.add(GroupMember(class_code=cls.code, pupil_id=pid))
     s.flush()
     return out
@@ -278,8 +281,8 @@ def reset_pin(s: Session, pupil_id: str, teacher_id: str | None = None, school: 
 
 
 def remove_pupil(s: Session, code: str, pupil_id: str, teacher_id: str | None = None, school: str | None = None) -> None:
-    """Takes the pupil out of this group. Their account and files stay while they are in another group; out of their
-    last group, the pupil is removed (as before groups could share pupils)."""
+    """Takes the pupil out of this group. Out of their last group they are **archived** (soft-deleted): signed out, cannot
+    sign in, files, work and name kept. Only `delete_pupil_forever` (a school admin, logged) removes them for good."""
     cls = get_class(s, code, teacher_id, school)
     m = s.get(GroupMember, (cls.code, pupil_id))
     row = s.get(Pupil, pupil_id)
@@ -292,9 +295,54 @@ def remove_pupil(s: Session, code: str, pupil_id: str, teacher_id: str | None = 
         if row.class_code == cls.code:
             row.class_code = rest[0]
         return
+    row.archived_at = utcnow()  # class_code stays: it still fixes the pupil's school
+    revoke_sessions(s, pupil_id)
+
+
+def is_archived(s: Session, pupil_id: str) -> bool:
+    row = s.get(Pupil, pupil_id)
+    return row is not None and row.archived_at is not None
+
+
+def archived_pupils(s: Session, school: str | None) -> list[dict]:
+    rows = [p for p in s.scalars(select(Pupil).where(Pupil.archived_at.is_not(None)).order_by(Pupil.pupil_id)) if pupil_school(s, p) == school]
+    named = people.names(s, school, (p.pupil_id for p in rows))
+    return [{"pupilId": p.pupil_id, "archivedAt": as_utc(p.archived_at).isoformat().replace("+00:00", "Z"), "lastGroup": p.class_code,  # type: ignore[arg-type]
+             **({"displayName": named[p.pupil_id]} if p.pupil_id in named else {})} for p in rows]
+
+
+def delete_pupil_forever(s: Session, who, pupil_id: str) -> dict:
+    """A school admin deletes an archived pupil for good: the account, their files (with G-code and history), activity work,
+    feedback, open tabs, display name and sign-in links. Logged (`AuditEvent`, logger `kerf.audit`), IDs only."""
+    import logging
+
+    from sqlalchemy import delete as sql_delete
+
+    from .models import ActivityWork, Feedback, GcodeRow, Identity, Job, JobEvent, Workspace
+
+    row = s.get(Pupil, pupil_id)
+    if row is None or pupil_school(s, row) != who.school:
+        raise ApiError(404, "not_found", f"There is no pupil {pupil_id}.")
+    if row.archived_at is None:
+        raise ApiError(409, "not_archived", "Archive the pupil first (remove them from all their groups); then they can be deleted for good.")
+    jobs = list(s.scalars(select(Job.id).where(Job.pupil_id == pupil_id, Job.school_id == who.school)))
+    if s.scalar(select(func.count()).select_from(Job).where(Job.id.in_(jobs), Job.status.in_(("assigned", "running")))):
+        raise ApiError(409, "in_use", "One of this pupil's files is on a laser right now. Try again when it has finished.")
+    if jobs:
+        s.execute(sql_delete(GcodeRow).where(GcodeRow.job_id.in_(jobs)))
+        s.execute(sql_delete(JobEvent).where(JobEvent.job_id.in_(jobs)))
+        s.execute(sql_delete(Job).where(Job.id.in_(jobs)))
+    s.execute(sql_delete(Feedback).where(Feedback.pupil_id == pupil_id))
+    s.execute(sql_delete(ActivityWork).where(ActivityWork.pupil_id == pupil_id))
+    s.execute(sql_delete(Workspace).where(Workspace.user_id == pupil_id, Workspace.school_id == who.school))
+    s.execute(sql_delete(Identity).where(Identity.person_id == pupil_id, Identity.school_id == who.school))
+    s.execute(sql_delete(GroupMember).where(GroupMember.pupil_id == pupil_id))
     revoke_sessions(s, pupil_id)
     people.forget(s, pupil_id)
     s.delete(row)
+    s.add(AuditEvent(school_id=who.school, actor_id=who.id, action="pupil_deleted", subject_id=pupil_id, detail={"files": len(jobs)}))
+    logging.getLogger("kerf.audit").info("pupil_deleted school=%s by=%s pupil=%s files=%d", who.school, who.id, pupil_id, len(jobs))
+    return {"pupilId": pupil_id, "filesDeleted": len(jobs)}
 
 
 def class_pupils(s: Session, code: str, teacher_id: str | None = None, school: str | None = None) -> list[dict]:

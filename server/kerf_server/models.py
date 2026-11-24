@@ -184,6 +184,19 @@ class SchoolClass(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class AuditEvent(Base):
+    """Actions that must be on record (e.g. a pupil deleted for good). IDs only, never names."""
+
+    __tablename__ = "audit_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    actor_id: Mapped[str] = mapped_column(String(64))
+    action: Mapped[str] = mapped_column(String(48))
+    subject_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
 class PlatformSetting(Base):
     """Kerf-wide settings the site admin changes (e.g. the default terms copied to every new school)."""
 
@@ -213,6 +226,9 @@ class Pupil(Base):
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Archived (soft-deleted): out of every group, cannot sign in, files and work kept. Adding them to a group brings them
+    #: back; only a school admin's explicit permanent delete removes them.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

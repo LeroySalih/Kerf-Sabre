@@ -2,6 +2,11 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.36 - archived pupils; permanent delete only by a school admin (additive)
+- Removing a pupil from their last group **archives** them (it used to delete them): signed out, cannot sign in (a DINO pupil gets `403 archived`), files, work and display name kept. `GET /pupils/archived` lists them; adding one to a group brings them back (`restored` in the answer, same PIN).
+- `DELETE /pupils/{pupilId}` (school admins only): deletes an archived pupil for good with their files, G-code, history, activity work, feedback, open tabs, display name and sign-in links. `409 not_archived` for a pupil still in a group, `409 in_use` while a file is on a laser. Every permanent delete is recorded (who, which pupil, how many files; IDs only).
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.36`.
+
 ## 0.2.35 - terms: configurable free tier, copied to each school (additive)
 - A free school's plan is its **terms**: `features` (`laser`: the queue, approval, sending, Station pages, the camera; `activities`: activities and feedback), `limits` (`groupsPerSchool`, `pupilsPerGroup`, `filesPerPupil`, `laserGroups`; null = no limit) and **grants**, extras for a time (e.g. "3 months of everything", "the laser for 10 groups for 12 months"). A paid school has everything with no limits.
 - Site admin: `GET/PUT /platform/terms` (Kerf's default; grants in `months`), `GET/PUT /schools/{schoolId}/terms` (one school; grants with `from`/`until`). A new free school gets a **copy** of the default at registration; changing the default later never changes it. Staff: `GET /school/terms`. `GET /auth/me` carries `features` and `limits`.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.35
+  version: 0.2.36
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -244,6 +244,24 @@ paths:
                     subject: {type: [string, "null"]}
                     yearGroup: {type: [string, "null"]}
                     pupils: {type: array, items: {type: string}}
+  /pupils/archived:
+    get:
+      summary: Teacher, admin. The school's archived pupils (out of every group). Adding one to a group brings them back (`restored`)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {type: array, items: {type: object, properties: {pupilId: {type: string}, displayName: {type: string}, archivedAt: {type: string, format: date-time}, lastGroup: {type: string}}}}
+  /pupils/{pupilId}:
+    delete:
+      summary: School admin. Delete an archived pupil for good, with their files, work, feedback, tabs, name and sign-in links. Logged (IDs only)
+      parameters:
+        - {name: pupilId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Deleted, content: {application/json: {schema: {type: object, properties: {pupilId: {type: string}, filesDeleted: {type: integer}}}}}}
+        "403": {description: Not a school admin}
+        "409": {description: "`not_archived` (remove them from every group first) or `in_use` (a file is on a laser)"}
   /classes:
     get:
       summary: Teacher. My classes (the ones I created, plus shared ones) and how many pupils are in each. Another teacher's class is invisible to me. Archived groups are left out unless archived=true (then only they are listed).
@@ -326,11 +344,12 @@ paths:
                 properties:
                   created: {type: array, items: {type: object, properties: {pupilId: {type: string}, pin: {type: string}}}}
                   added: {type: array, items: {type: string}}
+                  restored: {type: array, items: {type: string}, description: "Archived pupils brought back (files and PIN kept)"}
                   existing: {type: array, items: {type: string}}
                   conflicts: {type: array, items: {type: string}}
   /classes/{code}/pupils/{pupilId}:
     delete:
-      summary: Teacher. Remove a pupil from this group. Out of their last group the pupil is removed and their sessions end; otherwise they stay in their other groups
+      summary: Teacher. Remove a pupil from this group. Out of their last group the pupil is archived (signed out, cannot sign in, files and work kept); otherwise they stay in their other groups
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: pupilId, in: path, required: true, schema: {type: string}}

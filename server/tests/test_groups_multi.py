@@ -1,6 +1,8 @@
-"""Groups (docs/ACCOUNTS.md, shared 0.2.35): a pupil in several groups, join codes unique per school and editable,
+"""Groups (docs/ACCOUNTS.md, shared 0.2.36): a pupil in several groups, join codes unique per school and editable,
 archived groups, and a free school's limits (20 groups, 50 pupils per group, 20 files per pupil)."""
 from __future__ import annotations
+
+from kerf_server.security import issue_token
 
 from .conftest import auth
 from .test_classes import login, setup_class_with
@@ -24,8 +26,9 @@ class TestSeveralGroups:
         assert client.delete(f"{API}/classes/9B-DT/pupils/P001", headers=t).status_code == 204  # out of one group only
         assert login(client, code="9B-DT", pin=pins["P001"]).status_code == 401
         assert login(client, code="ART", pin=pins["P001"]).status_code == 200  # account and PIN kept
-        assert client.delete(f"{API}/classes/ART/pupils/P001", headers=t).status_code == 204  # the last group: the pupil goes
-        assert client.post(f"{API}/pupils/P001/reset-pin", headers=t).status_code == 404
+        assert client.delete(f"{API}/classes/ART/pupils/P001", headers=t).status_code == 204  # the last group: archived, not deleted
+        assert login(client, code="ART", pin=pins["P001"]).status_code == 401
+        assert [p["pupilId"] for p in client.get(f"{API}/pupils/archived", headers=t).json()] == ["P001"]
 
     def test_activities_of_every_group_are_shown(self, client, tokens):
         pins = setup_class_with(client, tokens, ids=("P001",))
@@ -97,3 +100,38 @@ class TestFreeLimits:
         t = auth(tokens["teacher"])
         for i in range(21):
             assert client.post(f"{API}/classes", json={"code": f"G{i}"}, headers=t).status_code == 201
+
+
+class TestArchivedPupils:
+    def _archived_with_a_file(self, client, tokens):
+        pins = setup_class_with(client, tokens, ids=("P001",))
+        t = auth(tokens["teacher"])
+        pt = auth(login(client, pin=pins["P001"]).json()["token"])
+        jid = client.post(f"{API}/jobs", json=job_doc(pupil="P001"), headers=pt).json()["id"]
+        client.delete(f"{API}/classes/9B-DT/pupils/P001", headers=t)
+        return pins, t, pt, jid
+
+    def test_archived_pupils_keep_their_files_and_come_back_when_added(self, client, tokens):
+        pins, t, pt, jid = self._archived_with_a_file(client, tokens)
+        assert client.get(f"{API}/jobs/{jid}", headers=pt).status_code == 401  # signed out
+        assert client.get(f"{API}/jobs/{jid}", headers=t).status_code == 200  # the file is kept
+        r = client.post(f"{API}/classes/9B-DT/pupils", json={"pupilIds": ["P001"]}, headers=t).json()
+        assert r["restored"] == ["P001"] and r["created"] == []
+        assert login(client, pin=pins["P001"]).status_code == 200  # same PIN
+        assert client.get(f"{API}/pupils/archived", headers=t).json() == []
+
+    def test_only_an_admin_deletes_for_good_only_when_archived_and_it_is_logged(self, client, tokens, app):
+        from kerf_server.models import AuditEvent
+
+        pins, t, pt, jid = self._archived_with_a_file(client, tokens)
+        assert client.delete(f"{API}/pupils/P001", headers=t).status_code == 403  # a teacher cannot
+        admin = auth(issue_token(app.state.db, "admin", "A001"))
+        setup_class_with(client, tokens, ids=("P002",), code="9C")
+        assert client.delete(f"{API}/pupils/P002", headers=admin).json()["code"] == "not_archived"
+        r = client.delete(f"{API}/pupils/P001", headers=admin)
+        assert r.status_code == 200 and r.json()["filesDeleted"] == 1
+        assert client.get(f"{API}/jobs/{jid}", headers=t).status_code == 404
+        assert client.get(f"{API}/pupils/archived", headers=t).json() == []
+        with app.state.db.session() as s:
+            ev = s.query(AuditEvent).one()
+            assert (ev.action, ev.subject_id, ev.actor_id) == ("pupil_deleted", "P001", "A001")

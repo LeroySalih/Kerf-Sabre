@@ -4,7 +4,7 @@ import type { Preset } from "./presets";
 import type { JobDimension, JobDoc, JobObject, Origin } from "./job";
 import type { Calibration } from "./alignlogic";
 
-export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.35); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
+export interface Session { baseUrl: string; token: string; role: string; id: string; school?: string | null; /** "free" or "paid" (the queue, lasers, Station pages, camera, activities, approval). */ plan?: string | null; /** A Kerf site admin (the Platform). */ siteAdmin?: boolean; schoolCode?: string | null; /** What the school's plan gives it today (shared 0.2.36); absent from an older server. */ features?: { laser: boolean; activities: boolean } | null; limits?: Record<string, number | null> | null; classCode?: string; expiresAt?: string; /** Signed in with DINO: the access token is short-lived and renewed in place, and is never written to localStorage. */ sso?: boolean;
   /** The person's DINO display name, kept in memory only (never stored here) so the top bar can show a name instead of an ID. Never an email. */
   name?: string }
 export interface Receipt { ticket?: number | null; position?: number | null; id: string; status: string; warnings?: string[]; replaced?: { id: string; ticket?: number | null }[]; estimate?: { durationS?: number; percentUsed?: number; costSar?: number | null; partAreaMm2?: number; extentMm?: Extent } }
@@ -103,7 +103,7 @@ export async function logout(s: Session, f: Fetch = fetch): Promise<void> {
 
 export interface ClassInfo { code: string; label: string | null; pupilCount: number; teacherId?: string | null; requireApproval?: boolean; joinCode?: string; archived?: boolean; source?: string; /** A laser group (picked by a school admin while the plan limits them). */ laser?: boolean }
 export interface ClassPupil { pupilId: string; displayName?: string; lastLogin: string | null; locked: boolean }
-export interface AddedPupils { created: { pupilId: string; pin: string }[]; /** Already in another group of the school: added to this one too, PIN unchanged. */ added?: string[]; existing: string[]; conflicts: string[] }
+export interface AddedPupils { created: { pupilId: string; pin: string }[]; /** Already in another group of the school: added to this one too, PIN unchanged. */ added?: string[]; /** Archived pupils brought back (files and PIN kept). */ restored?: string[]; existing: string[]; conflicts: string[] }
 export interface GroupInfo { id: string; name: string; subject: string | null; yearGroup: string | null; pupils: string[] }
 /** The teacher's classes with their pupil IDs (from DINO when signed in with DINO). */
 export const listGroups = (s: Session, f?: Fetch) => request<GroupInfo[]>(s, "GET", "/groups", undefined, f);
@@ -113,6 +113,11 @@ export const createClass = (s: Session, code: string, label: string, requireAppr
 export const updateClass = (s: Session, code: string, body: { label?: string; requireApproval?: boolean; joinCode?: string; archived?: boolean; laser?: boolean }, f?: Fetch) => request<ClassInfo>(s, "PUT", `/classes/${encodeURIComponent(code)}`, body, f);
 export const classPupils = (s: Session, code: string, f?: Fetch) => request<ClassPupil[]>(s, "GET", `/classes/${encodeURIComponent(code)}/pupils`, undefined, f);
 export const addPupils = (s: Session, code: string, pupilIds: string[], f?: Fetch) => request<AddedPupils>(s, "POST", `/classes/${encodeURIComponent(code)}/pupils`, { pupilIds }, f);
+export interface ArchivedPupil { pupilId: string; displayName?: string; archivedAt: string; lastGroup: string }
+/** Pupils out of every group (archived: kept with their files, cannot sign in). */
+export const archivedPupils = (s: Session, f?: Fetch) => request<ArchivedPupil[]>(s, "GET", "/pupils/archived", undefined, f);
+/** School admins: delete an archived pupil and their files for good (logged). */
+export const deletePupilForever = (s: Session, pupilId: string, f?: Fetch) => request<{ pupilId: string; filesDeleted: number }>(s, "DELETE", `/pupils/${encodeURIComponent(pupilId)}`, undefined, f);
 export const removePupil = (s: Session, code: string, pupilId: string, f?: Fetch) => request<null>(s, "DELETE", `/classes/${encodeURIComponent(code)}/pupils/${encodeURIComponent(pupilId)}`, undefined, f);
 
 /** Pupil IDs pasted from a spreadsheet or typed: split on whitespace, commas and semicolons; drop blanks and repeats. */

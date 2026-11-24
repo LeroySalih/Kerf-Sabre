@@ -86,6 +86,18 @@ def remove_pupil(code: str, pupil_id: str, who: Principal = Depends(require("tea
     return Response(status_code=204)
 
 
+@router.get("/pupils/archived")
+def archived(who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """The school's archived pupils (out of every group). Add one to a group to bring them back."""
+    return sc.archived_pupils(s, who.school)
+
+
+@router.delete("/pupils/{pupil_id}")
+def delete_forever(pupil_id: str, who: Principal = Depends(require("admin")), s: Session = Depends(get_session)):
+    """School admins: delete an archived pupil and everything of theirs for good. Logged."""
+    return sc.delete_pupil_forever(s, who, pupil_id)
+
+
 @router.post("/pupils/{pupil_id}/reset-pin")
 def reset_pin(pupil_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     return {"pupilId": pupil_id, "pin": sc.reset_pin(s, pupil_id, who_teacher(who), who.school)}

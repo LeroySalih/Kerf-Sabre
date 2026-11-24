@@ -11,7 +11,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, archivedPupils, deletePupilForever, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -142,16 +142,24 @@ const pupils: Page = {
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
-      const cls = await listClasses(s);
+      const [cls, gone] = await Promise.all([listClasses(s), archivedPupils(s).catch(() => [])]);
       const all = await Promise.all(cls.map(async (c) => ({ c, rows: await classPupils(s, c.code) })));
       const redraw = () => void draw().catch((e) => fail(host, e));
       const rows: HTMLElement[] = [];
       for (const { c, rows: ps } of all) for (const p of ps) {
         rows.push(el("tr", {}, cell(el("b", {}, pupilLabel(p.pupilId, p.displayName))), cell(c.code), cell(p.lastLogin ? new Date(p.lastLogin).toLocaleString() : "never"),
-          actions(btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${c.code}? They will be signed out.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
+          actions(btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${c.code}? If this is their last group they are archived: signed out, files kept.`)) void attempt(() => removePupil(s, c.code, p.pupilId), redraw); }, "danger"))));
       }
+      const archived = gone.map((p) => el("tr", {}, cell(el("b", {}, pupilLabel(p.pupilId, p.displayName))), cell(p.lastGroup), cell(new Date(p.archivedAt).toLocaleDateString()),
+        actions(...(s.role === "admin" ? [btn("Delete for good…", () => {
+          const who = pupilLabel(p.pupilId, p.displayName);
+          if (prompt(`Delete ${who} for good? Their account, files and work are removed and cannot be brought back. This is logged. Type the pupil ID to confirm.`) !== p.pupilId) return;
+          void attempt(async () => { const r = await deletePupilForever(s, p.pupilId); await infoDialog("Deleted", [`${who} and ${r.filesDeleted} file${r.filesDeleted === 1 ? "" : "s"} were deleted.`]); }, redraw);
+        }, "danger")] : []))));
       host.replaceChildren(...(rows.length ? [table(["Pupil ID", "Class", "Last signed in", ""], rows)] : [empty(cls.length ? "No pupils yet. Open a class and add pupils' DINO IDs." : "No classes yet.")]),
-        ...(cls.length ? [el("p", { class: "hint" }, "To add pupils, open the class on the Classes page.")] : []));
+        ...(cls.length ? [el("p", { class: "hint" }, "To add pupils, open the class on the Classes page.")] : []),
+        ...(archived.length ? [el("h2", {}, "Archived pupils"), el("p", { class: "hint" }, "Out of every group: they cannot sign in, and their files are kept. Add a pupil to a group to bring them back." + (s.role === "admin" ? " Only a school admin can delete one for good." : "")),
+          table(["Pupil ID", "Last group", "Archived", ""], archived)] : []));
     };
     void draw().catch((e) => fail(host, e));
   },

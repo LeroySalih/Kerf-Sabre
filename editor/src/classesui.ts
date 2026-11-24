@@ -57,14 +57,14 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
     for (const p of open.pupils) {
       list.append(el("div", { class: "filerow" },
         el("span", {}, `${pupilLabel(p.pupilId, p.displayName)} · ${p.lastLogin ? `last signed in ${new Date(p.lastLogin).toLocaleString()}` : "never signed in"}`),
-        btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${code}? They will be signed out.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")));
+        btn("Remove", () => { if (confirm(`Remove ${pupilLabel(p.pupilId, p.displayName)} from ${code}? If this is their last group they are archived: signed out, files kept.`)) void run(() => removePupil(session, code, p.pupilId)); }, "danger")));
     }
     body.replaceChildren(list, el("div", { class: "krow" }, btn("‹ All classes", () => void run(async () => { open = null; })), btn("Activities and progress…", () => void openClassWork(session, code, hooks)), btn("Add pupils…", () => void (async () => {
       const ids = await askIds(code);
       if (!ids) return;
       await run(async () => {
         const r = await addPupils(session, code, ids);
-        const notes = [...(r.added?.length ? [`Also added (already in another group, PIN unchanged): ${r.added.join(", ")}`] : []), ...(r.existing.length ? [`Already in the class: ${r.existing.join(", ")}`] : []), ...(r.conflicts.length ? [`Used in another school, not added: ${r.conflicts.join(", ")}`] : [])];
+        const notes = [...(r.restored?.length ? [`Brought back from the archive (files and PIN kept): ${r.restored.join(", ")}`] : []), ...(r.added?.length ? [`Also added (already in another group, PIN unchanged): ${r.added.join(", ")}`] : []), ...(r.existing.length ? [`Already in the class: ${r.existing.join(", ")}`] : []), ...(r.conflicts.length ? [`Used in another school, not added: ${r.conflicts.join(", ")}`] : [])];
         await infoDialog(r.created.length ? `${r.created.length} pupil${r.created.length === 1 ? "" : "s"} added to ${code}` : "Nobody new to add", notes);
       });
     })(), "on")));

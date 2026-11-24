@@ -83,7 +83,7 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 - **Pupil IDs** follow the group-code rule: Kerf makes one, the teacher may type their own (by hand or in the CSV), unique within the school.
 - **Email** is sent from `kerf-no-reply@mr-salih.org`.
 - **Re-sync** from a source removes a pupil from the group only (account and files kept) and shows the changes for the teacher to confirm first.
-- **Permanent delete** of an archived pupil: school admins only, and logged.
+- **Permanent delete** of an archived pupil: school admins only, and logged. Removing a pupil from their last group only archives them (built, shared 0.2.36); nothing removes a pupil for good except that explicit delete.
 - **BISAK** keeps every paid feature as an approved paid school.
 
 ## Terms: a configurable free tier (owner, 2026-11-24; built, shared 0.2.35)

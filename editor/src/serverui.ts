@@ -10,6 +10,7 @@ import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
+import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "./emailsignin";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
   STATUS_TEXT, ServerError, isPaid, hasActivities, personLabel, cancelJob, deleteJob, getJob, getWorkspace, putWorkspace, renameJob, type RemoteWorkspace, type WorkspaceTab, myActivity, submitActivity, type MyActivity, logout, describeDuration, listJobs, listPresets, listQueue, queueText, type QueueEntry, request, saveDraft, saveSession, sendJob, submitJob,
@@ -136,6 +137,7 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   const dropSession = () => {
     activity = null;
     if (session?.sso) void endSignIn("editor"); // a DINO session: end the connection there too
+    else if (session?.email) void endEmailSignIn("editor", session); // an emailed-link session: end it and forget it in this tab
     else if (session?.expiresAt) void logout(session); // a class-login session: end it on the server too
     renewer?.stop(); renewer = null;
     session = null; saveSession(null); cur.jobId = null; render(); };
@@ -545,6 +547,13 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     ev.preventDefault();
     void startDino();
   });
+  $("gate-email-send").addEventListener("click", () => void (async () => {
+    const box = $("gate-email") as HTMLInputElement;
+    if (!box.value.trim()) { box.focus(); return; }
+    try { $("gate-email-sent").textContent = await askForLink(($("gate-url") as HTMLInputElement).value, box.value, "editor"); $("gate-error").textContent = ""; }
+    catch (e) { $("gate-error").textContent = problem(e); }
+  })());
+  $("gate-email").addEventListener("keydown", (ev) => { if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); $("gate-email-send").click(); } });
   $("gate-url").addEventListener("change", () => { authConfig = { mode: "planner", sso: null }; });
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); void ctx.tabs.restore("offline"); });
@@ -590,6 +599,17 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   render();
   /** Back from DINO (?code=&state=), or a reload of a tab that was signed in with DINO. */
   const dinoStart = async (): Promise<void> => {
+    const link = readLinkToken(location.search);
+    if (link) { // opened from a staff sign-in email
+      cleanLinkFromAddress();
+      try { await signedIn(await finishEmailSignIn("editor", ($("gate-url") as HTMLInputElement).value, link)); }
+      catch (e) { $("gate").hidden = false; $("gate-error").textContent = problem(e); }
+      return;
+    }
+    if (!session) {
+      const s = await restoreEmailSignIn("editor");
+      if (s) { await signedIn(s); return; }
+    }
     if (readCallback(location.search)) {
       $("gate").hidden = false;
       try {

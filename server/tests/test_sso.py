@@ -212,7 +212,7 @@ class TestModes:
         assert r.status_code == 401
 
     def test_config_in_pins_mode(self, client):
-        assert client.get("/api/v1/auth/config").json() == {"mode": "pins", "sso": None}
+        assert client.get("/api/v1/auth/config").json() == {"mode": "pins", "sso": None, "email": True}
 
     def test_config_in_both_mode(self, sso_client):
         c = sso_client.get("/api/v1/auth/config").json()

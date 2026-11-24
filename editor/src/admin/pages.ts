@@ -12,7 +12,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, archivedPupils, deletePupilForever, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, listStaffPeople, inviteStaff, removeStaffPerson, archivedPupils, deletePupilForever, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -437,6 +437,39 @@ const staff: Page = {
   },
 };
 
+const ROLE_TEXT: Record<string, string> = { admin: "School admin", teacher: "Teacher", technician: "Technician (laser stations only)" };
+
+/** School admins: invite staff by email (they sign in with an emailed link until the school turns on Google, Microsoft or DINO). */
+const people: Page = {
+  key: "people", title: "Staff", lead: "Invite teachers, technicians and other admins by email. They get a link to sign in; later they ask for a new link on the sign-in page. Only admins invite. Staff who sign in with DINO are not listed here.",
+  mount(host, ctx) {
+    const s = ctx.session;
+    const draw = async () => {
+      const list = await listStaffPeople(s);
+      const redraw = () => void draw().catch((e) => fail(host, e));
+      const invite = (cur?: { email: string; role: string; name: string | null }) => void (async () => {
+        const v = await openDialog(cur ? `Invite ${cur.email} again` : "Invite staff", [
+          { key: "email", label: "School email address", type: "text", value: cur?.email ?? "" },
+          { key: "name", label: "Name (optional)", type: "text", value: cur?.name ?? "", hint: "Shown to your school's staff only" },
+          { key: "role", label: "Role", type: "select", value: cur?.role ?? "teacher", options: Object.entries(ROLE_TEXT).map(([value, label]) => ({ value, label })) },
+        ], { ok: "Send invite", intro: "Kerf emails them a link to sign in (it works once, for 7 days)." });
+        if (!v || !String(v.email).trim()) return;
+        await attempt(async () => {
+          const r = await inviteStaff(s, { email: String(v.email).trim(), role: String(v.role) as "teacher", name: String(v.name ?? "").trim() || undefined });
+          await infoDialog("Invite sent", [`An invite is on its way to ${r.email}.`]);
+        }, redraw);
+      })();
+      const bar = el("div", { class: "ad-bar" }, btn("Invite staff…", () => invite(), "on"));
+      host.replaceChildren(bar, list.length ? table(["Name", "Email", "Role", "Status", ""], list.map((p) => el("tr", {},
+        cell(el("b", {}, p.name ?? "")), cell(p.email), cell(ROLE_TEXT[p.role] ?? p.role),
+        cell(p.status === "active" ? `Signed in ${p.lastLogin ? new Date(p.lastLogin).toLocaleDateString() : ""}` : el("span", { class: "ad-tag warn" }, "Invited")),
+        actions(...(p.status === "invited" ? [btn("Send again", () => invite(p))] : []),
+          ...(p.id === s.id ? [] : [btn("Remove", () => { if (confirm(`Remove ${p.name || p.email}? They are signed out at once and cannot sign in again.`)) void attempt(() => removeStaffPerson(s, p.id), redraw); }, "danger")]))))) : empty("Nobody has been invited yet."));
+    };
+    void draw().catch((e) => fail(host, e));
+  },
+};
+
 /** Technicians and admins: one link per laser to its Station page (the full-screen queue, Frame and Start at the laser PC). */
 export const stationPages: Page = {
   key: "stationpages", title: "Station pages", lead: "Open a laser's Station page: its queue, then Frame and Start. Use it on the PC next to that laser.",
@@ -467,11 +500,12 @@ const schools: Page = {
         const v = await openDialog("New school", [
           { key: "id", label: "School ID", type: "text", value: "", hint: "Lower-case letters, digits and -, e.g. westfield-high" },
           { key: "name", label: "Name", type: "text", value: "" },
-          
+          { key: "adminEmail", label: "First admin's email (optional)", type: "text", value: "", hint: "Kerf emails them an invite to sign in as the school's admin" },
         ], { ok: "Create" });
         if (!v || !String(v.id).trim() || !String(v.name).trim()) return;
         await attempt(async () => {
-          await createSchool(s, String(v.id).trim(), String(v.name).trim());
+          const r = await createSchool(s, String(v.id).trim(), String(v.name).trim(), undefined, undefined, String(v.adminEmail ?? "").trim() || undefined);
+          if (r.adminInvite) await infoDialog("School created", [`An invite is on its way to ${r.adminInvite.email}.`]);
         }, redraw);
       })(), "on"));
       host.replaceChildren(bar, list.length ? table(["ID", "Name", "School code", "Plan", "Created", ""], list.map((x) => {
@@ -502,7 +536,7 @@ export function pagesFor(role: string, features: Features | string | null | unde
   const f = featuresOf(features);
   if (role === "technician") return f.laser ? [stationPages] : []; // technicians run the stations and see nothing else here
   const base = [...(f.laser ? [overview] : []), classes, pupils, ...(f.activities ? [activities] : []), ...(f.laser ? [queue] : []), materials, ...(f.laser ? [stations] : [])];
-  return role === "admin" ? [...base, ...(f.laser ? [stationPages] : []), schoolPage, staff] : base;
+  return role === "admin" ? [...base, ...(f.laser ? [stationPages] : []), schoolPage, people, ...(f.laser ? [staff] : [])] : base;
 }
 
 /** The Platform: one school's own terms (a free school's copy of the default, made when it registered). */

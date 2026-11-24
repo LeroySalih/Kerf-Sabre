@@ -316,3 +316,8 @@ td.cell.st-todo { background: #f9fafb; }
 .qc-bulk.on { background: #fff7ed; border-color: var(--accent); }
 .qc-bulk .qc-count { flex: 1 1 auto; color: var(--muted); }
 .qc-bulk.on .qc-count { color: var(--ink); font-weight: 600; }
+
+/* Staff sign-in with an emailed link (emailsignin.ts): the Editor gate and the Admin sign-in card */
+#gate-email-box, .ad-email { margin-top: 10px; text-align: left; }
+#gate-email-box input, .ad-email input { width: 100%; height: 32px; margin: 8px 0 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; }
+#gate-email-box summary { cursor: pointer; color: var(--muted); }

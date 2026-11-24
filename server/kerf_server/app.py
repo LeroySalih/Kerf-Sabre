@@ -44,6 +44,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.db = db
     app.state.throttle = IpThrottle()
+    from .services_email import Mailer
+    from .services_staffmail import LinkThrottle
+
+    app.state.mailer = Mailer.from_settings(settings)  # sign-in links and invites (Resend; kept in memory without RESEND_API)
+    app.state.link_throttle = LinkThrottle()
     app.state.sso = Verifier(settings) if settings.sso_enabled else None
     app.state.download_links = {}  # Cutter download links: random link -> expiry (in memory: a restart just means making a new one)
     app.state.hub = Hub(settings.data_dir / "logs", settings.log_max_bytes, settings.log_backups)

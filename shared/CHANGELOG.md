@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.38 - staff email sign-in links and invites (additive)
+- `POST /auth/email/start {email, app}`: a one-time sign-in link (15 minutes) is emailed to each school where the address has a staff account and the school's `email` sign-in is on. Same answer for unknown addresses; limited per address and per computer. `POST /auth/email/finish {token}` trades the link's token for a session token (works once). Links open `/admin/?signin=<token>` or `/?signin=<token>`.
+- School admins: `GET /staff/people`, `POST /staff/invite {email, role, name?}` (a 7-day invite link), `DELETE /staff/people/{personId}`. Site admins: `POST /schools` takes `adminEmail` (and `adminName`) to invite the school's first admin; the answer carries `adminInvite`.
+- `GET /auth/config` carries `email: true`. Emails come from `kerf-no-reply@mr-salih.org` (Resend).
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.38`.
+
 ## 0.2.37 - pupils' groups on queue entries and file lists (additive)
 - For staff (never pupils), `GET /queue` entries carry `pupilGroups` (`[{code, label}]`, the pupil's groups in the school, archived groups left out) and the file's `name`; `GET /jobs` items carry `pupilGroups`. The Admin queue, waiting files, processed files and the Station queue use them to filter by pupil name and group.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.37`.

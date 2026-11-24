@@ -79,6 +79,10 @@ class Settings:
     mcp_enabled: bool = False
     #: This server's public origin (https://kerf.example.org). The MCP resource is <public_url>/mcp; DINO binds MCP tokens to it.
     public_url: str = ""
+    #: Resend API key for Kerf's emails (sign-in links, invites). Env `RESEND_API` (or `KERF_RESEND_API_KEY`). Empty: emails are
+    #: kept in memory (`app.state.outbox`) instead of sent, for development and tests.
+    resend_api_key: str = ""
+    email_from: str = "Kerf <kerf-no-reply@mr-salih.org>"
     #: The `aud` an MCP token must carry. Empty: the MCP resource URL (<public_url>/mcp).
     mcp_audience: str = ""
     log_max_bytes: int = 5_000_000
@@ -133,6 +137,8 @@ class Settings:
             sso_scopes=" ".join(e.get("KERF_SSO_SCOPES", "profile groups").split()),
             mcp_enabled=_bool(e.get("KERF_MCP"), False),
             public_url=e.get("KERF_PUBLIC_URL", "").strip().rstrip("/"),
+            resend_api_key=(e.get("RESEND_API") or e.get("KERF_RESEND_API_KEY") or "").strip(),
+            email_from=e.get("KERF_EMAIL_FROM", "Kerf <kerf-no-reply@mr-salih.org>").strip(),
             mcp_audience=e.get("KERF_MCP_AUDIENCE", "").strip(),
             cors_origins=tuple(o.strip() for o in e.get("KERF_CORS_ORIGINS", "").split(",") if o.strip()),
         )

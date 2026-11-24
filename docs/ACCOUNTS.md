@@ -112,5 +112,5 @@ may include it for a limited number of groups or for a while, and the site admin
 
 ## Remaining questions
 
-- (answered: email goes through **Resend**; the key is `RESEND_API` in the production `.env`.)
+- (answered: email goes through **Resend**; the key is `RESEND_API` in the production `.env`. Built, shared 0.2.38: staff email sign-in links, admin invites, the first admin invited by the site admin. Needs `KERF_PUBLIC_URL`.)
 - Terms: should a school see a warning before a grant ends (e.g. 14 days ahead, by email to its admins)?

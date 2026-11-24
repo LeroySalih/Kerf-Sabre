@@ -49,6 +49,37 @@ class Token(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     #: Login sessions expire; tokens issued by an administrator do not (None).
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: How a person's session was started: "email" (a sign-in link). Such tokens are accepted even when DINO is the main way in.
+    method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class StaffAccount(Base):
+    """A member of staff who signs in with an emailed link (Kerf's own account), invited by a school admin. The email is
+    used only to send them links: never logged, never shown to pupils."""
+
+    __tablename__ = "staff_accounts"
+    person_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    school_id: Mapped[str] = mapped_column(String(32), index=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # admin | teacher | technician
+    name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    invited_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SignInLink(Base):
+    """A one-time sign-in link sent by email. Only its SHA-256 is stored."""
+
+    __tablename__ = "sign_in_links"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    person_id: Mapped[str] = mapped_column(String(64), index=True)
+    school_id: Mapped[str] = mapped_column(String(32))
+    purpose: Mapped[str] = mapped_column(String(16))  # signin | invite
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

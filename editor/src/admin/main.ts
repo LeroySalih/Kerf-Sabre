@@ -5,6 +5,7 @@ import "./admin.css";
 import { btn, el, msg } from "../dom";
 import { ServerError, request, type Session } from "../server";
 import { pagesFor, platformPages, type Ctx, type Page } from "./pages";
+import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "../emailsignin";
 import { Renewer, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type Tokens } from "../sso";
 
 const KEY = "kerf.admin.session"; // an older version kept a pasted token here; nothing is stored any more
@@ -31,9 +32,19 @@ function signInView(error = ""): void {
   const url = el("input", { type: "text", placeholder: "Leave blank unless told otherwise" });
   (url as HTMLInputElement).value = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
   const dino = el("button", { type: "submit", class: "on" }, "Sign in with DINO");
+  const email = el("input", { type: "email", placeholder: "you@school.org", "aria-label": "Your school email address", autocomplete: "email" }) as HTMLInputElement;
+  const sent = el("p", { class: "hint", role: "status" });
+  const ask = el("button", { type: "button" }, "Email me a sign-in link");
+  ask.addEventListener("click", () => void (async () => {
+    if (!email.value.trim()) { email.focus(); return; }
+    try { sent.textContent = await askForLink((url as HTMLInputElement).value, email.value, "admin"); err.textContent = ""; } catch (e) { err.textContent = msg(e); }
+  })());
+  email.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); ask.click(); } });
   const form = el("form", { class: "ad-card ad-signin" }, el("h1", {}, "Kerf Admin"),
-    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with your DINO account."),
-    el("details", {}, el("summary", {}, "Server address"), url), err, dino, el("a", { href: "/" }, "Looking for the Editor?"));
+    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with DINO, or with a link sent to your school email."),
+    el("details", {}, el("summary", {}, "Server address"), url), err, dino,
+    el("div", { class: "ad-email" }, el("p", { class: "hint" }, "No DINO account? Your school admin invites you by email; after that, ask for a link here."), email, ask, sent),
+    el("a", { href: "/" }, "Looking for the Editor?"));
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     void (async () => {
@@ -50,6 +61,7 @@ function signInView(error = ""): void {
 function signOut(): void {
   stopPage();
   if (session?.sso) void endSignIn("admin");
+  if (session?.email) void endEmailSignIn("admin", session);
   renewer?.stop(); renewer = null;
   session = null;
   saveSession(null);
@@ -108,6 +120,16 @@ async function shell(): Promise<void> {
 
 /** Back from DINO (?code=&state=), or a reload of a tab signed in with DINO. */
 async function start(): Promise<void> {
+  const link = readLinkToken(location.search);
+  if (link) { // opened from a sign-in or invite email
+    cleanLinkFromAddress();
+    try { const s = await finishEmailSignIn("admin", "", link); staffOnly(s); session = s; return void (await shell()); }
+    catch (e) { return signInView(msg(e)); }
+  }
+  if (!session) {
+    const s = await restoreEmailSignIn("admin");
+    if (s) { try { staffOnly(s); session = s; } catch (e) { void endEmailSignIn("admin", s); return signInView(msg(e)); } }
+  }
   if (readCallback(location.search)) {
     try {
       const r = await finishSignIn("admin", location.search, location);

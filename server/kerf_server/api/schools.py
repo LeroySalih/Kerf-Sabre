@@ -74,18 +74,51 @@ def set_school_terms(school_id: str, body: dict[str, Any] = Body(...), _: Princi
 
 
 @router.post("/schools", status_code=201)
-def create_school(request: Request, body: dict[str, Any] = Body(...), _: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
-    """Create a school and its first admin. The admin's token is in the answer once and is never shown again."""
+def create_school(request: Request, body: dict[str, Any] = Body(...), site_admin: Principal = Depends(require_site_admin), s: Session = Depends(get_session)):
+    """Create a school. `adminEmail` (and `adminName`) emails its first admin an invite; `adminId` (development servers only)
+    makes an admin token, shown once."""
     admin_id = body.get("adminId")
     if admin_id and request.app.state.settings.auth_mode == "planner":
         raise ApiError(422, "invalid", "School admins sign in with DINO, so no admin token is made. Create the school without adminId.")
     school = ss.create_school(s, str(body.get("id", "")), str(body.get("name", "")), str(body.get("plan") or "free"))
     out: dict[str, Any] = ss.school_doc(school)
+    if body.get("adminEmail"):  # the first admin gets an emailed invite (works with DINO-only servers too)
+        from .. import services_staffmail as sm
+
+        out["adminInvite"] = sm.invite(s, request.app.state.mailer, request.app.state.settings, str(request.base_url), school.id, site_admin.id,
+                                       {"email": body["adminEmail"], "role": "admin", "name": body.get("adminName")})
     if admin_id:
         s.flush()
         s.commit()  # the token is made through its own session, which must see the school
         out["admin"] = {"id": admin_id, "token": ss.add_staff(request.app.state.db, school.id, "admin", str(admin_id), "first admin")}
     return out
+
+
+@router.get("/staff/people")
+def staff_people(who: Principal = Depends(require("admin")), s: Session = Depends(get_session)):
+    """School admins: the staff who sign in with an emailed link (invited or active)."""
+    from .. import services_staffmail as sm
+
+    return sm.list_accounts(s, who.school)
+
+
+@router.post("/staff/invite", status_code=201)
+def staff_invite(request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("admin")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """School admins: invite a teacher, technician or admin by email (`{email, role, name?}`); sends an invite link (7 days)."""
+    from .. import services_staffmail as sm
+
+    return sm.invite(s, request.app.state.mailer, cfg, str(request.base_url), who.school, who.id, body)
+
+
+@router.delete("/staff/people/{person_id}", status_code=204)
+def staff_remove(person_id: str, who: Principal = Depends(require("admin")), s: Session = Depends(get_session)):
+    """School admins: remove a member of staff's email account (their sessions end at once)."""
+    from .. import services_staffmail as sm
+
+    if person_id == who.id:
+        raise ApiError(409, "conflict", "You cannot remove yourself. Ask another admin.")
+    sm.remove(s, who.school, person_id)
+    return Response(status_code=204)
 
 
 @router.get("/school/terms")

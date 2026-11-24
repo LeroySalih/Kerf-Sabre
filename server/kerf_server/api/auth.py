@@ -70,3 +70,20 @@ def logout(request: Request, _: Principal = Depends(current_principal), s: Sessi
     if row is not None and row.expires_at is not None:  # only login sessions: an administrator's token is revoked with kerf-admin
         row.revoked = True
     return Response(status_code=204)
+
+
+@router.post("/auth/email/start")
+def email_start(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Staff: email me a sign-in link (`{email, app: admin|editor}`). The same answer whether or not the address has an account."""
+    from .. import services_staffmail as sm
+
+    ip = request.client.host if request.client else "unknown"
+    return sm.start(s, request.app.state.mailer, cfg, request.app.state.link_throttle, str(request.base_url), ip, body)
+
+
+@router.post("/auth/email/finish")
+def email_finish(body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Trade a sign-in link's token for a session (`{token}` -> `{token, role, id, name, expiresAt}`). A link works once."""
+    from .. import services_staffmail as sm
+
+    return sm.finish(s, cfg, body)

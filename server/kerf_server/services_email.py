@@ -1,0 +1,89 @@
+"""Kerf's emails (sign-in links, invites), sent through Resend (https://resend.com) from `Settings.email_from`.
+
+The API key comes from the environment (`RESEND_API`). Without one, emails are kept in memory (`Mailer.outbox`, newest 50)
+instead of sent, so development and tests work offline. Addresses and links are never logged: a log line says only what
+kind of email went out and whether it worked.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import urllib.error
+import urllib.request
+from collections import deque
+from dataclasses import dataclass, field
+from html import escape
+
+from .config import Settings
+from .errors import ApiError
+
+log = logging.getLogger("kerf.email")
+RESEND_URL = "https://api.resend.com/emails"
+
+
+@dataclass
+class Email:
+    to: str
+    subject: str
+    text: str
+    html: str
+    kind: str
+
+
+@dataclass
+class Mailer:
+    api_key: str
+    sender: str
+    outbox: deque = field(default_factory=lambda: deque(maxlen=50))
+
+    @staticmethod
+    def from_settings(cfg: Settings) -> "Mailer":
+        return Mailer(cfg.resend_api_key, cfg.email_from)
+
+    @property
+    def live(self) -> bool:
+        return bool(self.api_key)
+
+    def send(self, mail: Email) -> None:
+        if not self.live:
+            self.outbox.append(mail)
+            log.info("email kept (no RESEND_API set): %s", mail.kind)
+            return
+        body = json.dumps({"from": self.sender, "to": [mail.to], "subject": mail.subject, "text": mail.text, "html": mail.html}).encode()
+        req = urllib.request.Request(RESEND_URL, data=body, method="POST", headers={
+            "Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json", "User-Agent": "kerf-server"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as res:  # noqa: S310 (fixed https URL)
+                res.read()
+            log.info("email sent: %s", mail.kind)
+        except urllib.error.HTTPError as e:
+            log.warning("email not sent: %s (Resend answered %s)", mail.kind, e.code)
+            raise ApiError(502, "email_failed", "Kerf could not send the email just now. Try again in a minute.") from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            log.warning("email not sent: %s (%s)", mail.kind, type(e).__name__)
+            raise ApiError(502, "email_failed", "Kerf could not send the email just now. Try again in a minute.") from e
+
+
+def _html(title: str, lines: list[str], link: str, button: str, small: str) -> str:
+    paras = "".join(f'<p style="margin:0 0 14px">{escape(x)}</p>' for x in lines)
+    return (f'<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111827">'
+            f'<h1 style="font-size:20px;margin:0 0 16px">{escape(title)}</h1>{paras}'
+            f'<p style="margin:22px 0"><a href="{escape(link, quote=True)}" style="background:#f97316;color:#fff;padding:11px 18px;border-radius:6px;text-decoration:none;font-weight:600">{escape(button)}</a></p>'
+            f'<p style="margin:0 0 8px;color:#6b7280;font-size:13px">Or copy this address into your browser:<br><span style="word-break:break-all">{escape(link)}</span></p>'
+            f'<p style="margin:16px 0 0;color:#6b7280;font-size:13px">{escape(small)}</p></div>')
+
+
+def sign_in_email(to: str, link: str, school_name: str, minutes: int) -> Email:
+    lines = [f"Here is your link to sign in to Kerf for {school_name}. It works once, for {minutes} minutes."]
+    small = "If you did not ask to sign in, you can ignore this email: nobody can sign in without the link."
+    text = f"Sign in to Kerf\n\n{lines[0]}\n\n{link}\n\n{small}\n"
+    return Email(to, f"Your Kerf sign-in link ({school_name})", text, _html("Sign in to Kerf", lines, link, "Sign in", small), "sign-in link")
+
+
+def invite_email(to: str, link: str, school_name: str, role: str, days: int) -> Email:
+    what = {"admin": "a school admin", "teacher": "a teacher", "technician": "a technician (laser stations)"}.get(role, role)
+    lines = [f"You have been invited to Kerf, the laser design and cutting service used by {school_name}, as {what}.",
+             f"Press the button to sign in for the first time. The link works once, for {days} days. Later, ask for a new sign-in link on the sign-in page."]
+    small = "If you were not expecting this, you can ignore it."
+    text = f"You are invited to Kerf\n\n{lines[0]}\n{lines[1]}\n\n{link}\n\n{small}\n"
+    return Email(to, f"You are invited to Kerf ({school_name})", text, _html("You are invited to Kerf", lines, link, "Sign in to Kerf", small), "invite")

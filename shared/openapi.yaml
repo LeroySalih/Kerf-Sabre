@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.37
+  version: 0.2.38
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -262,6 +262,55 @@ paths:
         "200": {description: Deleted, content: {application/json: {schema: {type: object, properties: {pupilId: {type: string}, filesDeleted: {type: integer}}}}}}
         "403": {description: Not a school admin}
         "409": {description: "`not_archived` (remove them from every group first) or `in_use` (a file is on a laser)"}
+  /auth/email/start:
+    post:
+      summary: Anyone. Staff ask for a one-time sign-in link by email. The answer is the same whether or not the address has an account. Limited per address and per computer (429)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [email], properties: {email: {type: string}, app: {enum: [admin, editor], default: admin}}}
+      responses:
+        "200": {description: "Always the same message", content: {application/json: {schema: {type: object, properties: {message: {type: string}}}}}}
+        "422": {description: Not an email address}
+        "503": {description: "`email_not_set_up`: the server has no public address for links"}
+  /auth/email/finish:
+    post:
+      summary: Anyone. Trade a sign-in or invite link's token (the `signin` query parameter) for a session token. A link works once
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [token], properties: {token: {type: string}}}
+      responses:
+        "200": {description: Signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {enum: [admin, teacher, technician]}, id: {type: string}, name: {type: [string, "null"]}, expiresAt: {type: string, format: date-time}}}}}}
+        "401": {description: "`link_invalid`: expired, used or unknown"}
+  /staff/people:
+    get:
+      summary: School admin. Staff who sign in with an emailed link (invited or active)
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/StaffPerson"}}}}}
+  /staff/invite:
+    post:
+      summary: School admin. Invite a member of staff by email; they get a link (7 days) to sign in. Inviting someone not signed in yet sends a new invite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [email], properties: {email: {type: string}, role: {enum: [admin, teacher, technician], default: teacher}, name: {type: string}}}
+      responses:
+        "201": {description: Invited, content: {application/json: {schema: {$ref: "#/components/schemas/StaffPerson"}}}}
+        "409": {description: They already have an account here}
+        "502": {description: "`email_failed`: the email could not be sent"}
+  /staff/people/{personId}:
+    delete:
+      summary: School admin. Remove a member of staff's email account; their sessions end at once
+      parameters:
+        - {name: personId, in: path, required: true, schema: {type: string}}
+      responses:
+        "204": {description: Removed}
   /classes:
     get:
       summary: Teacher. My classes (the ones I created, plus shared ones) and how many pupils are in each. Another teacher's class is invisible to me. Archived groups are left out unless archived=true (then only they are listed).
@@ -1539,6 +1588,16 @@ components:
             properties:
               id: {type: string}
               ticket: {type: [integer, "null"]}
+    StaffPerson:
+      type: object
+      properties:
+        id: {type: string}
+        email: {type: string}
+        role: {enum: [admin, teacher, technician]}
+        name: {type: [string, "null"]}
+        status: {enum: [invited, active]}
+        lastLogin: {type: [string, "null"], format: date-time}
+        createdAt: {type: [string, "null"], format: date-time}
     PupilGroup:
       type: object
       required: [code]

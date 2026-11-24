@@ -13,7 +13,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, listStaffPeople, inviteStaff, removeStaffPerson, archivedPupils, deletePupilForever, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, getDefaultTerms, setDefaultTerms, listStaffPeople, inviteStaff, removeStaffPerson, listDinoClasses, importDinoClasses, syncDinoClass, archivedPupils, deletePupilForever, getSchoolTerms, setSchoolTerms, myTerms, isPaid, hasActivities, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -104,7 +104,8 @@ const classes: Page = {
           ...(isPaid(s) ? [{ key: "approval", label: "Files from this class", type: "select" as const, value: "yes", options: APPROVAL.map((a) => ({ value: a.v, label: a.text })) }] : []),
         ], { ok: "Create" });
         if (v) await attempt(() => createClass(s, String(v.code ?? "").trim(), String(v.label ?? "").trim(), v.approval !== "no"), redraw);
-      })(), "on"), btn(showArchived ? "Show current classes" : "Show archived classes", () => { showArchived = !showArchived; redraw(); }));
+      })(), "on"), ...(s.sso ? [btn("Import from DINO…", () => void importFromDino(s, redraw))] : []),
+      btn(showArchived ? "Show current classes" : "Show archived classes", () => { showArchived = !showArchived; redraw(); }));
       if (!list.length) return host.replaceChildren(bar, empty(showArchived ? "No archived classes." : "No classes yet. Create one, then add the pupils' IDs."));
       const head = ["Class", "Join code", "Note", "Teacher", "Pupils", ...(isPaid(s) ? ["Files from this class"] : []), ...(pickLaser ? ["Laser group"] : []), ""];
       host.replaceChildren(bar, table(head, list.map((c) => {
@@ -121,6 +122,7 @@ const classes: Page = {
           ], { ok: "Save" });
           if (v) await attempt(() => updateClass(s, c.code, { label: String(v.label ?? "").trim(), joinCode: String(v.joinCode ?? "").trim() || c.code }), redraw);
         })());
+        const sync = c.source === "dino" && s.sso ? [btn("Sync with DINO…", () => void syncWithDino(s, c.code, redraw))] : [];
         const archive = btn(c.archived ? "Bring back" : "Archive", () => {
           if (!c.archived && !confirm(`Archive ${c.code}? Its pupils can no longer sign in through it; their files and work are kept.`)) return;
           void attempt(() => updateClass(s, c.code, { archived: !c.archived }), redraw);
@@ -129,13 +131,55 @@ const classes: Page = {
           ...(isPaid(s) ? [cell(sel)] : []), ...(pickLaser ? [cell(laser)] : []),
           actions(btn("Pupils…", () => openClasses(s, { openFile: lookAtFile }, c.code)),
             ...(hasActivities(s) ? [btn("Activities…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "activities")), btn("Progress…", () => void openClassWork(s, c.code, { openFile: lookAtFile }, "progress"))] : []),
-            edit, archive));
+            ...sync, edit, archive));
       })), ...(isPaid(s) ? [el("p", { class: "hint" }, "Changing the approval setting only affects files sent from now on. Files already waiting stay as they are.")] : []),
       ...(pickLaser ? [el("p", { class: "hint" }, `Your plan lets up to ${laserLimit} class${laserLimit === 1 ? "" : "es"} send files to the laser. Tick them under "Laser group".`)] : []));
     };
     void draw().catch((e) => fail(host, e));
   },
 };
+
+/** Tick the teacher's DINO classes to make Kerf groups of them (with their pupils' DINO IDs). */
+async function importFromDino(s: Session, done: () => void): Promise<void> {
+  let list;
+  try { list = await listDinoClasses(s); } catch (e) { await infoDialog("Couldn't get your DINO classes", [msg(e)]); return; }
+  if (!list.length) { await infoDialog("No DINO classes", ["DINO does not list any classes that you teach."]); return; }
+  const dlg = el("dialog", { class: "kdialog" });
+  const boxes: [HTMLInputElement, string][] = [];
+  const rows = list.map((g) => {
+    const box = el("input", { type: "checkbox", "aria-label": `Import ${g.name}` }) as HTMLInputElement;
+    if (g.importedAs) box.disabled = true; else boxes.push([box, g.id]);
+    const what = [g.subject, g.yearGroup ? `Year ${g.yearGroup}` : null, `${g.pupilCount} pupil${g.pupilCount === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+    return el("label", { class: "filerow", style: "cursor:pointer" }, box, " ", el("b", {}, g.name), el("span", { class: "hint" }, ` ${what}`),
+      ...(g.importedAs ? [el("span", { class: "hint" }, ` · already imported as ${g.importedAs}${g.archived ? " (archived)" : ""}: use Sync with DINO`)] : []));
+  });
+  let chosen: string[] = [];
+  dlg.append(el("h2", {}, "Import classes from DINO"),
+    el("p", { class: "hint" }, "Each class you tick becomes a group in Kerf with its pupils' DINO IDs. Pupils sign in with DINO. Their names appear once they have signed in to Kerf. You can sync a group with DINO later."),
+    el("div", {}, ...rows),
+    el("div", { class: "krow" }, btn("Cancel", () => dlg.close()), btn("Import", () => { chosen = boxes.filter(([b]) => b.checked).map(([, id]) => id); dlg.close(); }, "on")));
+  document.body.append(dlg);
+  await new Promise<void>((resolve) => { dlg.addEventListener("close", () => { dlg.remove(); resolve(); }); dlg.showModal(); });
+  if (!chosen.length) return;
+  await attempt(async () => {
+    const r = await importDinoClasses(s, chosen);
+    await infoDialog("Imported from DINO", r.map((x) => x.already ? `${x.name}: already imported as ${x.code}` : `${x.name}: group ${x.code} with ${x.pupils ?? 0} pupil${x.pupils === 1 ? "" : "s"}${x.conflicts?.length ? ` (not added, used in another school: ${x.conflicts.join(", ")})` : ""}`));
+  }, done);
+}
+
+/** Show what syncing a DINO-imported group would change, and make the changes only if the teacher says so. */
+async function syncWithDino(s: Session, code: string, done: () => void): Promise<void> {
+  let p;
+  try { p = await syncDinoClass(s, code, false); } catch (e) { await infoDialog("Couldn't compare with DINO", [msg(e)]); return; }
+  if (!p.add.length && !p.remove.length) { await infoDialog(`${code} matches DINO`, [`Everyone in the DINO class ${p.name} is in this group, and nobody else.`]); return; }
+  const lines = [...(p.add.length ? [`Add ${p.add.length}: ${p.add.join(", ")}`] : []),
+    ...(p.remove.length ? [`Remove ${p.remove.length} from this group: ${p.remove.join(", ")}. Their accounts and files are kept (a pupil in no other group is archived).`] : [])];
+  if (!confirm(`Sync ${code} with the DINO class ${p.name}?\n\n${lines.join("\n\n")}`)) return;
+  await attempt(async () => {
+    const r = await syncDinoClass(s, code, true);
+    await infoDialog(`${code} synced with DINO`, [`${r.add.length} added, ${r.remove.length} removed.`, ...(r.conflicts?.length ? [`Not added (used in another school): ${r.conflicts.join(", ")}`] : [])]);
+  }, done);
+}
 
 // ---------------------------------------------------------------- pupils
 

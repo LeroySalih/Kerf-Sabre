@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Response
+from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -124,13 +124,40 @@ def delete_forever(pupil_id: str, who: Principal = Depends(require("admin")), s:
     return sc.delete_pupil_forever(s, who, pupil_id)
 
 
+@router.get("/dino/classes")
+def dino_classes(request: Request, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """The teacher's own DINO classes and the Kerf group each is already imported as. Needs a DINO sign-in (409 dino_needed)."""
+    from .. import services_dinoimport as di
+
+    return di.listing(s, who, di.dino_classes(request, who))
+
+
+@router.post("/dino/classes/import", status_code=201)
+def import_dino(request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """`{ids: [DINO class id]}`: a Kerf group for each (named after it, with its pupils' DINO IDs), linked so it can be re-synced."""
+    from .. import services_dinoimport as di
+
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not ids or len(ids) > 50 or not all(isinstance(i, str) for i in ids):
+        raise ApiError(422, "invalid", "Send ids: a list of 1 to 50 DINO class ids.")
+    return di.import_classes(s, who, di.dino_classes(request, who), ids)
+
+
+@router.post("/classes/{code}/dino-sync")
+def dino_sync(code: str, request: Request, body: dict[str, Any] = Body(default={}), who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
+    """Compare a DINO-imported group with its DINO class (`{apply: false}`: just the changes) or make the changes (`{apply: true}`)."""
+    from .. import services_dinoimport as di
+
+    return di.sync(s, who, di.dino_classes(request, who), code, bool(isinstance(body, dict) and body.get("apply") is True))
+
+
 @router.post("/pupils/{pupil_id}/reset-pin")
 def reset_pin(pupil_id: str, who: Principal = Depends(require("teacher")), s: Session = Depends(get_session)):
     password = sc.reset_pin(s, pupil_id, who_teacher(who), who.school)
     return {"pupilId": pupil_id, "password": password, "pin": password}
 
 
-# ---------------------------------------------------------------- pupils ask to join a group (shared 0.2.41)
+# ---------------------------------------------------------------- pupils ask to join a group (shared 0.2.42)
 
 @router.post("/groups/join")
 def ask_to_join(body: dict[str, Any] = Body(...), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):

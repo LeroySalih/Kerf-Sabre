@@ -30,7 +30,7 @@ Google, Microsoft and DINO are registered once for all of Kerf by the site admin
 A teacher can make a group:
 - **by hand** (name, then add pupils);
 - **from a CSV** (group name, pupil ID, optionally display name);
-- **from a provider**: DINO groups (exists: `GET /groups`, shared 0.2.30), Google Classroom courses, Microsoft Teams/Entra classes. Importing links the group to the provider's group so it can be refreshed.
+- **from a provider**: DINO groups (exists: `GET /groups`, shared 0.2.30), Google Classroom courses, Microsoft Teams/Entra classes. Importing links the group to the provider's group so it can be refreshed. (DINO built, shared 0.2.42: **Import from DINO…** and **Sync with DINO…** on the Classes page.)
 
 Every group has a **group code** (as class codes today) that a teacher can show full screen.
 

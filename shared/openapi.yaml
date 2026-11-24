@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.41
+  version: 0.2.42
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -353,7 +353,7 @@ paths:
         "401": {description: "`bad_login`"}
   /groups/join:
     post:
-      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.41). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
+      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.42). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
       requestBody:
         required: true
         content:
@@ -367,12 +367,12 @@ paths:
         "409": {description: "`already_member`: I am in that group already; `too_many_requests`: 10 requests already waiting"}
   /me/join-requests:
     get:
-      summary: "Pupil. My requests to join groups, newest first (shared 0.2.41)"
+      summary: "Pupil. My requests to join groups, newest first (shared 0.2.42)"
       responses:
         "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MyJoinRequest"}}}}}
   /classes/{code}/join-requests:
     get:
-      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.41). Other teachers and other schools: 404"
+      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.42). Other teachers and other schools: 404"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
       responses:
@@ -394,7 +394,7 @@ paths:
                     createdAt: {type: string, format: date-time}
   /classes/{code}/join-requests/{requestId}/approve:
     post:
-      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.41)"
+      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.42)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -404,7 +404,7 @@ paths:
         "409": {description: "`limit_reached` (the group is full on the school's plan), `already_decided`, or `conflict` (the pupil ID is used in another school)"}
   /classes/{code}/join-requests/{requestId}/decline:
     post:
-      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.41)"
+      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.42)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -423,6 +423,32 @@ paths:
             schema: {type: object, properties: {pupilIds: {type: array, items: {type: string}}}}
       responses:
         "200": {description: OK, content: {application/json: {schema: {type: array, items: {type: object, properties: {pupilId: {type: string}, password: {type: string}, displayName: {type: string}}}}}}}
+  /dino/classes:
+    get:
+      summary: Teacher signed in with DINO. Their own DINO classes (asked of DINO with their sign-in), each with the Kerf group it is already imported as. 409 dino_needed for any other sign-in; 502 groups_unavailable when DINO cannot answer
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}, subject: {type: [string, "null"]}, yearGroup: {type: [string, "null"]}, pupilCount: {type: integer}, importedAs: {type: [string, "null"]}, archived: {type: boolean}}}}}}}
+  /dino/classes/import:
+    post:
+      summary: Teacher signed in with DINO. Make a Kerf group for each chosen DINO class (named after it, owned by the teacher, with its pupils' DINO IDs, source dino). A class already imported is reported, not imported again. Free limits apply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [ids], properties: {ids: {type: array, items: {type: string}, maxItems: 50}}}
+      responses:
+        "201": {description: Imported, content: {application/json: {schema: {type: array, items: {type: object, properties: {dinoId: {type: string}, code: {type: string}, name: {type: string}, already: {type: boolean}, pupils: {type: integer}, conflicts: {type: array, items: {type: string}}}}}}}}
+  /classes/{code}/dino-sync:
+    post:
+      summary: Teacher signed in with DINO. Compare a DINO-imported group with its DINO class (apply false, the default, changes nothing) or apply the changes. Pupils no longer in the class leave this group only (archived if in no other group, files kept). 409 not_linked for a group not imported from DINO
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {apply: {type: boolean, default: false}}}
+      responses:
+        "200": {description: OK, content: {application/json: {schema: {type: object, properties: {code: {type: string}, name: {type: string}, add: {type: array, items: {type: string}}, remove: {type: array, items: {type: string}}, applied: {type: boolean}, conflicts: {type: array, items: {type: string}}}}}}}
   /classes:
     get:
       summary: Teacher. My classes (the ones I created, plus shared ones) and how many pupils are in each. Another teacher's class is invisible to me. Archived groups are left out unless archived=true (then only they are listed).
@@ -1592,7 +1618,7 @@ components:
         archived: {type: boolean}
         source: {enum: [manual, csv, dino, google, microsoft], description: "Where the group came from"}
         laser: {type: boolean, description: "A laser group: may send files to the laser while the school's terms limit laser groups. Set by a school admin with PUT /classes/{code} {laser}"}
-        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.41)"}
+        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.42)"}
     CameraCalibration:
       type: object
       required: [imageWidth, imageHeight, points, homography]

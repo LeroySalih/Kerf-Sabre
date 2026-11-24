@@ -1,4 +1,4 @@
-// Pupils ask to join a group; a teacher approves (shared 0.2.41). The pupil types the group code their teacher gave them and waits;
+// Pupils ask to join a group; a teacher approves (shared 0.2.42). The pupil types the group code their teacher gave them and waits;
 // the request shows on the group's page on the Admin site. The words and the server calls live here (tested in tests/joingroup.test.ts).
 import { request, type Session } from "./server";
 

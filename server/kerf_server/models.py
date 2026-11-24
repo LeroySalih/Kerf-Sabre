@@ -265,7 +265,7 @@ class GroupMember(Base):
 
 
 class JoinRequest(Base):
-    """A pupil asked to join a group (by its join code) and waits for a teacher (shared 0.2.41). IDs only."""
+    """A pupil asked to join a group (by its join code) and waits for a teacher (shared 0.2.42). IDs only."""
 
     __tablename__ = "join_requests"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

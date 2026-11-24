@@ -78,7 +78,7 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
     const code = open.code;
     const list = el("div", {});
     if (open.waiting.length) {
-      // pupils who asked to join with the group code (shared 0.2.41): a teacher lets them in or says no
+      // pupils who asked to join with the group code (shared 0.2.42): a teacher lets them in or says no
       list.append(el("h3", {}, `Waiting to join (${open.waiting.length})`),
         el("p", { class: "hint" }, "These pupils typed this group's code and asked to join. Approve only pupils you expect in this group."));
       for (const w of open.waiting) {

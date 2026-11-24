@@ -26,6 +26,9 @@ class School(Base):
     plan: Mapped[str | None] = mapped_column(String(8), nullable=True)
     #: The short code pupils type with their group code, pupil ID and password (unique across Kerf).
     code: Mapped[str | None] = mapped_column(String(16), nullable=True, unique=True, index=True)
+    #: Which sign-in methods the school's admins have switched on, e.g. {"dino": true, "groupCode": true, "googleDomain": "..."}
+    #: (`services_signin`). NULL: a school from before per-school sign-in, which used DINO only.
+    sign_in: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -232,3 +235,16 @@ class Person(Base):
     school_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     display_name: Mapped[str] = mapped_column(String(128))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Identity(Base):
+    """A way a person signs in, linked to their Kerf ID: (provider, subject) -> person. Providers: dino, google, microsoft,
+    group-code, email. One person may have several (e.g. a group code at school, Google at home). IDs only: no names or emails here."""
+
+    __tablename__ = "identities"
+    provider: Mapped[str] = mapped_column(String(16), primary_key=True)
+    subject: Mapped[str] = mapped_column(String(160), primary_key=True)
+    person_id: Mapped[str] = mapped_column(String(64), index=True)
+    school_id: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

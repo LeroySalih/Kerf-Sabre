@@ -419,3 +419,40 @@ def test_a_dino_account_listed_as_site_admin_reaches_the_platform(tmp_path, jwks
         other = auth(mint(sub="u-123", roles=["admin"]))
         assert c.get("/api/v1/auth/me", headers=other).json()["siteAdmin"] is False
         assert c.get("/api/v1/schools", headers=other).status_code == 403
+
+
+class TestPerSchoolSignIn:
+    """docs/ACCOUNTS.md: each school switches its own sign-in methods on and off."""
+
+    def test_the_dino_school_keeps_dino_and_a_new_school_starts_without_it(self, planner_client):
+        admin = auth(mint(roles=["admin"]))
+        d = planner_client.get("/api/v1/school/sign-in", headers=admin).json()
+        assert d["methods"]["dino"] is True and d["methods"]["google"] is False and d["canEnable"]["google"] is False
+
+    def test_switching_dino_off_stops_dino_sign_ins_but_not_the_site_admin(self, tmp_path, jwks):
+        cfg = Settings.from_env(data_dir=tmp_path / "d", auth_mode="planner", sso_issuer=ISS, site_admins=("u-owner",), auto_approve_default=False)
+        app = create_app(cfg)
+        app.state.sso = Verifier(cfg, fetch=jwks)
+        with TestClient(app) as c:
+            admin = auth(mint(roles=["admin"]))
+            r = c.patch("/api/v1/school/sign-in", json={"methods": {"dino": False, "email": True}}, headers=admin)
+            assert r.status_code == 200 and r.json()["methods"]["dino"] is False
+            assert c.get("/api/v1/auth/me", headers=admin).json()["code"] == "sign_in_off"
+            assert c.get("/api/v1/auth/me", headers=auth(mint(sub="u-owner", roles=["admin"]))).status_code == 200
+
+    def test_google_cannot_be_turned_on_until_kerf_is_registered_and_staff_cannot_be_locked_out(self, planner_client):
+        admin = auth(mint(roles=["admin"]))
+        r = planner_client.patch("/api/v1/school/sign-in", json={"methods": {"google": True}}, headers=admin)
+        assert r.status_code == 409 and r.json()["code"] == "not_set_up"
+        r = planner_client.patch("/api/v1/school/sign-in", json={"methods": {"dino": False, "email": False}}, headers=admin)
+        assert r.status_code == 409 and r.json()["code"] == "would_lock_out"
+        assert planner_client.patch("/api/v1/school/sign-in", json={"methods": {"email": True}}, headers=auth(mint(roles=["teacher"]))).status_code == 403
+
+    def test_signing_in_links_the_dino_identity(self, sso_app):
+        sso_app.state.sso.fetch_userinfo = lambda url, token: {"name": "Sam"}
+        with TestClient(sso_app) as c:
+            c.post("/api/v1/auth/profile", headers=auth(mint(roles=["pupil"])))
+            from kerf_server.models import Identity
+            with sso_app.state.db.session() as s:
+                row = s.get(Identity, ("dino", "u-123"))
+                assert row is not None and row.person_id == "u-123" and row.school_id == "main"

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.32
+  version: 0.2.33
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -150,6 +150,27 @@ paths:
       summary: Remember the caller's display name from DINO (userinfo) so staff of the school see it instead of an ID. Never an email; never logged. The answer has name null when DINO cannot say.
       responses:
         "200": {description: OK}
+  /school/sign-in:
+    get:
+      summary: Teacher or admin. How people sign in to my school (methods on, what each needs before it can be turned on).
+      responses:
+        "200": {description: "{methods, googleDomain, microsoftTenant, canEnable, available}"}
+    patch:
+      summary: Admin. Switch sign-in methods on or off. 409 not_set_up / would_lock_out.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                methods:
+                  type: object
+                  properties: {dino: {type: boolean}, google: {type: boolean}, microsoft: {type: boolean}, groupCode: {type: boolean}, email: {type: boolean}}
+                googleDomain: {type: [string, "null"]}
+                microsoftTenant: {type: [string, "null"]}
+      responses:
+        "200": {description: The new settings}
   /staff:
     get:
       summary: School admin. Admins, teachers and station tokens in my school (never the tokens)

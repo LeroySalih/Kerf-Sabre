@@ -177,7 +177,7 @@ class Verifier:
         from .security import Principal
 
         role, sub = self.verify(token)
-        return Principal(role, sub, DEFAULT_SCHOOL, site_admin=sub in self.cfg.site_admins)
+        return Principal(role, sub, self.cfg.sso_school or DEFAULT_SCHOOL, site_admin=sub in self.cfg.site_admins)
 
 
 def auth_config(cfg: Settings) -> dict[str, Any]:

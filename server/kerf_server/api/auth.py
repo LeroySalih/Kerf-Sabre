@@ -52,6 +52,10 @@ def profile(request: Request, p: Principal = Depends(current_principal), s: Sess
     sso = getattr(request.app.state, "sso", None)
     if sso is None or p.role not in SSO_ROLES:
         return {"name": None}
+    from ..services_signin import remember as link
+
+    if p.school:
+        link(s, "dino", p.id, p.id, p.school)  # the DINO account is this person's DINO identity (their Kerf ID is the DINO ID)
     name = ps.remember(s, p.id, p.school, sso.userinfo_name(bearer(request) or ""))
     return {"name": name}
 

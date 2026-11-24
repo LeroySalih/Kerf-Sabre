@@ -17,7 +17,7 @@ describe("which Admin pages a role sees", () => {
 describe("free and paid schools", () => {
   it("a free school's admin site has the free tools only", () => {
     const keys = pagesFor("admin", "free").map((p) => p.key);
-    expect(keys).toEqual(["classes", "pupils", "materials", "staff"]);
+    expect(keys).toEqual(["classes", "pupils", "materials", "school", "staff"]);
     for (const paid of ["queue", "stations", "stationpages", "activities", "overview"]) expect(keys).not.toContain(paid);
     expect(pagesFor("technician", "free")).toEqual([]);
   });

@@ -10,7 +10,7 @@ import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
   addStaff, classActivities, classPupils, controlStation, disconnectStation, cutterCommand, cutterKinds, deleteMachine, getMachineDoc, listMachines, makeCutterPackage, putMachine, createClass, createSchool, mySchool, setAutoApprove, listPresets, createPreset, putPreset, describeDuration, listClasses, listQueue, listSchools, listStaff, listStations,
-  listJobsByStatus, pupilLabel, requeueJob, updateSchool, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
+  listJobsByStatus, pupilLabel, requeueJob, updateSchool, getSignIn, setSignIn, type SignInSettings, deletePreset, STATUS_TEXT, removePupil, revokeStaff, updateClass,
   type Activity, type CutterKind, type JobSummary, type Session, type StationInfo,
 } from "../server";
 
@@ -452,10 +452,44 @@ export function pagesFor(role: string, plan: string | null | undefined = "paid")
   if (role === "platform") return [schools];
   const paid = plan !== "free";
   if (role === "technician") return paid ? [stationPages] : []; // technicians run the stations and see nothing else here
-  if (!paid) return role === "admin" ? [classes, pupils, materials, staff] : [classes, pupils, materials];
+  if (!paid) return role === "admin" ? [classes, pupils, materials, schoolPage, staff] : [classes, pupils, materials];
   const base = [overview, classes, pupils, activities, queue, materials, stations];
-  return role === "admin" ? [...base, stationPages, staff] : base;
+  return role === "admin" ? [...base, stationPages, schoolPage, staff] : base;
 }
+
+const SIGN_IN_LABELS: [keyof SignInSettings["methods"], string, string][] = [
+  ["groupCode", "Group code", "Pupils type the school code, their group code, their pupil ID and the password on their card."],
+  ["email", "Email link", "Staff get a sign-in link by email."],
+  ["dino", "DINO", "Staff and pupils sign in with their DINO account."],
+  ["google", "Google", "Staff and pupils sign in with the school's Google accounts."],
+  ["microsoft", "Microsoft", "Staff and pupils sign in with the school's Microsoft 365 accounts."],
+];
+
+/** School admins: the school's code and plan, and which sign-in methods are on. */
+const schoolPage: Page = {
+  key: "school", title: "School", lead: "Your school's code and plan, and how people sign in. At least one way for staff to sign in must stay on.",
+  mount(host, ctx) {
+    const s = ctx.session;
+    const draw = async () => {
+      const [sc, si] = await Promise.all([mySchool(s), getSignIn(s)]);
+      const redraw = () => void draw().catch((e) => fail(host, e));
+      const rows = SIGN_IN_LABELS.map(([k, label, hint]) => {
+        const box = el("input", { type: "checkbox", "aria-label": label }) as HTMLInputElement;
+        box.checked = si.methods[k];
+        box.disabled = !si.methods[k] && !si.canEnable[k];
+        box.addEventListener("change", () => void attempt(() => setSignIn(s, { methods: { [k]: box.checked } }), redraw));
+        const note = !si.available[k] ? "Coming soon: can be set now, starts working when it is released." : !si.methods[k] && !si.canEnable[k] ? (k === "dino" ? "Linked to another school on this server." : "Kerf has not been registered with this provider yet.") : "";
+        return el("tr", {}, cell(el("label", {}, box, " ", el("b", {}, label))), cell(hint), cell(note ? el("span", { class: "hint" }, note) : ""));
+      });
+      host.replaceChildren(
+        el("div", { class: "ad-card" }, el("h3", {}, sc.name), el("p", {}, "School code: ", el("code", { class: "ad-code" }, sc.code ?? "")),
+          el("p", { class: "hint" }, "Pupils type this school code when they sign in with a group code."),
+          el("p", {}, `Plan: ${sc.plan === "free" ? "Free (the Editor, accounts, groups and saved files)" : "Paid (also the queue, lasers, Station pages, camera, activities and approval)"}`)),
+        el("h2", {}, "How people sign in"), table(["Method", "", ""], rows));
+    };
+    void draw().catch((e) => fail(host, e));
+  },
+};
 
 /** The Platform site (Kerf's site admins only): all schools. */
 export const platformPages = (): Page[] => [schools];

@@ -106,7 +106,13 @@ def current_principal(request: Request) -> Principal:
         sso = getattr(request.app.state, "sso", None)
         if sso is None:
             raise ApiError(401, "unauthorized", "Sign-in with DINO is not turned on for this server.")
-        return sso.principal(token)
+        p = sso.principal(token)
+        from .services_signin import allowed
+
+        with request.app.state.db.session() as s:
+            if not p.site_admin and not allowed(s, p.school, "dino"):
+                raise ApiError(403, "sign_in_off", "Sign-in with DINO is switched off for this school. Ask your school's Kerf admin.")
+        return p
     db: Database = request.app.state.db
     with db.session() as s:
         p = lookup(s, token, request.app.state.settings.auth_mode != "planner")

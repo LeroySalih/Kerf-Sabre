@@ -35,6 +35,11 @@ class Settings:
     cutter_zip: Path | None = None
     #: A pupil's new send replaces their earlier files that are still waiting (they go to the back of the queue). Turn off to let a pupil have several waiting at once.
     replace_old_sends: bool = True
+    #: The school that DINO (planner-004) sign-ins belong to on this server; that school's admins can switch DINO off.
+    sso_school: str = "main"
+    #: Kerf's registrations with Google and Microsoft (set by the site admin). Empty: those methods cannot be turned on yet.
+    google_client_id: str = ""
+    microsoft_client_id: str = ""
     #: DINO user IDs (`sub`) of the site admins: they may use the Platform site (all schools, plans). Never a school role.
     site_admins: tuple[str, ...] = ()
     #: The school's auto-approve switch when it has never been set (and for new schools). On: every new file goes straight to the queue.
@@ -106,6 +111,9 @@ class Settings:
             cutter_zip=Path(e["KERF_CUTTER_ZIP"]) if e.get("KERF_CUTTER_ZIP") else None,
             replace_old_sends=_bool(e.get("KERF_REPLACE_OLD_SENDS"), True),
             auto_approve_default=_bool(e.get("KERF_AUTO_APPROVE"), True),
+            sso_school=e.get("KERF_SSO_SCHOOL", "main").strip() or "main",
+            google_client_id=e.get("KERF_GOOGLE_CLIENT_ID", "").strip(),
+            microsoft_client_id=e.get("KERF_MICROSOFT_CLIENT_ID", "").strip(),
             site_admins=tuple(x.strip() for x in e.get("KERF_SITE_ADMINS", "").split(",") if x.strip()),
             require_approval=_bool(e.get("KERF_REQUIRE_APPROVAL"), True),
             require_frame=_bool(e.get("KERF_REQUIRE_FRAME"), True),

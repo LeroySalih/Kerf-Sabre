@@ -2,6 +2,12 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.33 - per-school sign-in methods and linked identities (additive)
+- `GET /school/sign-in` (teacher, admin) and `PATCH /school/sign-in` (admin): `{methods: {dino, google, microsoft, groupCode, email}, googleDomain, microsoftTenant, canEnable, available}`. A new school starts with `groupCode` and `email` on and the rest off; a school from before this (the DINO school) has DINO on. `409 not_set_up` turning on Google or Microsoft before Kerf is registered with them, or DINO for a school it is not linked to (`KERF_SSO_SCHOOL`); `409 would_lock_out` turning off every staff method. `available` says which sign-in screens exist yet (DINO today; the others can be set ahead).
+- A DINO sign-in to a school that has switched DINO off answers `403 sign_in_off` (site admins are never locked out).
+- Sign-ins are linked to the person as identities (provider + subject -> Kerf ID); a DINO account's Kerf ID stays its DINO ID.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.33`.
+
 ## 0.2.32 - free and paid schools, school codes, site admins (additive)
 - Schools have a **plan** (`free` or `paid`; a school made before plans existed counts as paid) and a short **school code** (5 characters from an alphabet without look-alike characters, unique across Kerf). `GET /school` and the school list carry `code` and `plan`.
 - The **paid service** answers `403 paid_feature` for a free school: the queue and approval, sending for cutting (`POST /jobs` with `status: submitted`, `POST /jobs/{id}/submit`), Station pages and lasers (`/stations`, frame, placement, start, take), the Cutter download, the camera, and activities and feedback. The Cutter WebSocket closes with **4402** for a free school (the Cutter does not reconnect). The free tools are unchanged: the Editor, saving files, materials, classes and pupils.

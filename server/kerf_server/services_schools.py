@@ -90,7 +90,9 @@ def create_school(s: Session, school_id: str, name: str, plan: str = "free") -> 
         raise ApiError(409, "conflict", f"There is already a school '{school_id}'.")
     if plan not in PLANS:
         raise ApiError(422, "invalid", "plan is free or paid.")
-    school = School(id=school_id, name=name.strip()[:128], plan=plan, code=new_school_code(s))
+    from .services_signin import NEW_SCHOOL
+
+    school = School(id=school_id, name=name.strip()[:128], plan=plan, code=new_school_code(s), sign_in=dict(NEW_SCHOOL))
     s.add(school)
     s.flush()
     seed_presets(s, school_id)

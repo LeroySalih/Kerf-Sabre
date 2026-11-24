@@ -69,6 +69,22 @@ def update_school(body: dict[str, Any] = Body(...), who: Principal = Depends(req
     return ss.school_doc(school, cfg.auto_approve_default)
 
 
+@router.get("/school/sign-in")
+def sign_in_settings(who: Principal = Depends(require("admin", "teacher")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """How people sign in to my school: which methods are on, and what each needs before it can be turned on."""
+    from .. import services_signin as si
+
+    return si.doc(s.get(School, who.school), cfg)
+
+
+@router.patch("/school/sign-in")
+def update_sign_in(body: dict[str, Any] = Body(...), who: Principal = Depends(require("admin")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
+    """School admins switch sign-in methods on or off (Google and Microsoft only once Kerf is registered with them)."""
+    from .. import services_signin as si
+
+    return si.doc(si.update(s, cfg, who.school, body), cfg)
+
+
 @router.get("/staff")
 def list_staff(who: Principal = Depends(require("admin")), s: Session = Depends(get_session)):
     return ss.staff(s, who.school)

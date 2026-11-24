@@ -65,6 +65,16 @@ export async function request<T>(s: { baseUrl: string; token: string }, method: 
 export interface School { id: string; name: string; createdAt?: string; code?: string | null; plan?: "free" | "paid"; /** New files go straight to the queue while this is on. */ autoApprove?: boolean }
 export interface StaffMember { role: "admin" | "teacher" | "technician" | "station"; id: string; label?: string | null; createdAt?: string }
 export const listSchools = (s: Session, f?: Fetch) => request<School[]>(s, "GET", "/schools", undefined, f);
+export interface SignInSettings {
+  methods: Record<"dino" | "google" | "microsoft" | "groupCode" | "email", boolean>;
+  googleDomain: string | null; microsoftTenant: string | null;
+  /** Whether each method may be turned on yet (Google/Microsoft need Kerf registered with them). */
+  canEnable: Record<string, boolean>;
+  /** Whether each method's sign-in screen exists yet (the others can be set ahead). */
+  available: Record<string, boolean>;
+}
+export const getSignIn = (s: Session, f?: Fetch) => request<SignInSettings>(s, "GET", "/school/sign-in", undefined, f);
+export const setSignIn = (s: Session, change: { methods?: Partial<SignInSettings["methods"]>; googleDomain?: string | null; microsoftTenant?: string | null }, f?: Fetch) => request<SignInSettings>(s, "PATCH", "/school/sign-in", change, f);
 /** Platform: set a school's plan (free or paid) or rename it. */
 export const updateSchool = (s: Session, id: string, change: { plan?: "free" | "paid"; name?: string }, f?: Fetch) => request<School>(s, "PATCH", `/schools/${encodeURIComponent(id)}`, change, f);
 /** The paid service (queue, approval, lasers, Station pages, camera, activities) is open to this session's school. A session from an older server (no plan) counts as paid. */

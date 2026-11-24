@@ -1,6 +1,6 @@
 # Walkthrough: a new school joins Kerf
 
-This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.38. Anything marked **Not built yet** does not work today.
+This walks through what a teacher sees, from "I have heard of Kerf" to "I am my school's admin, I have invited a colleague and made a group". It describes the code on `main` as of shared 0.2.38 plus the public website (landing page at `/`, pricing at `/pricing`, one sign-in page at `/sign-in`, the Editor at `/editor/`). Anything marked **Not built yet** does not work today.
 
 The example school is **Westfield High** (school ID `westfield-high`). The teacher is `you@westfield-high.example` and the colleague is `colleague@westfield-high.example`.
 
@@ -10,13 +10,13 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
   - `RESEND_API`: the Resend key. Without it, emails are not sent. The server keeps them in memory instead, which is for development only.
   - `KERF_PUBLIC_URL=https://kerf.mr-salih.org`. Every link in an email is built from this address. Without it, inviting someone or asking for a sign-in link fails with `503 email_not_set_up` ("Email sign-in is not set up on this server yet (KERF_PUBLIC_URL is missing).").
 - Run `./deploy.sh` on the server to put the latest `main` live. It backs up first, then pulls and rebuilds.
-- To use the Platform pages in a browser, sign in to `https://kerf.mr-salih.org/admin/` with **Sign in with DINO**, using a DINO account whose ID is listed in `KERF_SITE_ADMINS`. A stored platform token also counts as a site admin, but only through the API (for example with `curl`). The Admin site no longer has a box to paste a token into.
+- To use the Platform pages in a browser, go to `https://kerf.mr-salih.org/sign-in`, choose **I'm staff** and press **Sign in with DINO**, using a DINO account whose ID is listed in `KERF_SITE_ADMINS`. A stored platform token also counts as a site admin, but only through the API (for example with `curl`). The Admin site no longer has a box to paste a token into.
 
 ## The steps
 
 1. **The school asks to join.** Schools cannot sign themselves up yet (see "Not built yet"). The teacher contacts Kerf (mr-salih.org) and gives the school's name and their school email address.
 
-2. **The site admin creates the school.** At `https://kerf.mr-salih.org/admin/`, signed in with DINO, press **Kerf Platform** in the header. Then go to **Schools** and press **New school…**. Fill in:
+2. **The site admin creates the school.** In the Admin site (`https://kerf.mr-salih.org/admin/`), signed in with DINO, press **Kerf Platform** in the header. Then go to **Schools** and press **New school…**. Fill in:
    - **School ID**: `westfield-high` (lower-case letters, digits and `-`, up to 32 characters).
    - **Name**: `Westfield High`.
    - **First admin's email (optional)**: `you@westfield-high.example`.
@@ -36,9 +36,9 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
    - An orange **Sign in to Kerf** button, with the address written out below it.
    - Footer: "If you were not expecting this, you can ignore it."
 
-   The link goes to `https://kerf.mr-salih.org/admin/?signin=…`.
+   The link goes to `https://kerf.mr-salih.org/sign-in?signin=…&app=admin`.
 
-4. **The teacher clicks the link.** The Admin site opens and signs them straight in as **School admin**. The link is removed from the address bar, so it cannot be bookmarked or used again. The sign-in lasts about 10 hours, and only in that browser tab: closing the tab signs them out.
+4. **The teacher clicks the link.** The sign-in page opens, says it is signing them in, then opens the Admin site, signed in as **School admin**. The link is removed from the address bar, so it cannot be bookmarked or used again. The sign-in lasts about 10 hours, and only in that browser tab: closing the tab signs them out.
 
 5. **What the teacher sees.**
    - The header shows **Kerf Admin**, then "Westfield High · school code K7RPX · Free plan · School admin: st-…". The last part is their Kerf person ID, not their name. On the right are **Editor** and **Sign out**.
@@ -56,18 +56,18 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
    - A free school's technician sees nothing in the Admin site ("Your school is on Kerf's free plan, which has no Station pages."). Technicians are only useful on the paid plan.
 
 7. **Sign in again later.**
-   - **Admin site**: go to `https://kerf.mr-salih.org/admin/` and find the sign-in card under "No DINO account?". Type your school email and press **Email me a sign-in link**. The link works once, for 15 minutes.
+   - Go to `https://kerf.mr-salih.org/sign-in` (or press **Sign in** on the landing page; going to `/admin/` or `/editor/` while signed out also brings you here). Choose **I'm staff**, type your **School email address** and press **Send me a sign-in link**. The panel then says **Check your email**. The link works once, for 15 minutes, and opens the Admin site.
    - The answer is always the same, whether or not the address has an account: "If that address belongs to a Kerf account, a sign-in link is on its way. Check your email (and your junk folder)."
    - The email's subject is **Your Kerf sign-in link (Westfield High)**.
    - Each address can get 3 links per 15 minutes, and each computer can ask 20 times per 15 minutes.
-   - **Editor**: on the sign-in screen at `https://kerf.mr-salih.org/`, open **Staff: sign in with a link sent to your school email**, type your email and press **Email me a sign-in link**. This link opens the Editor (`/?signin=…`), not the Admin site.
+   - If you came to the sign-in page from the Editor (`/editor/`), the link opens the Editor instead of the Admin site.
    - If the address has accounts at more than one school, a separate link arrives for each school.
 
 8. **Make a group and add pupils.**
    - On **Classes**, press **New class…**. Fill in **Class code (optional)** (leave it blank and Kerf makes one) and **Note (optional)** (for example "Year 9 set 2", never a pupil's name). Press **Create**.
    - Press **Pupils…** on the new row, open the class, press **Add pupils…** and paste the pupils' IDs (described as their DINO IDs), one per line. An ID already used in another school is not added ("Used in another school, not added").
    - **Pupils at a new school cannot sign in yet.** Today pupils sign in only with DINO, and DINO sign-ins belong to the one school the server links to DINO (`KERF_SSO_SCHOOL`). Westfield High cannot switch DINO on. The group code sign-in that the School page describes ("Pupils type the school code, their group code, their pupil ID and the password on their card") has no sign-in screen yet. So a new school can set up groups, but its pupils cannot use them.
-   - Pupils, or anyone else, can still design in the Editor with **Work without signing in (nothing is saved to the server)**.
+   - Pupils, or anyone else, can still design in the Editor: **Work without signing in** on the sign-in page opens the Editor, and the work stays in that browser. The **Use your Pupil Card** form on the sign-in page is shown but marked **Coming soon**.
 
 9. **What the free plan includes.** Kerf's built-in default terms are:
    - features: the free tools only (no laser, no activities);
@@ -84,7 +84,7 @@ The example school is **Westfield High** (school ID `westfield-high`). The teach
 - **Self-registration**: a teacher cannot sign their school up. The site admin creates every school (step 2).
 - **Pupil sign-in for new schools**: there is no sign-in screen for the school code, group code and password, and no Pupil Cards. Only the school linked to DINO has working pupil sign-in.
 - **Google and Microsoft sign-in**: the tick boxes exist but say "Coming soon". They also stay greyed out until Kerf is registered with Google and Microsoft.
-- **Public pages**: the landing, pricing and sign-up pages are in progress, not on `main`. Today `https://kerf.mr-salih.org/` is the Editor and `/admin/` is the Admin site.
+- **Public pages**: the landing, pricing and sign-in pages are built. Things on them that do not work yet are greyed out and marked **Coming soon**: Pupil Card sign-in, Google and Microsoft, **Register your school (free)**, prices, **Talk to us**, and the Privacy, Terms and Contact links.
 - **Payment**: moving a school to paid is a manual switch for the site admin.
 
 ## If something goes wrong

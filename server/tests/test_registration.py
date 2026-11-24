@@ -186,3 +186,24 @@ class TestAccessLog:
         HideLinks().filter(rec)
         assert rec.getMessage() == "GET /sign-in?signin=…"
         assert sum(isinstance(f, HideLinks) for f in lg.getLogger("uvicorn.access").filters) == 1  # added once by create_app
+
+
+def test_what_happens_to_each_email_is_in_the_server_log(client):
+    """`kerf.email` lines reach the log (without the address or the link), so a missing RESEND_API is easy to spot."""
+    import logging
+
+    lg = logging.getLogger("kerf.email")
+    assert lg.handlers and lg.getEffectiveLevel() <= logging.INFO  # set up by create_app, whatever else configures logging
+    seen: list[str] = []
+
+    class Grab(logging.Handler):
+        def emit(self, record):
+            seen.append(record.getMessage())
+
+    g = Grab()
+    lg.addHandler(g)
+    try:
+        client.post("/api/v1/auth/register", json={"schoolName": "Log Test High", "name": "Sam Taylor", "email": "sam@logtest.example"})
+    finally:
+        lg.removeHandler(g)
+    assert seen == ["email kept (no RESEND_API set): registration link"]

@@ -7,6 +7,8 @@ where. Requests are limited per address and per computer. Addresses and links ar
 """
 from __future__ import annotations
 
+import logging
+
 import re
 import secrets
 import time
@@ -136,6 +138,7 @@ def start(s: Session, mailer: mail.Mailer, cfg: Settings, throttle: LinkThrottle
         raise ApiError(429, "too_many_attempts", "Too many sign-in links asked for from this computer. Wait a few minutes.")
     base = link_base(cfg, base)
     if not throttle.allow(f"to:{email}", PER_ADDRESS):
+        logging.getLogger("kerf.email").info("email skipped: sign-in link (3 already asked for this address in 15 minutes)")
         return {"message": SAME}  # quietly: the address already has links on the way
     for acct in s.scalars(select(StaffAccount).where(StaffAccount.email == email, StaffAccount.disabled.is_(False))):
         school = s.get(School, acct.school_id)

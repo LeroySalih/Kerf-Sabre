@@ -93,6 +93,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(cutter_ws.router)  # /api/v1/ws/cutter
     app.include_router(api)
 
+    # What happened to each email (sent, kept because RESEND_API is missing, refused by Resend) and new schools must reach the
+    # server's log even when nothing else configures logging. These lines never carry an address, a name or a link.
+    for name in ("kerf.email", "kerf.audit"):
+        lg = logging.getLogger(name)
+        if not lg.handlers:
+            h = logging.StreamHandler()
+            h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+            lg.addHandler(h)
+            lg.setLevel(logging.INFO)
+            lg.propagate = False
+
     if settings.mcp_enabled:  # before the Editor mount, which would otherwise answer "/mcp"
         app.include_router(mcp_routes.router)
         mcp_log = logging.getLogger("kerf.mcp")  # who read what (IDs and tool names only) must reach the console even when nothing else configures logging

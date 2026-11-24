@@ -75,6 +75,7 @@ def start(s: Session, mailer: mail.Mailer, cfg: Settings, throttle: LinkThrottle
         raise ApiError(429, "too_many_attempts", "Too many schools registered from this computer today. Try again tomorrow.")
     base = link_base(cfg, base)
     if not throttle.allow(f"reg-to:{email}", PER_ADDRESS, ADDRESS_WINDOW_S):
+        logging.getLogger("kerf.email").info("email skipped: registration link (3 already asked for this address in 15 minutes)")
         return {"message": SAME}  # quietly: links are already on their way to this address
     token = secrets.token_urlsafe(32)
     s.add(PendingRegistration(token_hash=hash_token(token), school_name=school_name, name=name, email=email, expires_at=utcnow() + timedelta(hours=LINK_HOURS)))

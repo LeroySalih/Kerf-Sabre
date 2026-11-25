@@ -15,6 +15,14 @@ Owner: **mr-salih.org** (Leroy Salih). Kerf was built on his own time with his o
 | 7 | **Free tools first.** The first public release offers only the free tools (free schools register instantly); no paid Server option is offered yet. Paid schools are approved by the site admin (BISAK is one). | Paid features (queue, lasers, Cutter, Station pages, camera) stay behind a per-school plan switch set by the site admin; nothing in the free release can turn them on. |
 | 3 | **The Editor is free and open source under the GNU AGPL-3.0** (`AGPL-3.0-only`). **Kerf Server and Kerf Cutter are closed (proprietary, all rights reserved).** | The design Editor is published in a public repository under an open-source licence and works with no server. The Server, Cutter and the paid screens stay closed. |
 
+## Go-live, phase 1 (owner, 2026-11-25)
+
+- **Phase 1 releases the Editor**, used on its own (no account; work kept in the browser, DXF/SVG export for the school's own laser software) or with **Kerf for classrooms** (school accounts, groups, Pupil Cards, files saved in Kerf).
+- **The Editor is free, always.** No end date and no limits.
+- **Kerf for classrooms is a free trial until September 2027**, to see take-up and gather feedback. The free limits stay (20 groups, 50 pupils per group, 20 files per pupil). The site promises nothing about what follows except that the Editor stays free, schools are told in good time, and nothing is deleted.
+- **The laser connection (queue, approval, Station pages, the camera, Kerf Cutter) and activities are not offered publicly** and the public site does not mention them. They stay in the product behind each school's terms (BISAK keeps them).
+- The public site (`editor/site/`) shows the two parts as two groups: *The Kerf Editor* (free, always) and *Kerf for classrooms* (free trial until September 2027).
+
 ## What each tier is for (owner, 2026-11-24)
 
 The problems each tier solves for a school; features belong in the tier whose problem they solve.

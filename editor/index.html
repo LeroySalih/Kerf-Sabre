@@ -17,9 +17,12 @@
         <details><summary>Server address</summary><input id="gate-url" type="text" placeholder="Leave blank unless your teacher says" /></details>
         <p id="gate-error" role="alert"></p>
         <button type="submit" id="gate-sso" class="on">Sign in with DINO</button>
-        <details id="gate-email-box"><summary>Staff: sign in with a link sent to your school email</summary>
-          <input id="gate-email" type="email" placeholder="you@school.org" autocomplete="email" aria-label="Your school email address" />
-          <button type="button" id="gate-email-send">Email me a sign-in link</button>
+        <details id="gate-email-box"><summary>Staff: sign in with your school email and password</summary>
+          <input id="gate-email" type="email" placeholder="you@school.org" autocomplete="username" aria-label="Your school email address" />
+          <input id="gate-password" type="password" placeholder="Password" autocomplete="current-password" aria-label="Your password" />
+          <button type="button" id="gate-email-send">Sign in</button>
+          <button type="button" id="gate-forgot" class="link">Forgot your password?</button>
+          <div id="gate-schools"></div>
           <p id="gate-email-sent" class="hint" role="status"></p>
         </details>
         <button type="button" id="gate-offline" class="link">Work without signing in (nothing is saved to the server)</button>

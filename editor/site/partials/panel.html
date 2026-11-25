@@ -56,21 +56,56 @@
 </div>
 </div>
 
-<!-- ---- Staff: email link ---- -->
+<!-- ---- Staff: school email + password ---- -->
 <div class="kp-part" data-only="staff" hidden>
-<div class="kp-divider"><span></span><span>or get a link by email</span><span></span></div>
-<form class="kp-form kp-form-tight" aria-label="Get a sign-in link by email" data-email-form novalidate>
+<div class="kp-divider"><span></span><span>or sign in with your school email</span><span></span></div>
+<form class="kp-form kp-form-tight" aria-label="Sign in with your school email and password" data-staff-form novalidate>
 <div class="kp-field">
 <label for="k-email">School email address</label>
-<input id="k-email" name="email" type="email" autocomplete="email" placeholder="name@westfieldhigh.example" aria-describedby="k-email-help" class="kp-input kp-email" required>
+<input id="k-email" name="email" type="email" autocomplete="username" placeholder="name@westfieldhigh.example" class="kp-input kp-email" required>
 </div>
-<button type="submit" class="kp-primary">Send me a sign-in link</button>
-<p id="k-email-help" class="kp-hint">We email you a link. It works once, for 15 minutes.</p>
+<div class="kp-field">
+<label for="k-staff-pass">Password</label>
+<input id="k-staff-pass" name="password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" class="kp-input" aria-describedby="k-staff-help" required>
+</div>
+<label class="kp-check"><input type="checkbox" data-show-password="k-staff-pass"><span>Show password</span></label>
+<button type="submit" class="kp-primary">Sign in</button>
+<button type="button" class="kp-textbtn" data-forgot>Forgot your password?</button>
+<p id="k-staff-help" class="kp-hint">New here? Your school admin invites you by email, and the email lets you choose a password. Used to sign in with an emailed link? Press Forgot your password? once to choose one.</p>
 </form>
 </div>
 </div>
 
-<!-- ========== BUSY (an emailed link is being traded for a session) ========== -->
+<!-- ========== PICK (the same email and password at several schools) ========== -->
+<div class="kp-view kp-gap16" data-view="pick" hidden>
+<h2 class="kp-title" data-title>Choose your school</h2>
+<p class="kp-p">You have Kerf accounts at more than one school. Which one do you want to sign in to?</p>
+<p class="kp-alert" data-alert role="alert" hidden></p>
+<div class="kp-sso-list" data-pick-list></div>
+<button type="button" class="kp-textbtn" data-back-staff>Back</button>
+</div>
+
+<!-- ========== CHOOSE A PASSWORD (an invite, reset or registration link) ========== -->
+<div class="kp-view kp-gap16" data-view="choose" hidden>
+<h2 class="kp-title" data-title>Choose a password</h2>
+<p class="kp-p" data-choose-text>Your email address is checked. Now choose the password you will sign in with, together with your school email.</p>
+<ul class="kp-p kp-box" data-rules style="margin: 0; padding-left: 28px"></ul>
+<form class="kp-form kp-form-tight" aria-label="Choose a password" data-choose-form novalidate>
+<div class="kp-field">
+<label for="k-new-pass">New password</label>
+<input id="k-new-pass" name="password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" class="kp-input" required minlength="10" maxlength="128">
+</div>
+<div class="kp-field">
+<label for="k-new-pass2">Type it again</label>
+<input id="k-new-pass2" name="repeat" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" class="kp-input" required>
+</div>
+<label class="kp-check"><input type="checkbox" data-show-password="k-new-pass k-new-pass2"><span>Show password</span></label>
+<p class="kp-alert" data-alert role="alert" hidden></p>
+<button type="submit" class="kp-primary" data-choose-go>Save password and sign in</button>
+</form>
+</div>
+
+<!-- ========== BUSY (a link is being traded for a session) ========== -->
 <div class="kp-view kp-gap16" data-view="busy" role="status" hidden>
 <h2 class="kp-title" data-title>Signing you in</h2>
 <p class="kp-p">One moment.</p>
@@ -80,24 +115,24 @@
 <div class="kp-view kp-gap16" data-view="sent" role="status" hidden>
 <span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M2 7l10 7 10-7"></path></svg></span>
 <h2 class="kp-title" data-title>Check your email</h2>
-<p class="kp-p">If that address belongs to a Kerf account, a sign-in link is on its way. Check your junk folder.</p>
-<p class="kp-p kp-box">The link works once, for 15 minutes. After that, ask for a new one.</p>
-<button type="button" class="kp-secondary" data-back-staff>Use a different email address</button>
+<p class="kp-p">If that address has a Kerf account, a link to set a new password is on its way. Check your junk folder too.</p>
+<p class="kp-p kp-box">The link works once, for 30 minutes. It opens a page where you choose your new password.</p>
+<button type="button" class="kp-secondary" data-back-staff>Back to sign in</button>
 </div>
 
 <!-- ========== EXPIRED ========== -->
 <div class="kp-view kp-gap16" data-view="expired" hidden>
 <span class="kp-badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
 <h2 class="kp-title" data-title>Link expired</h2>
-<p class="kp-p" role="alert" data-expired-text>That sign-in link has expired or has already been used. Ask for a new one.</p>
-<form class="kp-form kp-form-tight" aria-label="Ask for a new sign-in link" data-email-form novalidate>
+<p class="kp-p" role="alert" data-expired-text>That link has expired or has already been used. Ask for a new one below.</p>
+<form class="kp-form kp-form-tight" aria-label="Ask for a new link to set a password" data-email-form novalidate>
 <div class="kp-field">
 <label for="k-email-exp">School email address</label>
 <input id="k-email-exp" name="email" type="email" autocomplete="email" placeholder="name@westfieldhigh.example" class="kp-input kp-email" required>
 </div>
 <p class="kp-alert" data-alert role="alert" hidden></p>
 <button type="submit" class="kp-primary">Send me a new link</button>
-<p class="kp-hint">The new link works once, for 15 minutes.</p>
+<p class="kp-hint">The new link works once, for 30 minutes. If you already chose a password, sign in with it instead.</p>
 </form>
 <a href="/register" class="kp-foot-link" data-register-again hidden>Register your school again</a>
 <button type="button" class="kp-textbtn" data-back-pupil>Back to all sign-in options</button>

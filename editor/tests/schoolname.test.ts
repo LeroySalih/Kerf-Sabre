@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkSchoolName, SCHOOL_NAME_MAX } from "../src/admin/schoolname";
 import { renameSchool } from "../src/server";
 
-describe("renaming the school (shared 0.2.46)", () => {
+describe("renaming the school (shared 0.2.47)", () => {
   it("trims the name and keeps ordinary spaces and accents", () => {
     expect(checkSchoolName("  Westfield High  ")).toEqual({ name: "Westfield High" });
     expect(checkSchoolName("École Saint-Exupéry")).toEqual({ name: "École Saint-Exupéry" });

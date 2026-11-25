@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kerf API
-  version: 0.2.46
+  version: 0.2.47
   description: |
     Contract between Kerf Editor, Kerf Server and Kerf Cutter. Versioned with the JSON schemas in this folder.
     Units mm, bed space Y-up. Pupils are identified by pupil ID only, never name. Uploaded file names are never stored.
@@ -160,7 +160,7 @@ paths:
       responses:
         "200": {description: OK}
     patch:
-      summary: "Admin or teacher. Switch auto-approve on or off (while on, new files skip approval and go straight to the queue) and/or rename the school (school admins only, shared 0.2.46). Send at least one field; everything is checked before anything changes. Returns the school document."
+      summary: "Admin or teacher. Switch auto-approve on or off (while on, new files skip approval and go straight to the queue) and/or rename the school (school admins only, shared 0.2.47). Send at least one field; everything is checked before anything changes. Returns the school document."
       requestBody:
         required: true
         content:
@@ -265,9 +265,54 @@ paths:
         "200": {description: Deleted, content: {application/json: {schema: {type: object, properties: {pupilId: {type: string}, filesDeleted: {type: integer}}}}}}
         "403": {description: Not a school admin}
         "409": {description: "`not_archived` (remove them from every group first) or `in_use` (a file is on a laser)"}
+  /auth/staff/login:
+    post:
+      summary: "Anyone. Staff sign in with their school email and password (shared 0.2.47). Wrong email or wrong password is one identical `401 bad_login` (the same scrypt work for an unknown address). 5 wrong passwords in a row lock the account for 15 minutes (`429 locked`); too many wrong tries from one computer is `429 too_many_attempts`. A removed account cannot sign in. The school's `email` sign-in method must be on (`403 sign_in_off`). When the same email and password are good at more than one school the answer is `409 choose_school` with `details: [{school, name}]`; send again with `school`. The session lasts as long as other staff sessions"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [email, password], properties: {email: {type: string}, password: {type: string, description: "Never logged, stored or returned"}, school: {type: string, description: "A school ID from a `choose_school` answer"}}}
+      responses:
+        "200": {description: Signed in, content: {application/json: {schema: {$ref: "#/components/schemas/StaffSession"}}}}
+        "401": {description: "`bad_login`: That email address or password is not right."}
+        "403": {description: "`sign_in_off`: the school has email and password sign-in off"}
+        "409": {description: "`choose_school`: details `[{school, name}]`"}
+        "422": {description: "`invalid`: an empty box"}
+        "429": {description: "`locked` (this account, for 15 minutes; wait or use Forgot your password?) or `too_many_attempts` (this computer)"}
+  /auth/password/forgot:
+    post:
+      summary: "Anyone. Forgot your password? (shared 0.2.47). Emails a one-time link (`/sign-in?signin=<token>&app=…`, 30 minutes) to each school where the address has an account and email and password sign-in is on. The link opens Choose a password. The answer is the same whether or not the address has an account. Limited per address (3 per 15 minutes, quietly) and per computer (429)"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [email], properties: {email: {type: string}, app: {enum: [admin, editor], default: admin, description: "Where the person goes after choosing the password"}}}
+      responses:
+        "200": {description: "Always the same message", content: {application/json: {schema: {type: object, properties: {message: {type: string}}}}}}
+        "422": {description: Not an email address}
+        "429": {description: "`too_many_attempts`"}
+        "503": {description: "`email_not_set_up`: the server has no public address for links"}
+  /auth/password/change:
+    post:
+      summary: "Staff signed in with a Kerf password. Change it (shared 0.2.47). Ends the person's other sessions; this one stays. Wrong current passwords count towards the lockout"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [current, new], properties: {current: {type: string}, new: {type: string}}}
+      responses:
+        "200": {description: Changed, content: {application/json: {schema: {type: object, properties: {message: {type: string}}}}}}
+        "403": {description: "`wrong_password`: the current password is not right"}
+        "409": {description: "`no_password`: this session was not made with a Kerf password"}
+        "422": {description: "`weak_password` (see PasswordRules) or `invalid`"}
+        "429": {description: "`locked`"}
   /auth/email/start:
     post:
-      summary: Anyone. Staff ask for a one-time sign-in link by email. The answer is the same whether or not the address has an account. Limited per address and per computer (429)
+      summary: "Anyone. The old \"email me a sign-in link\": since shared 0.2.47 the same as `POST /auth/password/forgot` (the link leads to Choose a password; nobody signs in by link alone)"
+      deprecated: true
       security: []
       requestBody:
         required: true
@@ -280,16 +325,18 @@ paths:
         "503": {description: "`email_not_set_up`: the server has no public address for links"}
   /auth/email/finish:
     post:
-      summary: Anyone. Trade a sign-in or invite link's token (the `signin` query parameter) for a session token. A link works once
+      summary: "Anyone. Use an invite or reset link's token (the `signin` query parameter) with the password the person chose (shared 0.2.47): sets the password (see PasswordRules), ends the account's other sessions, uses up its other links, clears any lockout and signs them in (`Token.method` password). A link works once. Without a password (an old page) the answer is `422 password_needed` and the link is not used up; a weak password also leaves it unused"
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: {type: object, required: [token], properties: {token: {type: string}}}
+            schema: {type: object, required: [token, password], properties: {token: {type: string}, password: {type: string, description: "Never logged, stored or returned"}}}
       responses:
-        "200": {description: Signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {enum: [admin, teacher, technician]}, id: {type: string}, name: {type: [string, "null"]}, expiresAt: {type: string, format: date-time}}}}}}
+        "200": {description: Password set and signed in, content: {application/json: {schema: {$ref: "#/components/schemas/StaffSession"}}}}
         "401": {description: "`link_invalid`: expired, used or unknown"}
+        "403": {description: "`sign_in_off` (a reset link for a school that has email and password sign-in off)"}
+        "422": {description: "`password_needed` or `weak_password`"}
   /auth/register:
     post:
       summary: "Anyone. Register a free school (shared 0.2.40). Stores a pending registration and emails a confirmation link (`/sign-in?register=<token>`, works once, for 24 hours); nothing is made until it is used. The answer is the same whatever happens (it never says whether the address already has accounts). Limited per address (quietly) and per computer (429)"
@@ -307,25 +354,26 @@ paths:
         "503": {description: "`email_not_set_up`: the server has no public address for links"}
   /auth/register/finish:
     post:
-      summary: "Anyone. Use a registration link's token (the `register` query parameter). Makes the school on the free plan (an ID made from its name, unique with -2, -3...; a school code; a copy of Kerf's default terms; group code and email sign-in on) and the person its first admin (an email account), and signs them in. A link works once (shared 0.2.40)"
+      summary: "Anyone. Use a registration link's token (the `register` query parameter) with the password the admin chose (shared 0.2.47; `422 password_needed` without one, `422 weak_password`, the link is not used up either way). Makes the school on the free plan (an ID made from its name, unique with -2, -3...; a school code; a copy of Kerf's default terms; group code and email sign-in on) and the person its first admin (an email account), and signs them in. A link works once (shared 0.2.40)"
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: {type: object, required: [token], properties: {token: {type: string}}}
+            schema: {type: object, required: [token, password], properties: {token: {type: string}, password: {type: string}}}
       responses:
         "200": {description: Registered and signed in, content: {application/json: {schema: {type: object, properties: {token: {type: string}, role: {const: admin}, id: {type: string}, name: {type: [string, "null"]}, expiresAt: {type: string, format: date-time}, school: {type: string}, schoolName: {type: string}, schoolCode: {type: string}}}}}}
         "401": {description: "`link_invalid`: expired, used or unknown"}
         "403": {description: "`registration_closed`"}
+        "422": {description: "`password_needed` or `weak_password`"}
   /staff/people:
     get:
-      summary: School admin. Staff who sign in with an emailed link (invited or active)
+      summary: School admin. Staff with Kerf accounts (email and password; invited or active)
       responses:
         "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/StaffPerson"}}}}}
   /staff/invite:
     post:
-      summary: School admin. Invite a member of staff by email; they get a link (7 days) to sign in. Inviting someone not signed in yet sends a new invite
+      summary: "School admin. Invite a member of staff by email; they get a link (7 days) to choose their password (shared 0.2.47). Inviting someone who has not chosen one yet sends a new invite (Send again)"
       requestBody:
         required: true
         content:
@@ -356,7 +404,7 @@ paths:
         "401": {description: "`bad_login`"}
   /groups/join:
     post:
-      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.46). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
+      summary: "Pupil. Ask to join a group of my own school by its join code (shared 0.2.47). A teacher who manages the group approves or declines. An existing waiting request is returned (200) rather than made again"
       requestBody:
         required: true
         content:
@@ -370,12 +418,12 @@ paths:
         "409": {description: "`already_member`: I am in that group already; `too_many_requests`: 10 requests already waiting"}
   /me/join-requests:
     get:
-      summary: "Pupil. My requests to join groups, newest first (shared 0.2.46)"
+      summary: "Pupil. My requests to join groups, newest first (shared 0.2.47)"
       responses:
         "200": {description: OK, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MyJoinRequest"}}}}}
   /classes/{code}/join-requests:
     get:
-      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.46). Other teachers and other schools: 404"
+      summary: "Teacher who manages the group (admins: every group of the school). Pupils waiting to join it (shared 0.2.47). Other teachers and other schools: 404"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
       responses:
@@ -397,7 +445,7 @@ paths:
                     createdAt: {type: string, format: date-time}
   /classes/{code}/join-requests/{requestId}/approve:
     post:
-      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.46)"
+      summary: "Teacher who manages the group. Add the pupil to the group: their account is made if Kerf has none (a DINO pupil keeps signing in with DINO; the password is unusable), an archived pupil comes back (shared 0.2.47)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -407,7 +455,7 @@ paths:
         "409": {description: "`limit_reached` (the group is full on the school's plan), `already_decided`, or `conflict` (the pupil ID is used in another school)"}
   /classes/{code}/join-requests/{requestId}/decline:
     post:
-      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.46)"
+      summary: "Teacher who manages the group. Say no; the pupil may ask again (shared 0.2.47)"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string}}
         - {name: requestId, in: path, required: true, schema: {type: integer}}
@@ -1623,7 +1671,7 @@ components:
         archived: {type: boolean}
         source: {enum: [manual, csv, dino, google, microsoft], description: "Where the group came from"}
         laser: {type: boolean, description: "A laser group: may send files to the laser while the school's terms limit laser groups. Set by a school admin with PUT /classes/{code} {laser}"}
-        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.46)"}
+        joinRequests: {type: integer, description: "Pupils waiting to join the group (POST /groups/join), for a badge (shared 0.2.47)"}
     CameraCalibration:
       type: object
       required: [imageWidth, imageHeight, points, homography]
@@ -1673,7 +1721,8 @@ components:
       required: [mode]
       properties:
         mode: {enum: [pins, planner, both], description: "pins = class login only; planner = planner-004 sign-in only; both = either"}
-        email: {type: boolean, description: "Staff may ask for an emailed sign-in link"}
+        email: {type: boolean, description: "Staff have Kerf accounts (email and password)"}
+        password: {type: boolean, description: "Staff sign in with email and password (POST /auth/staff/login; shared 0.2.47)"}
         registration: {type: boolean, description: "Free schools may register themselves at /register (POST /auth/register). False: the page says registration is closed (shared 0.2.40)"}
         sso:
           type: [object, "null"]
@@ -1698,6 +1747,7 @@ components:
         schoolName: {type: [string, "null"]}
         schoolCode: {type: [string, "null"]}
         name: {type: [string, "null"], description: "Staff only: their own name (from DINO or their staff account). Null for pupils"}
+        method: {type: [string, "null"], enum: [dino, password, email, group, null], description: "How this session was made (shared 0.2.47): DINO, staff email + password, an emailed link (before passwords), a Pupil Card; null for a token issued by an administrator. The Admin site offers Change password for `password`"}
         features: {type: [object, "null"], description: "What the school's plan gives it now: {laser, activities}"}
         limits: {type: [object, "null"], description: "The school's limits now (null values: no limit)"}
     Terms:
@@ -1776,6 +1826,20 @@ components:
         status: {enum: [invited, active]}
         lastLogin: {type: [string, "null"], format: date-time}
         createdAt: {type: [string, "null"], format: date-time}
+        hasPassword: {type: boolean, description: "Has chosen a Kerf password (shared 0.2.47). Staff who signed in by link before passwords have none until they use Forgot your password?"}
+    StaffSession:
+      type: object
+      description: "A staff session from email + password, an invite or reset link, or (with schoolName and schoolCode) a registration (shared 0.2.47)"
+      properties:
+        token: {type: string}
+        role: {enum: [admin, teacher, technician]}
+        id: {type: string}
+        name: {type: [string, "null"]}
+        expiresAt: {type: string, format: date-time}
+        school: {type: string}
+    PasswordRules:
+      type: object
+      description: "Staff passwords (shared 0.2.47), checked by the server (`422 weak_password` with a plain reason, never the password): 10 to 128 characters; not the person's email address or part of it (ignoring capitals); not one of a short list of the commonest passwords; at least 3 different characters. Stored only as scrypt (n=2^15, r=8, p=1, a random 16-byte salt) in the form `scrypt$n$r$p$salt$hash`"
     PupilGroup:
       type: object
       required: [code]

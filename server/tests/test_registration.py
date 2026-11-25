@@ -23,10 +23,13 @@ def reg_token(app) -> str:
     return re.search(r"register=([A-Za-z0-9_-]+)", mail.text).group(1)  # type: ignore[union-attr]
 
 
+PW = "copper kettle orchard"
+
+
 def register(client, app, form=None) -> dict:
     r = client.post(f"{API}/auth/register", json=form or FORM)
     assert r.status_code == 200, r.text
-    f = client.post(f"{API}/auth/register/finish", json={"token": reg_token(app)})
+    f = client.post(f"{API}/auth/register/finish", json={"token": reg_token(app), "password": PW})
     assert f.status_code == 200, f.text
     return f.json()
 
@@ -44,7 +47,7 @@ class TestRegistering:
             row = s.query(PendingRegistration).one()
             assert reg_token(app) not in row.token_hash  # only the hash is stored
         tok = reg_token(app)
-        f = client.post(f"{API}/auth/register/finish", json={"token": tok})
+        f = client.post(f"{API}/auth/register/finish", json={"token": tok, "password": PW})
         assert f.status_code == 200, f.text
         out = f.json()
         assert out["role"] == "admin" and out["school"] == "westfield-high" and out["name"] == "Sam Head" and out["schoolName"] == "Westfield High"
@@ -58,16 +61,16 @@ class TestRegistering:
             acct = s.query(StaffAccount).one()
             assert acct.email == "head@westfield.example" and acct.role == "admin" and acct.name == "Sam Head"
             assert s.get(School, "westfield-high").terms is not None  # a copy of the default terms
-        # the new admin can later ask for a sign-in link like any member of staff
-        n = len(app.state.mailer.outbox)
-        client.post(f"{API}/auth/email/start", json={"email": "head@westfield.example"})
-        assert len(app.state.mailer.outbox) == n + 1
+        assert me["method"] == "password"
+        # the new admin later signs in with email + password like any member of staff
+        again = client.post(f"{API}/auth/staff/login", json={"email": "Head@westfield.example", "password": PW})
+        assert again.status_code == 200 and again.json()["id"] == out["id"]
         logged = caplog.text.lower()
-        assert "head@westfield.example" not in logged and tok not in caplog.text and "sam head" not in logged
+        assert "head@westfield.example" not in logged and tok not in caplog.text and "sam head" not in logged and PW not in logged
 
     def test_a_link_works_once(self, client, app):
         register(client, app)
-        r = client.post(f"{API}/auth/register/finish", json={"token": reg_token(app)})
+        r = client.post(f"{API}/auth/register/finish", json={"token": reg_token(app), "password": PW})
         assert r.status_code == 401 and r.json()["code"] == "link_invalid"
         with app.state.db.session() as s:
             assert s.query(School).filter(School.name == "Westfield High").count() == 1
@@ -80,11 +83,27 @@ class TestRegistering:
         client.post(f"{API}/auth/register", json=FORM)
         with app.state.db.session() as s:
             s.query(PendingRegistration).one().expires_at = utcnow() - timedelta(minutes=1)
-        r = client.post(f"{API}/auth/register/finish", json={"token": reg_token(app)})
+        r = client.post(f"{API}/auth/register/finish", json={"token": reg_token(app), "password": PW})
         assert r.status_code == 401 and r.json()["code"] == "link_invalid"
-        assert client.post(f"{API}/auth/register/finish", json={"token": "made-up"}).status_code == 401
+        assert client.post(f"{API}/auth/register/finish", json={"token": "made-up", "password": PW}).status_code == 401
         with app.state.db.session() as s:
             assert s.get(School, "westfield-high") is None
+
+    def test_the_link_needs_a_good_password_and_is_not_used_up_without_one(self, client, app):
+        client.post(f"{API}/auth/register", json=FORM)
+        tok = reg_token(app)
+        r = client.post(f"{API}/auth/register/finish", json={"token": tok})  # an old page sends no password
+        assert r.status_code == 422 and r.json()["code"] == "password_needed"
+        r = client.post(f"{API}/auth/register/finish", json={"token": tok, "password": "short"})
+        assert r.status_code == 422 and r.json()["code"] == "weak_password" and "short" not in r.text
+        r = client.post(f"{API}/auth/register/finish", json={"token": tok, "password": "head@westfield.example"})
+        assert r.json()["code"] == "weak_password"
+        with app.state.db.session() as s:
+            assert s.get(School, "westfield-high") is None
+        assert client.post(f"{API}/auth/register/finish", json={"token": tok, "password": PW}).status_code == 200
+        with app.state.db.session() as s:
+            h = s.query(StaffAccount).one().password_hash
+            assert h.startswith("scrypt$32768$8$1$") and PW not in h
 
     def test_checks_the_form(self, client):
         for bad in ({**FORM, "schoolName": " "}, {**FORM, "name": ""}, {**FORM, "email": "not an email"}, {**FORM, "name": "me@x.example"}, {**FORM, "schoolName": "x" * 200}):

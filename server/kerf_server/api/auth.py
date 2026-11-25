@@ -20,7 +20,7 @@ router = APIRouter(tags=["auth"])
 
 
 @router.get("/auth/me")
-def me(p: Principal = Depends(current_principal), s: Session = Depends(get_session)) -> dict[str, Any]:
+def me(request: Request, p: Principal = Depends(current_principal), s: Session = Depends(get_session)) -> dict[str, Any]:
     from ..services_schools import plan_of
     from ..models import School
 
@@ -28,7 +28,15 @@ def me(p: Principal = Depends(current_principal), s: Session = Depends(get_sessi
 
     row = s.get(School, p.school) if p.school else None
     now = terms.effective(row) if p.school else None
-    return {"role": p.role, "id": p.id, "school": p.school, "siteAdmin": p.site_admin, "plan": plan_of(row) if p.school else None,
+    raw = bearer(request) or ""
+    from ..sso import looks_like_jwt
+
+    if looks_like_jwt(raw):
+        method = "dino"
+    else:
+        tok = s.scalar(select(Token).where(Token.token_hash == hash_token(raw)))
+        method = tok.method if tok is not None else None
+    return {"method": method,"role": p.role, "id": p.id, "school": p.school, "siteAdmin": p.site_admin, "plan": plan_of(row) if p.school else None,
             "schoolName": row.name if row else None, "schoolCode": row.code if row else None,
             # staff see their own name (DINO's, from sign-in, or their staff account's); never sent for pupils or stations
             "name": ps.staff_name(s, p.school, p.id) if p.role in ("teacher", "admin", "technician") else None,
@@ -74,21 +82,49 @@ def logout(request: Request, _: Principal = Depends(current_principal), s: Sessi
     return Response(status_code=204)
 
 
-@router.post("/auth/email/start")
-def email_start(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
-    """Staff: email me a sign-in link (`{email, app: admin|editor}`). The same answer whether or not the address has an account."""
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+@router.post("/auth/staff/login")
+def staff_login(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Staff: sign in with school email + password (`{email, password, school?}`) -> `{token, role, id, name, expiresAt, school}`.
+    Wrong email or password is one `401 bad_login`; `429 locked` after repeated wrong passwords; `409 choose_school` (details
+    `[{school, name}]`) when the same email and password are good at several schools: send again with `school`."""
+    from .. import services_staffpw as pw
+
+    return pw.login(s, cfg, request.app.state.throttle, _ip(request), body)
+
+
+@router.post("/auth/password/forgot")
+def password_forgot(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """Staff: email me a link to set a new password (`{email, app?}`). The same answer whether or not the address has an account."""
     from .. import services_staffmail as sm
 
-    ip = request.client.host if request.client else "unknown"
-    return sm.start(s, request.app.state.mailer, cfg, request.app.state.link_throttle, str(request.base_url), ip, body)
+    return sm.forgot(s, request.app.state.mailer, cfg, request.app.state.link_throttle, str(request.base_url), _ip(request), body)
+
+
+@router.post("/auth/email/start")
+def email_start(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
+    """The old "email me a sign-in link": now the same as `POST /auth/password/forgot` (the link leads to Choose a password)."""
+    return password_forgot(request, body, s, cfg)
 
 
 @router.post("/auth/email/finish")
 def email_finish(body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
-    """Trade a sign-in link's token for a session (`{token}` -> `{token, role, id, name, expiresAt}`). A link works once."""
+    """Use an invite or reset link with the chosen password (`{token, password}`): sets the password, ends the person's other
+    sessions and signs them in. `422 password_needed` without a password (the link is not used up); `422 weak_password`."""
     from .. import services_staffmail as sm
 
     return sm.finish(s, cfg, body)
+
+
+@router.post("/auth/password/change")
+def password_change(request: Request, body: dict[str, Any] = Body(...), p: Principal = Depends(current_principal), s: Session = Depends(get_session)) -> dict[str, Any]:
+    """Staff signed in with a Kerf password: change it (`{current, new}`). Their other sessions end; this one stays."""
+    from .. import services_staffpw as pw
+
+    return pw.change(s, p.id, p.school, hash_token(bearer(request) or ""), body)
 
 
 @router.post("/auth/pupil")
@@ -108,13 +144,13 @@ def register(request: Request, body: dict[str, Any] = Body(...), s: Session = De
     until it is used. The same answer whatever happens. `403 registration_closed` when the server has registration off."""
     from .. import services_registration as reg
 
-    ip = request.client.host if request.client else "unknown"
-    return reg.start(s, request.app.state.mailer, cfg, request.app.state.link_throttle, str(request.base_url), ip, body)
+    return reg.start(s, request.app.state.mailer, cfg, request.app.state.link_throttle, str(request.base_url), _ip(request), body)
 
 
 @router.post("/auth/register/finish")
 def register_finish(request: Request, body: dict[str, Any] = Body(...), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)) -> dict[str, Any]:
-    """Anyone: use a registration link (`{token}`): makes the free school and its first admin and signs them in."""
+    """Anyone: use a registration link with the chosen password (`{token, password}`): makes the free school and its first admin
+    and signs them in. `422 password_needed` without a password (the link is not used up)."""
     from .. import services_registration as reg
 
     return reg.finish(s, request.app.state.mailer, cfg, body)

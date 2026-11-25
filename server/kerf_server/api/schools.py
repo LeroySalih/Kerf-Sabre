@@ -93,7 +93,7 @@ def create_school(request: Request, body: dict[str, Any] = Body(...), site_admin
 
 @router.get("/staff/people")
 def staff_people(who: Principal = Depends(require("admin")), s: Session = Depends(get_session)):
-    """School admins: the staff who sign in with an emailed link (invited or active)."""
+    """School admins: the staff with Kerf accounts (email and password; invited or active)."""
     from .. import services_staffmail as sm
 
     return sm.list_accounts(s, who.school)
@@ -101,7 +101,8 @@ def staff_people(who: Principal = Depends(require("admin")), s: Session = Depend
 
 @router.post("/staff/invite", status_code=201)
 def staff_invite(request: Request, body: dict[str, Any] = Body(...), who: Principal = Depends(require("admin")), s: Session = Depends(get_session), cfg: Settings = Depends(get_settings)):
-    """School admins: invite a teacher, technician or admin by email (`{email, role, name?}`); sends an invite link (7 days)."""
+    """School admins: invite a teacher, technician or admin by email (`{email, role, name?}`); emails a link (7 days) to choose their password.
+    For someone who has not chosen one yet, this sends the invite again."""
     from .. import services_staffmail as sm
 
     return sm.invite(s, request.app.state.mailer, cfg, str(request.base_url), who.school, who.id, body)

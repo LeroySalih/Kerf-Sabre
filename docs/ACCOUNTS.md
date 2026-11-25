@@ -21,7 +21,7 @@ Each school has its own list of methods, switched on by its school admin:
 | **Google** (OpenID Connect; optionally limited to the school's Google Workspace domain) | staff and pupils | **off**: a school admin turns it on |
 | **Microsoft** (Entra ID / Microsoft 365; optionally limited to the school's tenant) | staff and pupils | **off**: a school admin turns it on |
 | **Group code + pupil ID + password** | pupils | on |
-| **Kerf account** (email and a sign-in link) | staff, so a school can start before any single sign-on is set up | on |
+| **Kerf account** (school email and password) | staff, so a school can start before any single sign-on is set up | on |
 
 Google, Microsoft and DINO are registered once for all of Kerf by the site admin (one client ID each); a school only switches them on and says which domain or tenant is its own. A person signing in with a provider is matched to their school by that domain/tenant or by an existing link; nobody joins a school just by having a Google account.
 
@@ -56,11 +56,11 @@ A pupil may sign in with any method linked to their account (e.g. group code at 
 
 1. **The site admin signs in to the Platform site with their DINO account** (their DINO ID is listed as a site admin in the server's settings; no separate password).
 2. **Group-code passwords are issued by the teacher**; pupils cannot create their own accounts. A **Pupil Cards** page makes this super simple: pick a group, print one small card per pupil (school name, group code, pupil ID, password, how to sign in), and a full-screen view of the group code for the board. A password is shown on cards only when it is made or reset, never again.
-3. **Staff use an email sign-in link** until their school turns on Google, Microsoft or DINO.
+3. **Staff sign in with email and password; email validates the address** (shared 0.2.47; the owner does not want sign-in by emailed link). Until their school turns on Google, Microsoft or DINO, staff have a Kerf account: their school email and a password they choose. Email is only used to check the address: an invite (7 days), registering a school (24 hours) and **Forgot your password?** (30 minutes) each send a one-time link that opens **Choose a password**. Passwords are stored only as scrypt hashes (n=2^15, r=8, p=1, a random salt each); 10 to 128 characters, not the email address, not a common password. Five wrong in a row lock the account for 15 minutes. Choosing or changing a password signs the person out everywhere else. Staff who signed in by link before passwords use Forgot your password? once. (The school's method is still stored as `email`; it is shown as "Email and password".)
 
 ## More answers (owner, 2026-11-23)
 
-- **Roll-out: free tools first.** No paid Server option is offered publicly yet. **Free schools register instantly**; a **paid school is approved by the site admin** (BISAK is the existing paid school). (Built, shared 0.2.40: a teacher registers at `/register` with the school's name, their name and school email; a confirmation link (24 hours, once) makes the free school and signs them in as its admin. Nothing is made before the link is used. `KERF_REGISTRATION=false` closes it; `KERF_ADMIN_EMAIL` is told of each new school.)
+- **Roll-out: free tools first.** No paid Server option is offered publicly yet. **Free schools register instantly**; a **paid school is approved by the site admin** (BISAK is the existing paid school). (Built, shared 0.2.40: a teacher registers at `/register` with the school's name, their name and school email; a confirmation link (24 hours, once) opens Choose a password, then makes the free school and signs them in as its admin. Nothing is made before the link is used. `KERF_REGISTRATION=false` closes it; `KERF_ADMIN_EMAIL` is told of each new school.)
 - **Group join codes:** Kerf generates one by default; the teacher may type their own when making the group (by hand or in the CSV), and may edit it later. **Unique within a school.**
 - **Pupil passwords:** Kerf's default is **two words** (e.g. `tiger-river`); the teacher reissues them (new card); pupils do not choose or change them. (Built, shared 0.2.39: Pupil Card sign-in on `/sign-in`, Pupil Cards printed from the class's pupils.)
 - **Pupils can be in several groups**, and a group can be **re-synced from its source** (e.g. DINO).
@@ -112,5 +112,5 @@ may include it for a limited number of groups or for a while, and the site admin
 
 ## Remaining questions
 
-- (answered: email goes through **Resend**; the key is `RESEND_API` in the production `.env`. Built, shared 0.2.38: staff email sign-in links, admin invites, the first admin invited by the site admin. Needs `KERF_PUBLIC_URL`.)
+- (answered: email goes through **Resend**; the key is `RESEND_API` in the production `.env`. Built, shared 0.2.38: admin invites, the first admin invited by the site admin; since 0.2.47 the emails check the address and staff sign in with email and password. Needs `KERF_PUBLIC_URL`.)
 - Terms: should a school see a warning before a grant ends (e.g. 14 days ahead, by email to its admins)?

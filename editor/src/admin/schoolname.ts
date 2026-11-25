@@ -1,4 +1,4 @@
-// Renaming the school (Admin site, School page; shared 0.2.46). The same rules as the server's `clean_school_name`:
+// Renaming the school (Admin site, School page; shared 0.2.47). The same rules as the server's `clean_school_name`:
 // trimmed, 1 to 128 characters, no line breaks or other control characters. The school ID and school code never change.
 
 export const SCHOOL_NAME_MAX = 128;

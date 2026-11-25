@@ -5,7 +5,9 @@ import "./admin.css";
 import { btn, el, msg } from "../dom";
 import { ServerError, request, type Session } from "../server";
 import { pagesFor, platformPages, type Ctx, type Page } from "./pages";
-import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "../emailsignin";
+import { askForReset, cleanLinkFromAddress, endEmailSignIn, passwordSignIn, readLinkToken, restoreEmailSignIn, signInPageForLink } from "../emailsignin";
+import { checkForgot, checkSignIn, schoolChoices } from "../staffpassword";
+import { openChangePassword } from "./changepassword";
 import { goToSignInPage, readSignInMeta, signInPageFor } from "../signinpage";
 import { Renewer, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type Tokens } from "../sso";
 
@@ -36,18 +38,42 @@ function signInView(error = "", expired = false): void {
   const url = el("input", { type: "text", placeholder: "Leave blank unless told otherwise" });
   (url as HTMLInputElement).value = location.protocol.startsWith("http") && location.port !== "5173" ? location.origin : "";
   const dino = el("button", { type: "submit", class: "on" }, "Sign in with DINO");
-  const email = el("input", { type: "email", placeholder: "you@school.org", "aria-label": "Your school email address", autocomplete: "email" }) as HTMLInputElement;
+  // staff with a Kerf account: school email + password (and "Forgot your password?", which emails a link to choose a new one)
+  const email = el("input", { type: "email", placeholder: "you@school.org", "aria-label": "Your school email address", autocomplete: "username" }) as HTMLInputElement;
+  const password = el("input", { type: "password", placeholder: "Password", "aria-label": "Your password", autocomplete: "current-password" }) as HTMLInputElement;
   const sent = el("p", { class: "hint", role: "status" });
-  const ask = el("button", { type: "button" }, "Email me a sign-in link");
-  ask.addEventListener("click", () => void (async () => {
-    if (!email.value.trim()) { email.focus(); return; }
-    try { sent.textContent = await askForLink((url as HTMLInputElement).value, email.value, "admin"); err.textContent = ""; } catch (e) { err.textContent = msg(e); }
+  const schools = el("div", { class: "ad-email" });
+  const signIn = el("button", { type: "button" }, "Sign in with email and password");
+  const tryPassword = (school?: string) => void (async () => {
+    const problem = checkSignIn(email.value, password.value);
+    if (problem) { err.textContent = problem.message; (problem.field === "email" ? email : password).focus(); return; }
+    try {
+      const s = await passwordSignIn("admin", (url as HTMLInputElement).value, { email: email.value, password: password.value, ...(school ? { school } : {}) });
+      staffOnly(s); session = s; await shell();
+    } catch (e) {
+      const choices = schoolChoices(e);
+      if (choices) {
+        err.textContent = "";
+        schools.replaceChildren(el("p", { class: "hint" }, "You have accounts at more than one school. Choose one:"), ...choices.map((c) => btn(c.name, () => tryPassword(c.school))));
+        return;
+      }
+      err.textContent = msg(e); password.select();
+    }
+  })();
+  signIn.addEventListener("click", () => tryPassword());
+  password.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); tryPassword(); } });
+  email.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); password.focus(); } });
+  const forgot = el("button", { type: "button", class: "link" }, "Forgot your password?");
+  forgot.addEventListener("click", () => void (async () => {
+    const problem = checkForgot(email.value);
+    if (problem) { err.textContent = problem; email.focus(); return; }
+    try { sent.textContent = await askForReset((url as HTMLInputElement).value, email.value, "admin"); err.textContent = ""; } catch (e) { err.textContent = msg(e); }
   })());
-  email.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); ask.click(); } });
   const form = el("form", { class: "ad-card ad-signin" }, el("h1", {}, "Kerf Admin"),
-    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with DINO, or with a link sent to your school email."),
+    el("p", { class: "hint" }, "Classes, pupils, activities, the queue and stations. Sign in with DINO, or with your school email and password."),
     el("details", {}, el("summary", {}, "Server address"), url), err, dino,
-    el("div", { class: "ad-email" }, el("p", { class: "hint" }, "No DINO account? Your school admin invites you by email; after that, ask for a link here."), email, ask, sent),
+    el("div", { class: "ad-email" }, el("p", { class: "hint" }, "No DINO account? Your school admin invites you by email and you choose a password. Signed in with an emailed link before? Use Forgot your password? once."),
+      email, password, signIn, forgot, schools, sent),
     el("a", { href: "/editor/" }, "Looking for the Editor?"));
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -121,7 +147,8 @@ async function shell(): Promise<void> {
   const head = el("header", { class: `ad-head${platform ? " ad-platform" : ""}` }, el("span", { class: "brand" }, platform ? "Kerf Platform" : "Kerf Admin"),
     el("span", { class: "who" }, whoText, whoName), el("span", { class: "spacer" }),
     ...(s.siteAdmin && s.role !== "platform" ? [btn(platform ? "My school" : "Kerf Platform", () => switchSite(platform ? "school" : "platform"))] : []),
-    ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/editor/" }, "Editor")] : []), btn("Sign out", signOut));
+    ...(s.role === "teacher" || s.role === "admin" ? [el("a", { class: "btnlink", href: "/editor/" }, "Editor")] : []),
+    ...(s.password ? [btn("Change password…", () => void openChangePassword(s))] : []), btn("Sign out", signOut));
   root.replaceChildren(head, nav, main);
   let saved = "";
   try { saved = localStorage.getItem("kerf.admin.page") ?? ""; } catch { /* fine */ }
@@ -132,10 +159,9 @@ async function shell(): Promise<void> {
 /** Back from DINO (?code=&state=), or a reload of a tab signed in with DINO. */
 async function start(): Promise<void> {
   const link = readLinkToken(location.search);
-  if (link) { // opened from a sign-in or invite email
+  if (link) { // an older invite or sign-in email opened here: the sign-in page asks for the password first
     cleanLinkFromAddress();
-    try { const s = await finishEmailSignIn("admin", "", link); staffOnly(s); session = s; return void (await shell()); }
-    catch (e) { return signInView(msg(e), e instanceof ServerError && e.status === 401); }
+    return location.replace(signInPageForLink(link, "admin"));
   }
   if (!session) {
     const s = await restoreEmailSignIn("admin");

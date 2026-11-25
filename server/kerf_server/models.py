@@ -49,14 +49,16 @@ class Token(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     #: Login sessions expire; tokens issued by an administrator do not (None).
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    #: How a person's session was started: "email" (a sign-in link). Such tokens are accepted even when DINO is the main way in.
+    #: How a person's session was started: "password" (staff email + password), "email" (a sign-in link, from before passwords),
+    #: "group" (a Pupil Card). Such tokens are accepted even when DINO is the main way in.
     method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class StaffAccount(Base):
-    """A member of staff who signs in with an emailed link (Kerf's own account), invited by a school admin. The email is
-    used only to send them links: never logged, never shown to pupils."""
+    """A member of staff with Kerf's own account (email and password), invited by a school admin or made by registering a
+    school. The email is their sign-in name and is used to check the address (invite, confirmation, forgot password): never
+    logged, never shown to pupils. The password is only ever stored as a scrypt hash (`services_staffpw`)."""
 
     __tablename__ = "staff_accounts"
     person_id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -68,6 +70,11 @@ class StaffAccount(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    #: `scrypt$n$r$p$salt$hash` (shared 0.2.47). None: no password chosen yet (invited, or signed in by link before passwords).
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_attempts: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SignInLink(Base):
@@ -77,7 +84,7 @@ class SignInLink(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     person_id: Mapped[str] = mapped_column(String(64), index=True)
     school_id: Mapped[str] = mapped_column(String(32))
-    purpose: Mapped[str] = mapped_column(String(16))  # signin | invite
+    purpose: Mapped[str] = mapped_column(String(16))  # invite | reset (and signin, from before passwords: also leads to Choose a password)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -265,7 +272,7 @@ class GroupMember(Base):
 
 
 class JoinRequest(Base):
-    """A pupil asked to join a group (by its join code) and waits for a teacher (shared 0.2.46). IDs only."""
+    """A pupil asked to join a group (by its join code) and waits for a teacher (shared 0.2.47). IDs only."""
 
     __tablename__ = "join_requests"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

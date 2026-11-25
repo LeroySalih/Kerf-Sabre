@@ -1,7 +1,7 @@
 // The public website's pure parts (src/site/) and the Editor/Admin side of "one sign-in page" (src/signinpage.ts, sso.ts).
 import { describe, expect, it } from "vitest";
 import { EDITOR_QUERY_KEYS, SITE_FILES, editorForward } from "../src/site/routes";
-import { OFFLINE_EDITOR, destinationFor, dinoAppFor, emailAppFor, linkIsSpent, planSignIn } from "../src/site/signinlogic";
+import { OFFLINE_EDITOR, destinationFor, dinoAppFor, emailAppFor, linkIsSpent, planSignIn, viewAfterLinkError } from "../src/site/signinlogic";
 import { checkRegistration, registrationOpen, viewAfter } from "../src/site/registerlogic";
 import { otherTheme, readTheme, saveTheme, THEME_KEY } from "../src/site/theme";
 import { PROBLEM_KEY, goToSignInPage, signInPageFor, takeProblem } from "../src/signinpage";
@@ -48,9 +48,9 @@ describe("the sign-in page's first view", () => {
     expect(planSignIn("?app=admin")).toMatchObject({ view: "form", role: "staff", app: "admin" });
     expect(planSignIn("?app=nonsense")).toMatchObject({ role: "pupil", app: null });
   });
-  it("trades an emailed link, for the app the link names (the Admin site by default)", () => {
-    expect(planSignIn(`?signin=${TOKEN}&app=admin`)).toEqual({ view: "busy", role: "staff", app: "admin", token: TOKEN, register: false });
-    expect(planSignIn(`?signin=${TOKEN}&app=editor`)).toMatchObject({ view: "busy", app: "editor", token: TOKEN });
+  it("an emailed link (invite or reset) asks for a password first, for the app the link names (the Admin site by default)", () => {
+    expect(planSignIn(`?signin=${TOKEN}&app=admin`)).toEqual({ view: "choose", role: "staff", app: "admin", token: TOKEN, register: false });
+    expect(planSignIn(`?signin=${TOKEN}&app=editor`)).toMatchObject({ view: "choose", app: "editor", token: TOKEN });
     expect(planSignIn(`?signin=${TOKEN}`)).toMatchObject({ app: "admin" });
   });
   it("shows the expired view for a broken link or when told the link did not work", () => {
@@ -65,6 +65,15 @@ describe("the sign-in page's first view", () => {
     expect(dinoAppFor("staff", "editor")).toBe("editor"); // a teacher the Editor sent here goes back to the Editor
     expect(emailAppFor(null)).toBe("admin");
     expect(emailAppFor("editor")).toBe("editor");
+  });
+  it("after Choose a password: expired link, try another password, or back to the form", () => {
+    expect(viewAfterLinkError(401, "link_invalid")).toBe("expired");
+    expect(viewAfterLinkError(422, "weak_password")).toBe("choose");
+    expect(viewAfterLinkError(422, "password_needed")).toBe("choose");
+    expect(viewAfterLinkError(403, "sign_in_off")).toBe("form");
+    expect(viewAfterLinkError(403, "registration_closed")).toBe("form");
+    expect(viewAfterLinkError(0, "network")).toBe("form");
+    expect(viewAfterLinkError(502, "email_failed")).toBe("form");
   });
   it("tells a spent link from a network failure", () => {
     expect(linkIsSpent(401)).toBe(true);
@@ -184,7 +193,7 @@ describe("registering a school (shared 0.2.40)", () => {
     expect(viewAfter("too_many_attempts")).toBe("form");
   });
   it("a confirmation link on /sign-in sets up the school and opens the Admin site", () => {
-    expect(planSignIn(`?register=${TOKEN}`)).toEqual({ view: "busy", role: "staff", app: "admin", token: TOKEN, register: true });
+    expect(planSignIn(`?register=${TOKEN}`)).toEqual({ view: "choose", role: "staff", app: "admin", token: TOKEN, register: true });
     expect(planSignIn(`?register=${TOKEN}&app=editor`)).toMatchObject({ app: "admin", register: true });
     expect(planSignIn("?register=short")).toEqual({ view: "expired", role: "staff", app: "admin", token: null, register: true });
     expect(planSignIn("?register=<script>aaaaaaaaaaaaaaaaaaaa")).toMatchObject({ view: "expired", token: null });

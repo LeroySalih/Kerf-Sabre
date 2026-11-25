@@ -166,7 +166,7 @@ class Verifier:
             gid = g.get("id")
             if not isinstance(gid, str) or not 0 < len(gid) <= 64 or not set(gid) <= ID_OK:
                 continue
-            # a pupil is an ID, or {id, name} when DINO sends names (staff-only display names, shared 0.2.46)
+            # a pupil is an ID, or {id, name} when DINO sends names (staff-only display names, shared 0.2.47)
             from .services_people import clean_name
 
             names: dict[str, str] = {}
@@ -195,7 +195,7 @@ class Verifier:
 
 def auth_config(cfg: Settings) -> dict[str, Any]:
     """What `GET /auth/config` tells the Editor and Admin: how to sign in here."""
-    out: dict[str, Any] = {"mode": cfg.auth_mode, "sso": None, "email": True,  # staff may ask for an emailed sign-in link (if their school allows it)
+    out: dict[str, Any] = {"mode": cfg.auth_mode, "sso": None, "email": True, "password": True,  # staff sign in with email + password (if their school allows it)
                            "registration": cfg.registration}  # free schools may register themselves at /register
     if cfg.sso_enabled:
         o = cfg.sso_issuer

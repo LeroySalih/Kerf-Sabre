@@ -157,7 +157,7 @@ def reset_pin(pupil_id: str, who: Principal = Depends(require("teacher")), s: Se
     return {"pupilId": pupil_id, "password": password, "pin": password}
 
 
-# ---------------------------------------------------------------- pupils ask to join a group (shared 0.2.46)
+# ---------------------------------------------------------------- pupils ask to join a group (shared 0.2.47)
 
 @router.post("/groups/join")
 def ask_to_join(body: dict[str, Any] = Body(...), who: Principal = Depends(require("pupil")), s: Session = Depends(get_session)):

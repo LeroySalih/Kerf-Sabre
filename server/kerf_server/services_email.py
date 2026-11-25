@@ -1,4 +1,4 @@
-"""Kerf's emails (sign-in links, invites), sent through Resend (https://resend.com) from `Settings.email_from`.
+"""Kerf's emails (invites, password resets, school confirmations), sent through Resend (https://resend.com) from `Settings.email_from`.
 
 The API key comes from the environment (`RESEND_API`). Without one, emails are kept in memory (`Mailer.outbox`, newest 50)
 instead of sent, so development and tests work offline. Addresses and links are never logged: a log line says only what
@@ -73,31 +73,35 @@ def _html(title: str, lines: list[str], link: str, button: str, small: str) -> s
             f'<p style="margin:16px 0 0;color:#6b7280;font-size:13px">{escape(small)}</p></div>')
 
 
-def sign_in_email(to: str, link: str, school_name: str, minutes: int) -> Email:
-    lines = [f"Here is your link to sign in to Kerf for {school_name}. It works once, for {minutes} minutes."]
-    small = "If you did not ask to sign in, you can ignore this email: nobody can sign in without the link."
-    text = f"Sign in to Kerf\n\n{lines[0]}\n\n{link}\n\n{small}\n"
-    return Email(to, f"Your Kerf sign-in link ({school_name})", text, _html("Sign in to Kerf", lines, link, "Sign in", small), "sign-in link")
+def reset_email(to: str, link: str, school_name: str, minutes: int) -> Email:
+    """"Forgot your password?": a one-time link to choose a new password. Signing in is always email + password."""
+    lines = [f"Someone (we hope it was you) asked to set a new password for your Kerf account at {school_name}.",
+             f"Press the button to choose a new password. The link works once, for {minutes} minutes. "
+             "Choosing a new password signs you out on every other computer."]
+    small = "If you did not ask for this, you can ignore this email: your password stays as it is."
+    text = f"Reset your Kerf password\n\n{lines[0]}\n{lines[1]}\n\n{link}\n\n{small}\n"
+    return Email(to, f"Reset your Kerf password ({school_name})", text, _html("Reset your Kerf password", lines, link, "Choose a new password", small), "password reset link")
 
 
 def invite_email(to: str, link: str, school_name: str, role: str, days: int) -> Email:
     what = {"admin": "a school admin", "teacher": "a teacher", "technician": "a technician (laser stations)"}.get(role, role)
     lines = [f"You have been invited to Kerf, the laser design and cutting service used by {school_name}, as {what}.",
-             f"Press the button to sign in for the first time. The link works once, for {days} days. Later, ask for a new sign-in link on the sign-in page."]
+             f"Press the button to choose your password. The link works once, for {days} days. "
+             "After that, you sign in with this email address and your password."]
     small = "If you were not expecting this, you can ignore it."
     text = f"You are invited to Kerf\n\n{lines[0]}\n{lines[1]}\n\n{link}\n\n{small}\n"
-    return Email(to, f"You are invited to Kerf ({school_name})", text, _html("You are invited to Kerf", lines, link, "Sign in to Kerf", small), "invite")
+    return Email(to, f"You are invited to Kerf ({school_name})", text, _html("You are invited to Kerf", lines, link, "Choose your password", small), "invite")
 
 
 def register_email(to: str, link: str, school_name: str, hours: int) -> Email:
     """Confirm a school that registered at /register. Nothing exists until the link is used."""
     lines = [f"Thank you for registering {school_name} on Kerf, the free laser design tools for schools.",
-             f"Press the button to confirm. Kerf then sets up {school_name} on the free plan, makes you its admin and signs you in. "
+             f"Press the button to confirm and choose your password. Kerf then sets up {school_name} on the free plan, makes you its admin and signs you in. "
              "Next you add your teachers, make groups and print Pupil Cards for your pupils.",
              f"The link works once, for {hours} hours. Nothing is set up until you press it."]
     small = "If you did not register a school on Kerf, you can ignore this email: nothing will be set up."
     text = "Confirm your school on Kerf\n\n" + "\n".join(lines) + f"\n\n{link}\n\n{small}\n"
-    return Email(to, f"Confirm your school on Kerf ({school_name})", text, _html("Confirm your school on Kerf", lines, link, "Confirm my school", small), "registration link")
+    return Email(to, f"Confirm your school on Kerf ({school_name})", text, _html("Confirm your school on Kerf", lines, link, "Confirm and choose a password", small), "registration link")
 
 
 def school_registered_email(to: str, school_name: str, school_id: str) -> Email:

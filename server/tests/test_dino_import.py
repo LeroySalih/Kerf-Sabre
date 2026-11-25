@@ -1,4 +1,4 @@
-"""Import DINO classes as Kerf groups and re-sync them (shared 0.2.46)."""
+"""Import DINO classes as Kerf groups and re-sync them (shared 0.2.47)."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient

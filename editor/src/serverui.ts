@@ -11,7 +11,8 @@ import type { DocObject } from "./doc";
 import { ANCHORS, buildJob, fromJobDimension, fromJobObjects, type Anchor, type LoadedShape, type Origin } from "./job";
 import { DEFAULT_ORIGIN, blankMeta, designName, fileKey, type ClosedFile, type FileMeta, type FileRef } from "./workspace";
 import { setPresets } from "./presets";
-import { askForLink, cleanLinkFromAddress, endEmailSignIn, finishEmailSignIn, readLinkToken, restoreEmailSignIn } from "./emailsignin";
+import { askForReset, cleanLinkFromAddress, endEmailSignIn, passwordSignIn, readLinkToken, restoreEmailSignIn, signInPageForLink } from "./emailsignin";
+import { checkForgot, checkSignIn, schoolChoices } from "./staffpassword";
 import { goToSignInPage, readSignInMeta, signInPageFor } from "./signinpage";
 import { Renewer, SsoError, beginSignIn, cleanAddress, endSignIn, fetchAuthConfig, finishSignIn, readCallback, restoreSignIn, type AuthConfig, type Tokens } from "./sso";
 import {
@@ -572,13 +573,37 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
     ev.preventDefault();
     void startDino();
   });
-  $("gate-email-send").addEventListener("click", () => void (async () => {
+  // staff with a Kerf account: school email + password ("Forgot your password?" emails a link to choose a new one)
+  const gatePassword = (school?: string) => void (async () => {
+    const box = $("gate-email") as HTMLInputElement, pass = $("gate-password") as HTMLInputElement;
+    const bad = checkSignIn(box.value, pass.value);
+    if (bad) { $("gate-error").textContent = bad.message; (bad.field === "email" ? box : pass).focus(); return; }
+    try {
+      const s = await passwordSignIn("editor", ($("gate-url") as HTMLInputElement).value, { email: box.value, password: pass.value, ...(school ? { school } : {}) });
+      pass.value = "";
+      $("gate-schools").replaceChildren();
+      $("gate-error").textContent = "";
+      await signedIn(s);
+    } catch (e) {
+      const choices = schoolChoices(e);
+      if (choices) {
+        $("gate-error").textContent = "You have accounts at more than one school. Choose one:";
+        $("gate-schools").replaceChildren(...choices.map((c) => { const b = document.createElement("button"); b.type = "button"; b.textContent = c.name; b.addEventListener("click", () => gatePassword(c.school)); return b; }));
+        return;
+      }
+      $("gate-error").textContent = problem(e); pass.select();
+    }
+  })();
+  $("gate-email-send").addEventListener("click", () => gatePassword());
+  $("gate-forgot").addEventListener("click", () => void (async () => {
     const box = $("gate-email") as HTMLInputElement;
-    if (!box.value.trim()) { box.focus(); return; }
-    try { $("gate-email-sent").textContent = await askForLink(($("gate-url") as HTMLInputElement).value, box.value, "editor"); $("gate-error").textContent = ""; }
+    const bad = checkForgot(box.value);
+    if (bad) { $("gate-error").textContent = bad; box.focus(); return; }
+    try { $("gate-email-sent").textContent = await askForReset(($("gate-url") as HTMLInputElement).value, box.value, "editor"); $("gate-error").textContent = ""; }
     catch (e) { $("gate-error").textContent = problem(e); }
   })());
-  $("gate-email").addEventListener("keydown", (ev) => { if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); $("gate-email-send").click(); } });
+  $("gate-email").addEventListener("keydown", (ev) => { if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); ($("gate-password") as HTMLInputElement).focus(); } });
+  $("gate-password").addEventListener("keydown", (ev) => { if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); gatePassword(); } });
   $("gate-url").addEventListener("change", () => { authConfig = { mode: "planner", sso: null }; });
   ($("gate-url") as HTMLInputElement).value = defaultBase;
   $("gate-offline").addEventListener("click", () => { offline = true; render(); void ctx.tabs.restore("offline"); });
@@ -628,10 +653,9 @@ export function initServerUi(ctx: ServerUiContext): ServerUiHandle {
   /** Back from DINO (?code=&state=), or a reload of a tab that was signed in with DINO. */
   const dinoStart = async (): Promise<void> => {
     const link = readLinkToken(location.search);
-    if (link) { // opened from a staff sign-in email
+    if (link) { // an older invite or sign-in email opened here: the sign-in page asks for the password first
       cleanLinkFromAddress();
-      try { await signedIn(await finishEmailSignIn("editor", ($("gate-url") as HTMLInputElement).value, link)); }
-      catch (e) { signInFailed(problem(e), e instanceof ServerError && e.status >= 400 && e.status < 500); }
+      location.replace(signInPageForLink(link, "editor"));
       return;
     }
     if (!session) {

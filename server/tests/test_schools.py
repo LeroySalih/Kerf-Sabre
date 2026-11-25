@@ -166,6 +166,25 @@ class TestJoinRequestsAreSeparate:
         assert client.post(f"{API}/classes/A2/join-requests/{rid}/approve", headers=a["admin"]).status_code == 200
 
 
+class TestStaffPasswordsAreSeparate:
+    """Staff email + password sessions (shared 0.2.47) belong to one school; one school's admin cannot touch another's staff."""
+
+    def test_walls(self, client, app, world):
+        from kerf_server import services_staffpw as pw
+        from kerf_server.models import StaffAccount
+
+        with app.state.db.session() as s:
+            s.add(StaffAccount(person_id="st-alpha1", school_id="alpha", email="t@alpha.example", role="teacher", failed_attempts=0,
+                               password_hash=pw.hash_password("alpha school password")))
+        t = auth(client.post(f"{API}/auth/staff/login", json={"email": "t@alpha.example", "password": "alpha school password"}).json()["token"])
+        assert client.get(f"{API}/classes/BETA/pupils", headers=t).status_code == 404
+        assert all(p["id"] != "st-alpha1" for p in client.get(f"{API}/staff/people", headers=world["beta"]["admin"]).json())
+        assert client.delete(f"{API}/staff/people/st-alpha1", headers=world["beta"]["admin"]).status_code == 404
+        r = client.post(f"{API}/auth/staff/login", json={"email": "t@alpha.example", "password": "alpha school password", "school": "beta"})
+        assert r.json()["code"] == "bad_login"  # naming another school finds nothing
+        assert client.get(f"{API}/auth/me", headers=t).json()["school"] == "alpha"
+
+
 class TestFilesAndQueueAreSeparate:
     def submit(self, client, w):
         pid = client.get(f"{API}/auth/me", headers=w["pupil"]).json()["id"]

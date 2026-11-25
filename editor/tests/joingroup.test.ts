@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { askToJoin, cleanGroupCode, decideJoinRequest, groupJoinRequests, myJoinRequests, requestLine, waitingLabel, waitingText } from "../src/joingroup";
 
-describe("asking to join a group (shared 0.2.46)", () => {
+describe("asking to join a group (shared 0.2.47)", () => {
   it("tidies the group code a pupil types", () => {
     expect(cleanGroupCode(" 9b-dt ")).toBe("9B-DT");
     expect(cleanGroupCode("9b dt")).toBe("9BDT");

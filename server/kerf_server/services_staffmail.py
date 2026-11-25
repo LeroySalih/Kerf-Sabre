@@ -1,9 +1,10 @@
-"""Staff who sign in with an emailed link (docs/ACCOUNTS.md: "Staff use an email sign-in link until their school turns on
-Google, Microsoft or DINO"). A school admin invites them (`StaffAccount`); each sign-in is a one-time link (`SignInLink`)
-that becomes an ordinary expiring session token (`Token.method = "email"`).
+"""Staff accounts and the emails that check their address (docs/ACCOUNTS.md: "Staff sign in with email and password; email
+validates the address"). A school admin invites them (`StaffAccount`); the invite, and "Forgot your password?", are one-time
+links (`SignInLink`) that lead to *Choose a password* on the sign-in page. Finishing a link sets the password
+(`services_staffpw`) and starts an ordinary expiring session (`Token.method = "password"`). Nobody signs in by link alone.
 
-Asking for a link always gets the same answer whether or not the address has an account, so nobody can find out who works
-where. Requests are limited per address and per computer. Addresses and links are never logged.
+Asking for a reset link always gets the same answer whether or not the address has an account, so nobody can find out who
+works where. Requests are limited per address and per computer. Addresses, links and passwords are never logged.
 """
 from __future__ import annotations
 
@@ -24,16 +25,17 @@ from .config import Settings
 from .db import as_utc, iso, utcnow
 from .errors import ApiError
 from .models import School, SignInLink, StaffAccount, Token
-from .security import hash_token, new_token
+from .security import hash_token
 
 EMAIL_RE = re.compile(r"^[^@\s<>\"',;]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)+$")
 ROLES = ("admin", "teacher", "technician")
-LINK_MINUTES = 15
+RESET_MINUTES = 30
 INVITE_DAYS = 7
 PER_ADDRESS = 3      # links per address per window
 PER_COMPUTER = 20    # link requests per IP per window
 WINDOW_S = 15 * 60
-SAME = "If that address belongs to a Kerf account, a sign-in link is on its way. Check your email (and your junk folder)."
+SAME = "If that address has a Kerf account, a link to set a new password is on its way. Check your email (and your junk folder)."
+PASSWORD_NEEDED = ApiError(422, "password_needed", "Choose a password to finish. Reload the sign-in page and open the link from your email again.")
 
 
 def clean_email(raw: Any) -> str:
@@ -76,14 +78,14 @@ def _make_link(s: Session, acct: StaffAccount, purpose: str, lifetime: timedelta
 
 
 def _url(base: str, app: str, token: str) -> str:
-    """The emailed link: Kerf's one sign-in page trades the token, then opens the Admin site or the Editor.
-    (Older links, ``/admin/?signin=`` and ``/?signin=``, still work: the Admin site and the Editor trade them too.)"""
+    """The emailed link: Kerf's one sign-in page shows *Choose a password*, trades the token with the password, then opens the
+    Admin site or the Editor. (Older links, ``/admin/?signin=`` and ``/?signin=``, are sent on to the sign-in page.)"""
     return f"{base}/sign-in?signin={token}&app={'admin' if app == 'admin' else 'editor'}"
 
 
 def account_doc(a: StaffAccount) -> dict[str, Any]:
     return {"id": a.person_id, "email": a.email, "role": a.role, "name": a.name, "status": "active" if a.last_login else "invited",
-            "lastLogin": iso(a.last_login), "createdAt": iso(a.created_at), "disabled": bool(a.disabled)}
+            "lastLogin": iso(a.last_login), "createdAt": iso(a.created_at), "disabled": bool(a.disabled), "hasPassword": bool(a.password_hash)}
 
 
 def list_accounts(s: Session, school: str) -> list[dict[str, Any]]:
@@ -103,8 +105,9 @@ def invite(s: Session, mailer: mail.Mailer, cfg: Settings, base: str, school: st
         raise ApiError(404, "not_found", "There is no such school.")
     base = link_base(cfg, base)
     acct = s.scalar(select(StaffAccount).where(StaffAccount.school_id == school, StaffAccount.email == email))
-    if acct is not None and not acct.disabled and acct.last_login:
-        raise ApiError(409, "conflict", "That person already has an account here. They can ask for a sign-in link on the sign-in page.")
+    if acct is not None and not acct.disabled and (acct.last_login or acct.password_hash):
+        raise ApiError(409, "conflict", "That person already has an account here. They sign in with their email and password; "
+                                        "Forgot your password? on the sign-in page sets a new one.")
     if acct is None:
         acct = StaffAccount(person_id="st-" + secrets.token_hex(6), school_id=school, email=email, role=role, name=name, invited_by=by)
         s.add(acct)
@@ -122,53 +125,61 @@ def remove(s: Session, school: str, person_id: str) -> None:
     if acct is None or acct.school_id != school:
         raise ApiError(404, "not_found", "There is no such member of staff.")
     acct.disabled = True
+    acct.password_hash = None  # an account added again later starts with a new invite and a new password
     for t in s.scalars(select(Token).where(Token.subject_id == person_id, Token.revoked.is_(False))):
         t.revoked = True
     for link in s.scalars(select(SignInLink).where(SignInLink.person_id == person_id, SignInLink.used_at.is_(None))):
         link.used_at = utcnow()
 
 
-def start(s: Session, mailer: mail.Mailer, cfg: Settings, throttle: LinkThrottle, base: str, ip: str, body: dict[str, Any]) -> dict[str, Any]:
-    """Email a sign-in link to every school where this address has an account and email sign-in is on. Same answer either way."""
+def forgot(s: Session, mailer: mail.Mailer, cfg: Settings, throttle: LinkThrottle, base: str, ip: str, body: dict[str, Any]) -> dict[str, Any]:
+    """"Forgot your password?": email a reset link (30 minutes, once) to every school where this address has an account and
+    email-and-password sign-in is on. The same answer either way, with the limits sign-in links had."""
     from .services_signin import allowed
 
     email = clean_email(body.get("email"))
     app = "editor" if body.get("app") == "editor" else "admin"
     if not throttle.allow(f"ip:{ip}", PER_COMPUTER):
-        raise ApiError(429, "too_many_attempts", "Too many sign-in links asked for from this computer. Wait a few minutes.")
+        raise ApiError(429, "too_many_attempts", "Too many emails asked for from this computer. Wait a few minutes.")
     base = link_base(cfg, base)
     if not throttle.allow(f"to:{email}", PER_ADDRESS):
-        logging.getLogger("kerf.email").info("email skipped: sign-in link (3 already asked for this address in 15 minutes)")
+        logging.getLogger("kerf.email").info("email skipped: password reset link (3 already asked for this address in 15 minutes)")
         return {"message": SAME}  # quietly: the address already has links on the way
     for acct in s.scalars(select(StaffAccount).where(StaffAccount.email == email, StaffAccount.disabled.is_(False))):
         school = s.get(School, acct.school_id)
         if school is None or not allowed(s, acct.school_id, "email"):
             continue
-        token = _make_link(s, acct, "signin", timedelta(minutes=LINK_MINUTES))
+        token = _make_link(s, acct, "reset", timedelta(minutes=RESET_MINUTES))
         s.flush()
-        mailer.send(mail.sign_in_email(email, _url(base, app, token), school.name, LINK_MINUTES))
+        mailer.send(mail.reset_email(email, _url(base, app, token), school.name, RESET_MINUTES))
     return {"message": SAME}
 
 
-def finish(s: Session, cfg: Settings, body: dict[str, Any]) -> dict[str, Any]:
-    """Trade a link for a session. A link works once; an expired, used or unknown one gets the same answer."""
-    from .services_signin import allowed
+#: The old name: `POST /auth/email/start` is now the same as `POST /auth/password/forgot`.
+start = forgot
 
+
+def finish(s: Session, cfg: Settings, body: dict[str, Any]) -> dict[str, Any]:
+    """`{token, password}`: an invite or reset link plus the password the person chose -> the password is set and they are
+    signed in. A link works once; an expired, used or unknown one gets the same answer. Without a password (an old page) the
+    link is not used up: `422 password_needed`."""
+    from .services_signin import allowed
+    from . import services_staffpw as pw
+
+    if body.get("password") in (None, ""):
+        raise PASSWORD_NEEDED
     raw = str(body.get("token") or "").strip()
     link = s.get(SignInLink, hash_token(raw)) if raw else None
-    bad = ApiError(401, "link_invalid", "That sign-in link has expired or has already been used. Ask for a new one.")
+    bad = ApiError(401, "link_invalid", "That link has expired or has already been used. Use Forgot your password? to get a new one.")
     if link is None or link.used_at is not None or as_utc(link.expires_at) <= utcnow():
         raise bad
     acct = s.get(StaffAccount, link.person_id)
     if acct is None or acct.disabled or acct.school_id != link.school_id:
         raise bad
-    if link.purpose == "signin" and not allowed(s, acct.school_id, "email"):
-        raise ApiError(403, "sign_in_off", "Email sign-in is switched off for your school. Ask your school's Kerf admin.")
-    now = utcnow()
-    link.used_at = now
-    acct.last_login = now
-    token = new_token(acct.role if acct.role != "technician" else "teacher")
-    expires = now + timedelta(hours=cfg.session_hours)
-    s.add(Token(token_hash=hash_token(token), role=acct.role, subject_id=acct.person_id, school_id=acct.school_id, label="email sign-in",
-                expires_at=expires, method="email"))
-    return {"token": token, "role": acct.role, "id": acct.person_id, "name": acct.name, "expiresAt": iso(expires)}
+    if link.purpose != "invite" and not allowed(s, acct.school_id, "email"):
+        raise ApiError(403, "sign_in_off", "Email and password sign-in is switched off for your school. Ask your school's Kerf admin.")
+    password = pw.check_rules(body.get("password"), acct.email)  # a weak password leaves the link unused, to try again
+    link.used_at = utcnow()
+    pw.set_password(s, acct, password)
+    logging.getLogger("kerf.audit").info("staff_password_set person=%s school=%s from=%s", acct.person_id, acct.school_id, link.purpose)
+    return pw.session_for(s, cfg, acct)

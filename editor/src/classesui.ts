@@ -79,7 +79,7 @@ export function openClasses(session: Session, hooks: TeacherCallbacks, initialCo
     const fromDino = classes.find((c) => c.code === code)?.source === "dino"; // its pupils sign in with DINO: no Pupil Cards or passwords
     const list = el("div", {});
     if (open.waiting.length) {
-      // pupils who asked to join with the group code (shared 0.2.46): a teacher lets them in or says no
+      // pupils who asked to join with the group code (shared 0.2.47): a teacher lets them in or says no
       list.append(el("h3", {}, `Waiting to join (${open.waiting.length})`),
         el("p", { class: "hint" }, "These pupils typed this group's code and asked to join. Approve only pupils you expect in this group."));
       for (const w of open.waiting) {

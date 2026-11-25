@@ -1,4 +1,4 @@
-"""Terms (docs/ACCOUNTS.md, shared 0.2.46): the site admin sets Kerf's default terms (features, limits, time-limited grants);
+"""Terms (docs/ACCOUNTS.md, shared 0.2.47): the site admin sets Kerf's default terms (features, limits, time-limited grants);
 a new free school gets a copy that later default changes never touch; the site admin can change one school's terms."""
 from __future__ import annotations
 

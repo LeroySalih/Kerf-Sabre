@@ -2,9 +2,11 @@
 import type { App } from "../sso";
 
 export type Role = "pupil" | "staff";
-export type View = "form" | "busy" | "sent" | "expired";
+/** "choose": Choose a password, for an emailed link (invite, reset, registration; shared 0.2.47). "pick": the same email and password
+ * are good at several schools, choose one. "busy": a link is being traded for a session. */
+export type View = "form" | "busy" | "sent" | "expired" | "choose" | "pick";
 export interface Plan {
-  /** What the panel shows first. "busy": an emailed link is being traded for a session. */
+  /** What the panel shows first. */
   view: View;
   /** The tab that is chosen first. */
   role: Role;
@@ -27,12 +29,12 @@ export function planSignIn(search: string): Plan {
   const reg = q.get("register");
   if (reg !== null) {
     const token = TOKEN.test(reg) ? reg : null;
-    return { view: token ? "busy" : "expired", role: "staff", app: "admin", token, register: true };
+    return { view: token ? "choose" : "expired", role: "staff", app: "admin", token, register: true };
   }
   const raw = q.get("signin");
   if (raw !== null) {
     const token = TOKEN.test(raw) ? raw : null;
-    return { view: token ? "busy" : "expired", role: "staff", app: app ?? "admin", token, register: false };
+    return { view: token ? "choose" : "expired", role: "staff", app: app ?? "admin", token, register: false };
   }
   if (q.get("link") === "expired") return { view: "expired", role: "staff", app: app ?? "admin", token: null, register: false };
   return { view: "form", role: app === "admin" ? "staff" : "pupil", app, token: null, register: false };
@@ -40,6 +42,15 @@ export function planSignIn(search: string): Plan {
 
 /** Whose DINO sign-in a button starts. Pupils always use the Editor's. Staff use the Admin site's, unless the Editor sent them here. */
 export const dinoAppFor = (role: Role, hint: App | null): App => (role === "pupil" ? "editor" : hint ?? "admin");
+
+/** What to show after a link and password were sent and the server said no: a used or expired link gets the expired view; a weak
+ * password (or one an old page did not send) stays on Choose a password with the server's words; anything else (switched off, the
+ * network) goes back to the sign-in form with the message. */
+export function viewAfterLinkError(status: number | undefined, code: string | undefined): "expired" | "choose" | "form" {
+  if (code === "weak_password" || code === "password_needed") return "choose";
+  if (code === "registration_closed" || code === "sign_in_off") return "form";
+  return linkIsSpent(status) ? "expired" : "form";
+}
 
 /** Which app an emailed link should open: the Admin site, unless the Editor sent the person here. */
 export const emailAppFor = (hint: App | null): App => hint ?? "admin";

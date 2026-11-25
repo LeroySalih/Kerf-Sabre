@@ -1,4 +1,4 @@
-"""Groups (docs/ACCOUNTS.md, shared 0.2.46): a pupil in several groups, join codes unique per school and editable,
+"""Groups (docs/ACCOUNTS.md, shared 0.2.47): a pupil in several groups, join codes unique per school and editable,
 archived groups, and a free school's limits (20 groups, 50 pupils per group, 20 files per pupil)."""
 from __future__ import annotations
 

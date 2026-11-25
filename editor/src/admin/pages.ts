@@ -475,9 +475,9 @@ const staff: Page = {
 
 const ROLE_TEXT: Record<string, string> = { admin: "School admin", teacher: "Teacher", technician: "Technician (laser stations only)" };
 
-/** School admins: invite staff by email (they sign in with an emailed link until the school turns on Google, Microsoft or DINO). */
+/** School admins: invite staff by email. The invite's link lets them choose a password; they then sign in with their school email and password. */
 const people: Page = {
-  key: "people", title: "Staff", lead: "Invite teachers, technicians and other admins by email. They get a link to sign in; later they ask for a new link on the sign-in page. Only admins invite. Staff who sign in with DINO are not listed here.",
+  key: "people", title: "Staff", lead: "Invite teachers, technicians and other admins by email. The invite asks them to choose a password; after that they sign in with their school email and password (Forgot your password? on the sign-in page sets a new one). Only admins invite. Staff who sign in with DINO are not listed here.",
   mount(host, ctx) {
     const s = ctx.session;
     const draw = async () => {
@@ -488,7 +488,7 @@ const people: Page = {
           { key: "email", label: "School email address", type: "text", value: cur?.email ?? "" },
           { key: "name", label: "Name (optional)", type: "text", value: cur?.name ?? "", hint: "Shown to your school's staff only" },
           { key: "role", label: "Role", type: "select", value: cur?.role ?? "teacher", options: Object.entries(ROLE_TEXT).map(([value, label]) => ({ value, label })) },
-        ], { ok: "Send invite", intro: "Kerf emails them a link to sign in (it works once, for 7 days)." });
+        ], { ok: "Send invite", intro: cur ? "Kerf sends the invite again: a new link to choose their password (it works once, for 7 days)." : "Kerf emails them a link to choose their password (it works once, for 7 days)." });
         if (!v || !String(v.email).trim()) return;
         await attempt(async () => {
           const r = await inviteStaff(s, { email: String(v.email).trim(), role: String(v.role) as "teacher", name: String(v.name ?? "").trim() || undefined });
@@ -498,7 +498,7 @@ const people: Page = {
       const bar = el("div", { class: "ad-bar" }, btn("Invite staff…", () => invite(), "on"));
       host.replaceChildren(bar, list.length ? table(["Name", "Email", "Role", "Status", ""], list.map((p) => el("tr", {},
         cell(el("b", {}, p.name ?? "")), cell(p.email), cell(ROLE_TEXT[p.role] ?? p.role),
-        cell(p.status === "active" ? `Signed in ${p.lastLogin ? new Date(p.lastLogin).toLocaleDateString() : ""}` : el("span", { class: "ad-tag warn" }, "Invited")),
+        cell(p.status === "active" ? `Signed in ${p.lastLogin ? new Date(p.lastLogin).toLocaleDateString() : ""}` : el("span", { class: "ad-tag warn", title: "They have not chosen a password yet" }, "Invited")),
         actions(...(p.status === "invited" ? [btn("Send again", () => invite(p))] : []),
           ...(p.id === s.id ? [] : [btn("Remove", () => { if (confirm(`Remove ${p.name || p.email}? They are signed out at once and cannot sign in again.`)) void attempt(() => removeStaffPerson(s, p.id), redraw); }, "danger")]))))) : empty("Nobody has been invited yet."));
     };
@@ -609,7 +609,7 @@ const defaultTerms: Page = {
 
 const SIGN_IN_LABELS: [keyof SignInSettings["methods"], string, string][] = [
   ["groupCode", "Group code", "Pupils type the school code, their group code, their pupil ID and the password on their card."],
-  ["email", "Email link", "Staff get a sign-in link by email."],
+  ["email", "Email and password", "Staff sign in with their school email and a password they choose. Email is used to check the address (invites, Forgot your password?)."],
   ["dino", "DINO", "Staff and pupils sign in with their DINO account."],
   ["google", "Google", "Staff and pupils sign in with the school's Google accounts."],
   ["microsoft", "Microsoft", "Staff and pupils sign in with the school's Microsoft 365 accounts."],

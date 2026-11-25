@@ -2,6 +2,15 @@
 
 Schemas and the API contract are versioned together. Breaking change = major bump + migration note.
 
+## 0.2.47 - staff sign in with email and password; email checks the address (additive)
+- `POST /auth/staff/login {email, password, school?}`: staff sign in with their school email and a password. Wrong email or password is one `401 bad_login`; 5 wrong in a row lock the account for 15 minutes (`429 locked`); `429 too_many_attempts` per computer; `403 sign_in_off` when the school has its `email` method off (stored name unchanged; shown as "Email and password"); `409 choose_school` with `details: [{school, name}]` when the same email and password are good at several schools (send again with `school`). The session is a `Token.method` `password`, accepted alongside DINO like `email` and `group`.
+- `POST /auth/password/forgot {email, app?}`: emails a one-time link to set a new password (30 minutes), with the same answer and limits as sign-in links had. `POST /auth/email/start` is now the same request (deprecated); nobody signs in by link alone any more.
+- Invite (7 days), registration (24 hours) and reset links open Choose a password: `POST /auth/email/finish {token, password}` and `POST /auth/register/finish {token, password}`. Without a password (an old page) they answer `422 password_needed` and the link is not used up; a weak password is `422 weak_password` (see `PasswordRules`). Setting a password ends the account's other sessions, uses up its other links and clears any lockout, then signs the person in.
+- `POST /auth/password/change {current, new}` (password sessions): `403 wrong_password`, `409 no_password`, `422 weak_password`; other sessions end, this one stays.
+- `GET /auth/me` carries `method` (`dino`, `password`, `email`, `group` or null). `StaffPerson.hasPassword`. `AuthConfig.password`. New schemas `StaffSession`, `PasswordRules` (scrypt n=2^15, r=8, p=1, 16-byte salt, stored as `scrypt$n$r$p$salt$hash`).
+- Staff who signed in by link before have no password: they use Forgot your password? once.
+- `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.47`.
+
 ## 0.2.46 - station names unique within a school (additive)
 - `PUT /machines/{machineId}` answers `409 name_in_use` when another station in the same school already has that name (compared without regard to capitals or extra spaces). Stations saved before keep their names; the rule applies when a station is next saved.
 - `schemaVersion` constants, `info.version`, Editor documents moved to `0.2.46`.

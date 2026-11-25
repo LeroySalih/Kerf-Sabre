@@ -82,8 +82,8 @@ def issue_token(db: Database, role: str, subject_id: str, label: str | None = No
 def lookup(session: Session, token: str, people_tokens: bool = True) -> Principal | None:
     """`people_tokens` False (DINO is the only way in): only stations and the platform owner may hold a stored token."""
     row = session.scalar(select(Token).where(Token.token_hash == hash_token(token), Token.revoked.is_(False)))
-    if row is not None and not people_tokens and row.role in PERSON_ROLES and row.method not in ("email", "group"):
-        return None  # sessions from an emailed sign-in link or a Pupil Card are allowed alongside DINO
+    if row is not None and not people_tokens and row.role in PERSON_ROLES and row.method not in ("password", "email", "group"):
+        return None  # sessions from staff email + password, an emailed link (before passwords) or a Pupil Card are allowed alongside DINO
     if row is None or (row.expires_at is not None and as_utc(row.expires_at) <= utcnow()):
         return None  # unknown, revoked or expired
     return Principal(row.role, row.subject_id, None if row.role == "platform" else (row.school_id or DEFAULT_SCHOOL), site_admin=row.role == "platform")

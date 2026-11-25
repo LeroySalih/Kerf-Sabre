@@ -93,3 +93,8 @@ details[open] > summary svg { transform: rotate(180deg); }
 .kp-check { display: flex; gap: 12px; align-items: flex-start; font-size: 17px; cursor: pointer; }
 .kp-check input { flex: none; width: 24px; height: 24px; margin: 1px 0 0; accent-color: #f97316; cursor: pointer; }
 .kp-foot-link { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; color: var(--acc); font-weight: 700; }
+
+/* "Sign in with Pupil Card" opens the card's boxes in a framed panel underneath */
+.kp-sso[data-card-open].on { border-color: var(--acc); }
+.kp-card-panel { padding: 18px; border-radius: 14px; border: 1px solid var(--softB); background: var(--soft); }
+.kp-card-panel .kp-input { background: var(--input, var(--card)); }

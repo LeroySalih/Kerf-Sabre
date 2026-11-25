@@ -75,6 +75,17 @@ export function mountPanel(root: HTMLElement): void {
         .finally(() => go.removeAttribute("aria-busy"));
     });
   }
+  // "Sign in with Pupil Card" opens the card's four boxes underneath (and closes them again)
+  const cardOpen = one<HTMLButtonElement>("[data-card-open]");
+  const cardPanel = one<HTMLElement>("[data-card-panel]");
+  cardOpen.addEventListener("click", () => {
+    const open = cardPanel.hidden === true;
+    cardPanel.hidden = !open;
+    cardOpen.setAttribute("aria-expanded", String(open));
+    cardOpen.classList.toggle("on", open);
+    if (open) { cardPanel.querySelector<HTMLInputElement>("input")?.focus(); cardPanel.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  });
+
   const card = one<HTMLFormElement>("[data-pupil-card]");
   card.addEventListener("submit", (ev) => {
     ev.preventDefault();

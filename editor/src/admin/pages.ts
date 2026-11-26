@@ -10,7 +10,7 @@ import { presetLabel, type Preset } from "../presets";
 import { checkSchoolName } from "./schoolname";
 import { termsFields, termsFromForm, termsText, type Terms } from "../termsform";
 import { applyFilter, filterBar } from "../queuefilter";
-import { btn, el, modal, msg, shortDate } from "../dom";
+import { btn, el, fillWindow, modal, msg, shortDate } from "../dom";
 import { mountQueue } from "../stationui";
 import { previewSvg } from "../stationlogic";
 import {
@@ -295,6 +295,7 @@ function mountProcessed(host: HTMLElement, s: Session): () => void {
   const bar = filterBar(() => show(), "kerf.admin.processedFilter");
   const body = el("div");
   host.replaceChildren(bar.el, body); // the bar stays put (and keeps its focus) while the list refreshes
+  const fill = fillWindow(body, 24, 240); // the list fills the window and scrolls inside it
   const mat = (id: string) => { const p = materials.find((m) => m.id === id); return p ? presetLabel(p) : `${id} (removed)`; };
   const redraw = () => void draw().catch((e) => fail(body, e));
   function show(): void {
@@ -309,12 +310,14 @@ function mountProcessed(host: HTMLElement, s: Session): () => void {
       cell(el("span", { class: `ad-tag ${j.status === "done" ? "ok" : "warn"}` }, STATUS_TEXT[j.status] ?? j.status), ...(j.statusReason ? [el("div", { class: "hint" }, j.statusReason)] : [])),
       actions(btn("Back to the queue", () => { if (confirm("Put this file back at the end of the queue?")) void attempt(() => requeueJob(s, j.id), redraw); }))))),
       el("p", { class: "hint" }, "The newest 200. A file put back gets a new ticket at the end of the queue, already approved."));
+    fill.fit();
   }
   const draw = async (): Promise<void> => {
     [jobs, materials] = await Promise.all([listJobsByStatus(s, PROCESSED, undefined, 200), listPresets(s)]);
     show();
   };
-  return refreshing(body, draw, 10000);
+  const stop = refreshing(body, draw, 10000);
+  return () => { stop(); fill.stop(); };
 }
 
 // ---------------------------------------------------------------- materials (power, speed, passes, kerf; per-laser settings)

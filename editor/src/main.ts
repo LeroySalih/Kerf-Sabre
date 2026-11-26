@@ -35,7 +35,8 @@ import { bedChoices, bedText, commonBed, fitsAnyLaser, parseBed, validateBed } f
 import type { BedSize } from "./bounds";
 import { initServerUi, type ServerUiHandle } from "./serverui";
 import { mergeRemoteTabs } from "./remotetabs";
-import { addFilesToDoc } from "./consolidate";
+import { addFilesToDoc, removedText } from "./consolidate";
+import { cancelJob, pupilLabel } from "./server";
 import { askTrace, bitmapFromBlob } from "./imagetraceui";
 import { chooseFiles } from "./consolidateui";
 import { Workspace, blankMeta, matches as matchesMeta, addClosed, readClosed, readMirror, removeClosed, removeMirror, serializeMirror, writeMirror, isDirty as tabIsDirty, pasteIntoSnapshot, snapshotOf, uniqueName, type FileRef, type FileTab } from "./workspace";
@@ -2130,6 +2131,16 @@ on("srv-consolidate", () => void (async () => {
   const parts = [`Imported ${r.groups} file${r.groups === 1 ? "" : "s"}, one group each.`];
   if (r.skipped.length) parts.push(`Nothing to import from ${r.skipped.join(", ")}.`);
   if (!r.fits) parts.push("They do not all fit on the bed: move or remove some.");
+  if (pick.remove && r.imported.length) {
+    // only files that really came in are taken out of the queue, one at a time; a refusal (e.g. it is being cut now) is reported
+    let done = 0;
+    const failed: { who: string; why: string }[] = [];
+    for (const id of r.imported) {
+      const j = pick.jobs.find((x) => x.id === id)!;
+      try { await cancelJob(session, id); done++; } catch (e) { failed.push({ who: pupilLabel(j.pupilId, j.pupilName), why: e instanceof Error ? e.message : String(e) }); }
+    }
+    parts.push(removedText(done, failed));
+  }
   notify(parts.join(" "));
 })());
 on("tab-new", () => newTab());

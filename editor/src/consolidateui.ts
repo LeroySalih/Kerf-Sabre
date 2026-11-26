@@ -3,7 +3,7 @@ import { makeDraggable } from "./dialog";
 import { QUEUE_QUERY, describeFile, filesForClass, materialWarning } from "./consolidate";
 import { listGroups, listJobsByStatus, type GroupInfo, type JobSummary, type Session } from "./server";
 
-export interface ConsolidateChoice { jobs: JobSummary[]; labels: boolean }
+export interface ConsolidateChoice { jobs: JobSummary[]; labels: boolean; /** take the imported files out of the queue (cancel them) */ remove: boolean }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
   const e = Object.assign(document.createElement(tag), props);
@@ -23,13 +23,14 @@ export function chooseFiles(session: Session, materialName: (id: string) => stri
     const h = el("h2", { textContent: "Import pupils’ files" });
     dlg.append(h);
     makeDraggable(dlg, h);
-    dlg.append(el("p", { className: "hint", textContent: "Brings the files waiting in the queue for a class into the open file, each as one group you can move around. The files stay in the queue." }));
+    dlg.append(el("p", { className: "hint", textContent: "Brings the files waiting in the queue for a class into the open file, each as one group you can move around. Tick the last box to take them out of the queue as well." }));
 
     const classSel = el("select", { id: "cons-class" });
     const status = el("p", { className: "hint", role: "status" });
     const list = el("div", { className: "klist" });
     const warn = el("p", { className: "kwarn" });
     const labels = el("input", { type: "checkbox", checked: true });
+    const remove = el("input", { type: "checkbox", checked: false });
     const all = el("button", { type: "button", textContent: "Select all" });
     const none = el("button", { type: "button", textContent: "Select none" });
     const ok = el("button", { type: "button", className: "on", textContent: "Import", disabled: true });
@@ -42,6 +43,7 @@ export function chooseFiles(session: Session, materialName: (id: string) => stri
       list,
       warn,
       el("label", { className: "kcheck" }, labels, " Put each pupil’s name above their file (on the Ignore layer, so it is never cut)"),
+      el("label", { className: "kcheck" }, remove, " Remove the imported files from the queue (they are cancelled; the pupils see “Cancelled”)"),
       el("div", { className: "krow" }, cancel, ok),
     );
 
@@ -87,7 +89,7 @@ export function chooseFiles(session: Session, materialName: (id: string) => stri
     none.addEventListener("click", () => { boxes.forEach((b) => (b.checked = false)); refresh(); });
 
     let answer: ConsolidateChoice | null = null;
-    ok.addEventListener("click", () => { answer = { jobs: chosen(), labels: labels.checked }; dlg.close(); });
+    ok.addEventListener("click", () => { answer = { jobs: chosen(), labels: labels.checked, remove: remove.checked }; dlg.close(); });
     cancel.addEventListener("click", () => dlg.close());
     document.body.append(dlg);
     dlg.addEventListener("close", () => { dlg.remove(); resolve(answer); });

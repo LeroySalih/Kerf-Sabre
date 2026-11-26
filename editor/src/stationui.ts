@@ -5,6 +5,7 @@ import { createAlignView, type AlignView } from "./alignui";
 import { openCalibration } from "./calibrateui";
 import type { Calibration } from "./alignlogic";
 import { infoDialog, openDialog } from "./dialog";
+import { fillWindow } from "./dom";
 import { findPreset, presetLabel, setPresets, type Preset } from "./presets";
 import {
   STATUS_TEXT, ServerError, changeJobPreset, disconnectStation, listPresets, markTested, pupilLabel, takeJob, approveJob, assignJob, cameraUrl, cancelJob, controlStation, deferJob, describeDuration, frameJob, getCalibration, getJob, getMachine, placeJob,
@@ -68,6 +69,9 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
   let aligning: { jobId: string; view: AlignView } | null = null;
   let data: { queue: QueueEntry[]; station?: StationInfo; failed: boolean } = { queue: [], failed: false };
   const qbar: FilterBar = filterBar(() => render(), `kerf.station.filter.${stationId}`);
+  // the queue list is kept across the 2-second redraws so its scroll position stays put; it fills the window and scrolls inside
+  const qscroll = h("div");
+  const qfit = fillWindow(qscroll, 36, 200);
 
   const say = (t: string, kind: "info" | "error" = "info") => { notice = t; noticeKind = kind; render(); };
   const guard = async (fn: () => Promise<unknown>) => {
@@ -144,7 +148,9 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     qbar.update(data.queue, shownQueue.length, data.queue.length);
     const qsec = h("section", { class: "st-card st-queue" }, h("h2", {}, "Queue"));
     main.append(qsec);
-    qsec.append(queueList(shownQueue, stationId, { selected: next?.jobId ?? null, onPick: (e) => { if (!busy && !st?.currentJobId && !aligning) { picked = e.jobId ?? null; confirmed = false; notice = ""; void refresh(); } }, canPick: takeable }, data.queue.length));
+    const qtop = qscroll.scrollTop;
+    qscroll.replaceChildren(queueList(shownQueue, stationId, { selected: next?.jobId ?? null, onPick: (e) => { if (!busy && !st?.currentJobId && !aligning) { picked = e.jobId ?? null; confirmed = false; notice = ""; void refresh(); } }, canPick: takeable }, data.queue.length));
+    qsec.append(qscroll);
     const panel = h("section", { class: "st-card st-job" });
     if (data.failed) panel.append(h("p", { class: "st-error", role: "alert" }, "Lost contact with the server. Trying again…"));
     if (st?.currentJobId) panel.append(...cuttingPanel(st, running));
@@ -153,6 +159,8 @@ export function openStation(session: Session, onSignOut: () => void, opts: { sta
     main.append(panel);
     root.replaceChildren(head, main);
     qbar.attach(qsec, qsec.children[1] ?? null, was); // the filter sits under the heading and keeps its focus across refreshes
+    qfit.fit();
+    qscroll.scrollTop = qtop;
   }
 
   /** Calibrating changes what every pupil sees, so only a technician, teacher or admin (signed in with DINO) may do it. */
@@ -348,11 +356,10 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
   let stations: StationInfo[] = [];
   let materials: Preset[] = [];
   const bar = filterBar(() => draw(), "kerf.admin.queueFilter");
-  const body = h("div", { class: "qc-scroll" });
+  const body = h("div");
   container.replaceChildren(bar.el, body); // the bar stays put (and keeps its focus) while the lists refresh
   // the lists fill the window below the search bar and scroll inside it, so the page itself does not scroll
-  const fit = () => { if (body.isConnected) body.style.maxHeight = `${Math.max(240, Math.floor(window.innerHeight - body.getBoundingClientRect().top - 60))}px`; };
-  window.addEventListener("resize", fit);
+  const { fit, stop: stopFit } = fillWindow(body, 24, 240);
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e) { await infoDialog("That didn't work", [msg(e)]); } await load(); };
   let busy = false;
 
@@ -491,5 +498,5 @@ export function mountQueue(container: HTMLElement, session: Session): () => void
   }
 
   const stopPolling = poller(load, 3000);
-  return () => { stopPolling(); window.removeEventListener("resize", fit); };
+  return () => { stopPolling(); stopFit(); };
 }

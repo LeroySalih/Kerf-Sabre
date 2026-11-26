@@ -35,3 +35,15 @@ export function shortDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
+
+/**
+ * A list that runs from where it starts down to the bottom of the window and scrolls inside itself, so no row is ever
+ * off the screen (every queue: the Admin site's Queue and Processed files, the Station page). Call `fit` after each
+ * redraw; `stop` removes the resize listener.
+ */
+export function fillWindow(box: HTMLElement, gap = 24, min = 200): { fit: () => void; stop: () => void } {
+  box.classList.add("qc-scroll");
+  const fit = () => { if (box.isConnected) box.style.maxHeight = `${Math.max(min, Math.floor(window.innerHeight - box.getBoundingClientRect().top - gap))}px`; };
+  window.addEventListener("resize", fit);
+  return { fit, stop: () => window.removeEventListener("resize", fit) };
+}

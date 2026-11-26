@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addFilesToDoc, describeFile, filesForClass, materialWarning, planLayout } from "../src/consolidate";
+import { addFilesToDoc, removedText, describeFile, filesForClass, materialWarning, planLayout } from "../src/consolidate";
 import { Doc } from "../src/doc";
 import { boundsOf, rectangle, transformPath, translation } from "../src/geometry";
 import { DEFAULT_ORIGIN } from "../src/workspace";
@@ -101,6 +101,13 @@ describe("importing into the document", () => {
     const r = addFilesToDoc(d, [empty, jobs[0]!], { labels: false, bed });
     expect(r.groups).toBe(1);
     expect(r.skipped).toEqual(["P1"]);
+    expect(r.imported).toEqual([jobs[0]!.id]); // only files that really came in may be taken out of the queue
+  });
+
+  it("says how many files were taken out of the queue and which could not be", () => {
+    expect(removedText(2, [])).toBe("Took 2 files out of the queue.");
+    expect(removedText(1, [{ who: "Sam", why: "It is being cut now" }])).toBe("Took 1 file out of the queue. Could not take this file out of the queue: Sam (It is being cut now).");
+    expect(removedText(0, [])).toBe("");
   });
 
   it("adds to what is already in the document without touching it", () => {

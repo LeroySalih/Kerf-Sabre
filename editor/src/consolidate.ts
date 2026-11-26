@@ -81,7 +81,15 @@ function pieceSet(job: JobSummary, label: boolean): { pieces: Piece[]; box: Boun
   return { pieces, box: union(pieces.map((p) => boundsOf(transformPath(p.path, p.matrix)))) };
 }
 
-export interface ImportResult { ids: number[]; groups: number; skipped: string[]; fits: boolean }
+/** What to tell the teacher after taking imported files out of the queue. */
+export function removedText(done: number, failed: { who: string; why: string }[]): string {
+  const parts: string[] = [];
+  if (done) parts.push(`Took ${done} file${done === 1 ? "" : "s"} out of the queue.`);
+  if (failed.length) parts.push(`Could not take ${failed.length === 1 ? "this file" : "these files"} out of the queue: ${failed.map((f) => `${f.who} (${f.why})`).join("; ")}.`);
+  return parts.join(" ");
+}
+
+export interface ImportResult { ids: number[]; groups: number; skipped: string[]; fits: boolean; /** ids of the files that were brought in (not the skipped ones) */ imported: string[] }
 
 /**
  * Add the chosen files to the document, each as one group, laid out in rows on the bed. Returns the new object ids (so the caller can select them).
@@ -103,5 +111,5 @@ export function addFilesToDoc(doc: Doc, jobs: JobSummary[], opts: { labels: bool
       ids.push(o.id);
     }
   });
-  return { ids, groups: usable.length, skipped: sets.filter((s) => s.set === null).map((s) => who(s.job)), fits: layout.fits };
+  return { ids, groups: usable.length, imported: usable.map((u) => u.job.id), skipped: sets.filter((s) => s.set === null).map((s) => who(s.job)), fits: layout.fits };
 }
